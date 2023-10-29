@@ -20,11 +20,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
   <meta name="theme-color" content="#f8f8f8">
   
-  <title>编写博客的开始 - 小陌XMo</title>
+  <title>JavaScript 函数、方法和对象 - 小陌XMo</title>
 
   
-  <meta name="description" content="做博客是为了什么？我一开始搭建博客的原因，是 将自己遇到的问题都写在博客里，将自己学习到的知识整理到博客当中，以便于后续的复习和查找。
-有了这个想法，我便在互联网上查找有关的资料，很惊喜地发现原来做一个自己的博客的门槛真的不高，于是便跟着教程一步一步地做了起来，这个过程中也遇到了不少的麻烦，但...">
+  <meta name="description" content="函数函数使你可以将一系列语句组织成一个整体，以执行某一特定任务。如果在不同的地方有些任务要重复执行，可以重用函数（而非重复一组相同的语句）。
+12345678910111213&lt;!DOCTYPE html&gt;&lt;html lang=&quot;en&quot;&gt;&lt;he...">
   
   <meta name="keywords" content="Hexo">
 
@@ -77,7 +77,7 @@
 <widget class="widget-wrapper search"><div class="widget-body"><div class="search-wrapper" id="search"><form class="search-form"><input type="text" class="search-input" id="search-input" data-filter="/blog/" placeholder="文章搜索"><svg t="1670596976048" class="icon search-icon" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="2676" width="200" height="200"><path d="M938.2 832.6L723.8 618.1c-2.5-2.5-5.3-4.4-7.9-6.4 36.2-55.6 57.3-121.8 57.3-193.1C773.3 222.8 614.6 64 418.7 64S64 222.8 64 418.6c0 195.9 158.8 354.6 354.6 354.6 71.3 0 137.5-21.2 193.2-57.4 2 2.7 3.9 5.4 6.3 7.8L832.5 938c14.6 14.6 33.7 21.9 52.8 21.9 19.1 0 38.2-7.3 52.8-21.8 29.2-29.1 29.2-76.4 0.1-105.5M418.7 661.3C284.9 661.3 176 552.4 176 418.6 176 284.9 284.9 176 418.7 176c133.8 0 242.6 108.9 242.6 242.7 0 133.7-108.9 242.6-242.6 242.6" p-id="2677"></path></svg></form><div id="search-result"></div><div class="search-no-result">没有找到内容！</div></div></div></widget>
 
 
-<widget class="widget-wrapper toc single" id="data-toc"><div class="widget-header cap dis-select"><span class="name">编写博客的开始</span></div><div class="widget-body fs14"><div class="doc-tree active"><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%81%9A%E5%8D%9A%E5%AE%A2%E6%98%AF%E4%B8%BA%E4%BA%86%E4%BB%80%E4%B9%88%EF%BC%9F"><span class="toc-number">1.</span> <span class="toc-text">做博客是为了什么？</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%90%AD%E5%BB%BA%E5%8D%9A%E5%AE%A2%E7%9A%84%E6%96%B9%E6%B3%95"><span class="toc-number">2.</span> <span class="toc-text">搭建博客的方法</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%87%86%E5%A4%87%E5%B7%A5%E4%BD%9C"><span class="toc-number">2.1.</span> <span class="toc-text">准备工作</span></a></li></ol></li></ol></div></div></widget>
+<widget class="widget-wrapper toc single" id="data-toc"><div class="widget-header cap dis-select"><span class="name">JavaScript 函数、方法和对象</span></div><div class="widget-body fs14"><div class="doc-tree active"><ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%87%BD%E6%95%B0%E7%9A%84%E5%A3%B0%E6%98%8E"><span class="toc-number">1.</span> <span class="toc-text">函数的声明</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%A3%B0%E6%98%8E%E5%87%BD%E6%95%B0%E7%9A%84%E4%B8%80%E8%88%AC%E6%96%B9%E6%B3%95"><span class="toc-number">1.1.</span> <span class="toc-text">声明函数的一般方法</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%A3%B0%E6%98%8E%E9%9C%80%E8%A6%81%E4%BF%A1%E6%81%AF%E7%9A%84%E5%87%BD%E6%95%B0"><span class="toc-number">1.2.</span> <span class="toc-text">声明需要信息的函数</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%87%BD%E6%95%B0%E7%9A%84%E8%B0%83%E7%94%A8"><span class="toc-number">2.</span> <span class="toc-text">函数的调用</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E8%B0%83%E7%94%A8%E9%9C%80%E8%A6%81%E6%8F%90%E4%BE%9B%E4%BF%A1%E6%81%AF%E7%9A%84%E5%87%BD%E6%95%B0"><span class="toc-number">2.1.</span> <span class="toc-text">调用需要提供信息的函数</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#%E5%80%BC%E4%BD%9C%E4%B8%BA%E5%AE%9E%E5%8F%82"><span class="toc-number">2.1.1.</span> <span class="toc-text">值作为实参</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#%E5%8F%98%E9%87%8F%E4%BD%9C%E4%B8%BA%E5%AE%9E%E5%8F%82"><span class="toc-number">2.1.2.</span> <span class="toc-text">变量作为实参</span></a></li></ol></li></ol></li></ol></div></div></widget>
 
 
 
@@ -96,19 +96,34 @@
 <div class="bread-nav fs12"><div id="breadcrumb"><a class="cap breadcrumb" href="/">主页</a><span class="sep"></span><a class="cap breadcrumb" href="/">文章</a><span class="sep"></span><a class="cap breadcrumb-link" href="/categories/%E7%BB%8F%E9%AA%8C%E5%88%86%E4%BA%AB/">经验分享</a></div><div id="post-meta">发布于&nbsp;<time datetime="2023-08-19T16:00:00.000Z">2023-08-20</time></div></div>
 
 <article class='md-text content post'>
-<h1 class="article-title"><span>编写博客的开始</span></h1>
-<h2 id="做博客是为了什么？"><a href="#做博客是为了什么？" class="headerlink" title="做博客是为了什么？"></a>做博客是为了什么？</h2><p>我一开始搭建博客的原因，是 <mark class="tag-plugin mark" color="light">将自己遇到的问题都写在博客里，将自己学习到的知识整理到博客当中，以便于后续的复习和查找。</mark></p>
-<p>有了这个想法，我便在互联网上查找有关的资料，很惊喜地发现原来做一个自己的博客的门槛真的不高，于是便跟着教程一步一步地做了起来，这个过程中也遇到了不少的麻烦，但还好互联网的发达就在于你碰到的问题大概率已经有了相应的解决办法。</p>
-<p>当我建立好了我的博客文件夹后，我便迫不及待地想要修饰我的博客主页，但是当时对于前端知识一窍不通的我来说，即使看着教程也寸步难行，反而把自己的博客搞崩溃了很多次。</p>
-<p>所以，我便老老实实地从头学起，逐渐发现 <mark class="tag-plugin mark" color="light">得靠知识的不断积累才能把博客写的更好</mark> ，于是便把编写博客的重心从 <mark class="tag-plugin mark" color="error">炫酷的外观</mark> 转向 <mark class="tag-plugin mark" color="warning">更好的内容</mark> 。</p>
-<p>不仅如此，当我真正地走向编写博客的正轨时，我越来越意识到持续学习的重要性，每天每时每刻都有太多的技术更新，还有太多自己不知道的有趣的项目，这些也促使我不断更新自己的认知，同时也给了我坚持编写博客更多的动力。</p>
-<h2 id="搭建博客的方法"><a href="#搭建博客的方法" class="headerlink" title="搭建博客的方法"></a>搭建博客的方法</h2><p>我的博客采用 <a class="tag-plugin tag" color="yellow" target="_blank" rel="noopener" href="https://hexo.io/">Hexo</a> 框架搭建，具体步骤如下：</p>
-<h3 id="准备工作"><a href="#准备工作" class="headerlink" title="准备工作"></a>准备工作</h3><div class="tag-plugin quot"><p class="content" type="text">Github 账号</p></div>
-<p>我们最终的博客通过 <strong>Github Pages</strong> 部署，首先需要在 <a class="tag-plugin tag" color="yellow" target="_blank" rel="noopener" href="https://github.com/">Github官网</a> 注册一个账号。</p>
-<div class="tag-plugin quot"><p class="content" type="text">安装 Git</p></div>
-<p>访问 <a class="tag-plugin tag" color="yellow" target="_blank" rel="noopener" href="https://git-scm.com/downloads">Git官网</a> ，选择对应操作系统版本下载即可。 </p>
-<div class="tag-plugin quot"><p class="content" type="text">安装 Node JS</p></div>
-
+<h1 class="article-title"><span>JavaScript 函数、方法和对象</span></h1>
+<h1 id="函数"><a href="#函数" class="headerlink" title="函数"></a>函数</h1><p>函数使你可以将一系列语句组织成一个整体，以执行某一特定任务。如果在不同的地方有些任务要重复执行，可以重用函数（而非重复一组相同的语句）。</p>
+<figure class="highlight html"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">&lt;!DOCTYPE <span class="keyword">html</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">html</span> <span class="attr">lang</span>=<span class="string">&quot;en&quot;</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">head</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">meta</span> <span class="attr">charset</span>=<span class="string">&quot;UTF-8&quot;</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">meta</span> <span class="attr">name</span>=<span class="string">&quot;viewport&quot;</span> <span class="attr">content</span>=<span class="string">&quot;width=device-width, initial-scale=1.0&quot;</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">title</span>&gt;</span>Document<span class="tag">&lt;/<span class="name">title</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">head</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;<span class="name">body</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">h1</span>&gt;</span>小陌XMo<span class="tag">&lt;/<span class="name">h1</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">div</span> <span class="attr">id</span>=<span class="string">&quot;message&quot;</span>&gt;</span>Welcome to my site!<span class="tag">&lt;/<span class="name">div</span>&gt;</span></span><br><span class="line">    <span class="tag">&lt;<span class="name">script</span> <span class="attr">src</span>=<span class="string">&quot;./script.js&quot;</span>&gt;</span><span class="tag">&lt;/<span class="name">script</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">body</span>&gt;</span></span><br><span class="line"><span class="tag">&lt;/<span class="name">html</span>&gt;</span></span><br></pre></td></tr></table></figure>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">var</span> msg = <span class="string">&#x27;Sign up to recieve our newsletter for 10% off&#x27;</span>;</span><br><span class="line"><span class="keyword">function</span> <span class="title function_">updateMessage</span>(<span class="params"></span>) &#123;</span><br><span class="line">    <span class="keyword">var</span> el = <span class="variable language_">document</span>.<span class="title function_">getElementById</span>(<span class="string">&#x27;message&#x27;</span>);</span><br><span class="line">    el.<span class="property">textContent</span> = msg;</span><br><span class="line">&#125;</span><br><span class="line"><span class="title function_">updateMessage</span>();</span><br></pre></td></tr></table></figure>
+<p>以上案例中，用户在页面顶端显示一条消息。此消息由一个 id 属性为 message 的 HTML 元素保存，此消息将被 JavaScript 修改。</p>
+<h2 id="函数的声明"><a href="#函数的声明" class="headerlink" title="函数的声明"></a>函数的声明</h2><h3 id="声明函数的一般方法"><a href="#声明函数的一般方法" class="headerlink" title="声明函数的一般方法"></a>声明函数的一般方法</h3><p>要创建函数，先对函数命名，然后在花括号里编写完成任务所需的语句，这就是函数的声明。</p>
+<ul>
+<li>用 function 关键字声明函数。</li>
+<li>给函数指定名称（有时也称为标识符），接着是一对括号。</li>
+<li>花括号内是执行任务的语句。</li>
+</ul>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">function</span> <span class="title function_">sayHello</span>(<span class="params"></span>) &#123;</span><br><span class="line">    <span class="variable language_">document</span>.<span class="title function_">write</span>(<span class="string">&#x27;Hello&#x27;</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h3 id="声明需要信息的函数"><a href="#声明需要信息的函数" class="headerlink" title="声明需要信息的函数"></a>声明需要信息的函数</h3><p>有时，函数需要特定的信息来执行任务。在这种情况下，声明函数时要给它提供形参。在函数内部，形参的行为类似于变量。</p>
+<ul>
+<li>如果函数需要一些信息，在函数后面的括号内指定。</li>
+<li>括号中的这些项即函数的形参。在函数体中它们的行为和变量一样。 </li>
+</ul>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">function</span> <span class="title function_">getArea</span>(<span class="params">width,height</span>) &#123;</span><br><span class="line">    <span class="keyword">return</span> width * height;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<h2 id="函数的调用"><a href="#函数的调用" class="headerlink" title="函数的调用"></a>函数的调用</h2><p>声明了函数后，就可以用一行代码执行花括号里的所有语句，这就是函数的调用。</p>
+<ul>
+<li>在函数名后面带上一对括号。这就是编程术语中的调用函数。</li>
+<li>可以在同一个 JavaScript 文件中调用同一个函数任意次。</li>
+</ul>
+<figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="title function_">sayHello</span>();</span><br></pre></td></tr></table></figure>
+<h3 id="调用需要提供信息的函数"><a href="#调用需要提供信息的函数" class="headerlink" title="调用需要提供信息的函数"></a>调用需要提供信息的函数</h3><p>调用带有形参的函数时，需在函数名后面的括号中指定一些值。这些值就是实参，可以像变量一样被赋值。</p>
+<h4 id="值作为实参"><a href="#值作为实参" class="headerlink" title="值作为实参"></a>值作为实参</h4><figure class="highlight javascript"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="title function_">getArea</span>(<span class="number">3</span>,<span class="number">5</span>);</span><br></pre></td></tr></table></figure>
+<p>在调用上面的函数时，数字 3 被用作盒子的宽度，5 被用作高度。</p>
+<h4 id="变量作为实参"><a href="#变量作为实参" class="headerlink" title="变量作为实参"></a>变量作为实参</h4><h1 id="方法"><a href="#方法" class="headerlink" title="方法"></a>方法</h1><h1 id="对象"><a href="#对象" class="headerlink" title="对象"></a>对象</h1>
 
 
 <div class="article-footer reveal fs14"><section id="license"><div class="header"><span>许可协议</span></div><div class="body"><p>本文采用 <a target="_blank" rel="noopener" href="https://creativecommons.org/licenses/by-nc-sa/4.0/">署名-非商业性使用-相同方式共享 4.0 国际</a> 许可协议，转载请注明出处。</p>
@@ -116,7 +131,7 @@
 
 </article>
 
-<div class="related-wrap reveal" id="read-next"><section class="body"><div class="item" id="prev"><div class="note">较新文章</div><a href="/2023/08/20/2-%20%E5%87%BD%E6%95%B0%E3%80%81%E6%96%B9%E6%B3%95%E5%92%8C%E5%AF%B9%E8%B1%A1/">JavaScript 函数、方法和对象</a></div><div class="item" id="next"></div></section></div>
+<div class="related-wrap reveal" id="read-next"><section class="body"><div class="item" id="prev"><div class="note">较新文章</div><a href="/2023/09/20/%E8%AF%BB%E4%B9%A6%E7%AC%94%E8%AE%B0/%E3%80%8A%E9%AB%98%E8%83%BD%E6%95%88%E4%BA%BA%E5%A3%AB%E7%9A%84%E4%B8%83%E4%B8%AA%E4%B9%A0%E6%83%AF%E3%80%8B/">XMo读书笔记：《高能效人士的七个习惯》</a></div><div class="item" id="next"><div class="note">较早文章</div><a href="/2023/08/20/%E7%BB%8F%E9%AA%8C%E5%88%86%E4%BA%AB/1-%20%E7%BC%96%E5%86%99%E5%8D%9A%E5%AE%A2%E7%9A%84%E5%BC%80%E5%A7%8B/">编写博客的开始</a></div></section></div>
 
 
 <div class="related-wrap reveal" id="related-posts">
@@ -124,7 +139,7 @@
       <div class='title cap theme'>您可能感兴趣的文章</div>
     </section>
     <section class='body'>
-    <div class="related-posts"><a class="item" href="\2023\08\20\2- 函数、方法和对象\" title="JavaScript 函数、方法和对象"><span class="title">JavaScript 函数、方法和对象</span></a></div></section></div>
+    <div class="related-posts"><a class="item" href="\2023\08\20\经验分享\1- 编写博客的开始\" title="编写博客的开始"><span class="title">编写博客的开始</span></a></div></section></div>
 
 
 
