@@ -1605,6 +1605,15 @@ blockquote footer cite:before {
 blockquote > :last-child {
   margin-bottom: 0 !important;
 }
+hr {
+  position: relative;
+  margin: 26px auto;
+  border: 1px dashed var(--hr-border);
+  width: calc(100% - 4px);
+}
+hr:hover:before {
+  left: calc(95% - 20px);
+}
 :root {
   --hl-color: #90a4ae;
   --hl-bg: #f6f8fa;
