@@ -138,6 +138,112 @@ test('SiteHeader keeps all primary destinations available and marks the current 
   assert.match(source, /ThemeToggle/);
 });
 
+test('search shell is progressively mounted once with an accessible opener', async () => {
+  const [header, base, toggle] = await Promise.all([
+    readSource('src/components/SiteHeader.astro'),
+    readSource('src/layouts/BaseLayout.astro'),
+    readSource('src/components/SearchToggle.astro'),
+  ]);
+
+  assert.match(header, /import\s+SearchToggle\s+from\s+['"]\.\/SearchToggle\.astro['"]/);
+  assert.match(
+    header,
+    /<div\s+class=["']site-header__utilities["'][^>]*>[\s\S]*?<SearchToggle\s*\/>[\s\S]*?<ThemeToggle\s*\/>[\s\S]*?<\/div>/,
+  );
+  assert.match(base, /import\s+SearchDialog\s+from\s+['"]\.\.\/components\/SearchDialog\.astro['"]/);
+  assert.match(base, /<SiteHeader\s*\/>\s*<SearchDialog\s*\/>\s*<main/);
+  assert.equal(base.match(/<SearchDialog\s*\/>/g)?.length, 1);
+  assert.match(
+    toggle,
+    /<button\s+(?=[^>]*type=["']button["'])(?=[^>]*aria-label=["']搜索文章["'])(?=[^>]*data-search-open)(?=[^>]*hidden(?:\s|>|=))[^>]*>/,
+  );
+});
+
+test('search dialog exposes native labels, state hooks and an archive fallback', async () => {
+  const dialog = await readSource('src/components/SearchDialog.astro');
+
+  assert.match(
+    dialog,
+    /<dialog\s+(?=[^>]*id=["']site-search["'])(?=[^>]*aria-labelledby=["']site-search-title["'])(?=[^>]*aria-describedby=["']site-search-description["'])[^>]*>/,
+  );
+  assert.match(dialog, /id=["']site-search-title["']/);
+  assert.match(dialog, /id=["']site-search-description["']/);
+  assert.match(
+    dialog,
+    /<input\s+(?=[^>]*type=["']search["'])(?=[^>]*data-search-input)(?=[^>]*aria-label=["']搜索文章["'])[^>]*>/,
+  );
+  assert.match(dialog, /<button[^>]*data-search-close[^>]*>/);
+  assert.match(
+    dialog,
+    /<[^>]+(?=[^>]*data-search-status)(?=[^>]*aria-live=["']polite["'])[^>]*>/,
+  );
+  assert.match(dialog, /<ol[^>]*data-search-results[^>]*>/);
+  assert.match(dialog, /data-search-loading/);
+  assert.match(dialog, /data-search-empty/);
+  assert.match(dialog, /data-search-error/);
+  assert.match(dialog, /href=["']\/posts\/["'][^>]*>[^<]*文章归档/);
+  assert.match(dialog, /<script>[\s\S]*?import\s+['"]\.\.\/scripts\/search-dialog['"];?[\s\S]*?<\/script>/);
+});
+
+test('search client requires its shell before revealing every opener', async () => {
+  const script = await readSource('src/scripts/search-dialog.ts');
+
+  for (const selector of [
+    '#site-search',
+    '[data-search-open]',
+    '[data-search-input]',
+    '[data-search-results]',
+    '[data-search-status]',
+  ]) {
+    assert.match(script, new RegExp(selector.replaceAll('[', '\\[').replaceAll(']', '\\]')));
+  }
+  assert.match(script, /querySelectorAll<[^>]+>\(['"]\[data-search-open\]['"]\)/);
+  assert.match(script, /if\s*\([^)]*(?:!dialog|dialog\s*===\s*null)[\s\S]*?\)\s*\{?\s*return;/);
+  assert.match(script, /openers\.forEach\([\s\S]*?opener\.hidden\s*=\s*false/);
+  assert.ok(
+    script.indexOf('return;') < script.indexOf('opener.hidden = false'),
+    'openers must be revealed only after required-node validation',
+  );
+});
+
+test('search client caches and validates one same-origin index request', async () => {
+  const script = await readSource('src/scripts/search-dialog.ts');
+
+  assert.equal(script.match(/fetch\(/g)?.length, 1);
+  assert.match(
+    script,
+    /fetch\(['"]\/search-index\.json['"],\s*\{\s*headers:\s*\{\s*accept:\s*['"]application\/json['"]\s*\}\s*\}\)/s,
+  );
+  assert.match(script, /(?:\?\?=|if\s*\(\s*[^)]*Promise[^)]*===\s*undefined\s*\))/);
+  assert.match(script, /!response\.ok/);
+  assert.match(script, /payload\.version\s*!==\s*1/);
+  assert.match(script, /!Array\.isArray\(payload\.entries\)/);
+  assert.doesNotMatch(script, /https?:\/\//);
+});
+
+test('search client supports safe rendering and the complete keyboard flow', async () => {
+  const script = await readSource('src/scripts/search-dialog.ts');
+
+  assert.match(script, /searchEntries\([^)]*,[^)]*,\s*8\s*\)/);
+  assert.match(script, /document\.createElement/);
+  assert.match(script, /\.textContent\s*=/);
+  assert.doesNotMatch(script, /innerHTML/);
+  assert.match(script, /metaKey/);
+  assert.match(script, /ctrlKey/);
+  assert.match(script, /key\s*===\s*['"]\/['"]/);
+  for (const editable of ['input', 'textarea', 'select', '[contenteditable]']) {
+    assert.match(script, new RegExp(editable.replaceAll('[', '\\[').replaceAll(']', '\\]'), 'i'));
+  }
+  for (const key of ['ArrowDown', 'ArrowUp', 'Enter', 'Escape']) {
+    assert.match(script, new RegExp(key));
+  }
+  assert.match(script, /aria-current/);
+  assert.match(script, /\.click\(\)/);
+  assert.match(script, /event\.target\s*===\s*dialog[\s\S]*?dialog\.close\(\)/);
+  assert.match(script, /最近更新/);
+  assert.match(script, /搜索暂不可用/);
+});
+
 test('ThemeToggle exposes state and persists the selected theme', async () => {
   const source = await readSource('src/components/ThemeToggle.astro');
 

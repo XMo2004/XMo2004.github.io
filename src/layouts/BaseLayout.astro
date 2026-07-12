@@ -1,4 +1,5 @@
 ---
+import SearchDialog from '../components/SearchDialog.astro';
 import SiteFooter from '../components/SiteFooter.astro';
 import SiteHeader from '../components/SiteHeader.astro';
 import { SITE } from '../config/site';
@@ -79,6 +80,7 @@ const serializedJsonLd = jsonLd === undefined ? undefined : serializeJsonLd(json
   <body>
     <a class="skip-link" href="#main-content">跳到正文</a>
     <SiteHeader />
+    <SearchDialog />
     <main id="main-content" class="site-main" tabindex="-1">
       <slot />
     </main>
