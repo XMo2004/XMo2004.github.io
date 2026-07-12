@@ -1,0 +1,66 @@
+---
+import type { CollectionEntry } from 'astro:content';
+import { getCollection } from 'astro:content';
+
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { buildColumnIndex, getColumnHref } from '../../lib/posts';
+
+function getLatestDate(posts: CollectionEntry<'posts'>[]): Date {
+  return posts.reduce(
+    (latestDate, post) =>
+      post.data.pubDate.getTime() > latestDate.getTime()
+        ? post.data.pubDate
+        : latestDate,
+    posts[0].data.pubDate,
+  );
+}
+
+const columnIndex = buildColumnIndex(await getCollection('posts'));
+const dateFormatter = new Intl.DateTimeFormat('zh-CN', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+});
+---
+
+<BaseLayout title="专栏" description="按连续阅读顺序浏览文章专栏。">
+  <section class="taxonomy-directory" aria-labelledby="column-directory-title">
+    <header class="page-header">
+      <p class="eyebrow">COLUMN INDEX</p>
+      <h1 id="column-directory-title">文章专栏</h1>
+      <p>专栏按作者声明的序号组织连续文章，数量与更新时间来自当前公开归档。</p>
+    </header>
+
+    {columnIndex.length > 0 ? (
+      <ul class="taxonomy-directory__list">
+        {columnIndex.map((column) => {
+          const latestDate = getLatestDate(column.posts);
+
+          return (
+            <li>
+              <a
+                class="taxonomy-directory__link"
+                href={getColumnHref(column.label)}
+              >
+                <strong>{column.label}</strong>
+                <span>{column.posts.length} 篇文章</span>
+                <small>
+                  最近更新
+                  {' '}
+                  <time datetime={latestDate.toISOString().slice(0, 10)}>
+                    {dateFormatter.format(latestDate)}
+                  </time>
+                </small>
+              </a>
+            </li>
+          );
+        })}
+      </ul>
+    ) : (
+      <div class="empty-state">
+        <p>公开文章还没有组成专栏。</p>
+        <a class="standalone-action" href="/posts/">浏览文章归档</a>
+      </div>
+    )}
+  </section>
+</BaseLayout>

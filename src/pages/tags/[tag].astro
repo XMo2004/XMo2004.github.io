@@ -2,7 +2,7 @@
 import type { CollectionEntry } from 'astro:content';
 import { getCollection } from 'astro:content';
 
-import PostCard from '../../components/PostCard.astro';
+import PostRow from '../../components/PostRow.astro';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import { buildTagIndex, sortNewestFirst } from '../../lib/posts';
 
@@ -38,8 +38,8 @@ const { label, posts } = Astro.props;
       <p>这个标签下共有 {posts.length} 篇文章，按发布时间倒序排列。</p>
     </header>
 
-    <div class="post-grid post-grid--archive">
-      {posts.map((post) => <PostCard entry={post} headingLevel="h2" />)}
+    <div class="post-row-list">
+      {posts.map((post) => <PostRow entry={post} headingLevel="h2" />)}
     </div>
   </section>
 </BaseLayout>

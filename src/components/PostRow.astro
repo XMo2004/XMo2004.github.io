@@ -1,0 +1,119 @@
+---
+import type { CollectionEntry } from 'astro:content';
+
+import {
+  estimateReadingMinutes,
+  getCategoryHref,
+  getColumnHref,
+  getPostHref,
+  normalizeTag,
+} from '../lib/posts';
+
+interface Props {
+  entry: CollectionEntry<'posts'>;
+  headingLevel?: 'h2' | 'h3';
+}
+
+const { entry, headingLevel = 'h2' } = Astro.props;
+const {
+  title,
+  description,
+  pubDate,
+  category,
+  column,
+  columnOrder,
+  tags,
+  cover,
+} = entry.data;
+const Heading = headingLevel;
+
+if (entry.body === undefined) {
+  throw new Error(`Post "${entry.id}" does not expose its Markdown body.`);
+}
+
+const postHref = getPostHref(entry);
+const readingMinutes = estimateReadingMinutes(entry.body);
+const dateTime = pubDate.toISOString().slice(0, 10);
+const displayDate = new Intl.DateTimeFormat('zh-CN', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+}).format(pubDate);
+const displayColumnOrder = columnOrder === undefined
+  ? undefined
+  : String(columnOrder).padStart(2, '0');
+---
+
+<article class:list={['post-row', { 'post-row--with-cover': cover !== undefined }]}>
+  {cover && (
+    <div class="post-row__cover" aria-hidden="true">
+      <img src={cover} alt="" loading="lazy" decoding="async" />
+    </div>
+  )}
+
+  <div class="post-row__body">
+    <div class="post-row__meta">
+      <time datetime={dateTime}>{displayDate}</time>
+      <span>{readingMinutes} 分钟阅读</span>
+    </div>
+
+    <Heading class="post-row__heading">
+      <a class="post-row__title post-row__stretched-link" href={postHref}>
+        {title}
+      </a>
+    </Heading>
+
+    <p class="post-row__description">{description}</p>
+
+    <div class="post-row__taxonomies" aria-label="文章分类信息">
+      <a
+        class="post-row__taxonomy-link post-row__category"
+        href={getCategoryHref(category)}
+      >
+        {category}
+      </a>
+
+      {column !== undefined && displayColumnOrder !== undefined && (
+        <a
+          class="post-row__taxonomy-link post-row__column"
+          href={getColumnHref(column)}
+        >
+          <span aria-label={`专栏第 ${columnOrder} 篇`}>{displayColumnOrder}</span>
+          <span>{column}</span>
+        </a>
+      )}
+
+      {tags.length > 0 && (
+        <ul class="post-row__tags" aria-label="文章标签">
+          {tags.map((tag) => (
+            <li>
+              <a
+                class="post-row__taxonomy-link"
+                href={`/tags/${normalizeTag(tag)}/`}
+              >
+                {tag}
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  </div>
+</article>
+
+<style>
+  .post-row {
+    position: relative;
+  }
+
+  .post-row__stretched-link::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+  }
+
+  .post-row__taxonomy-link {
+    position: relative;
+    z-index: 1;
+  }
+</style>

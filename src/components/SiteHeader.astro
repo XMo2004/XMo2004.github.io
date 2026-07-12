@@ -14,6 +14,19 @@ const navigation = [
     current: normalizedPath === '/posts' || normalizedPath.startsWith('/posts/'),
   },
   {
+    href: '/categories/',
+    label: '分类',
+    current:
+      normalizedPath === '/categories' ||
+      normalizedPath.startsWith('/categories/'),
+  },
+  {
+    href: '/columns/',
+    label: '专栏',
+    current:
+      normalizedPath === '/columns' || normalizedPath.startsWith('/columns/'),
+  },
+  {
     href: '/tags/',
     label: '标签',
     current: normalizedPath === '/tags' || normalizedPath.startsWith('/tags/'),

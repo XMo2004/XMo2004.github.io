@@ -2,35 +2,86 @@
 import { getCollection } from 'astro:content';
 
 import PostCard from '../components/PostCard.astro';
+import PostRow from '../components/PostRow.astro';
 import { SITE } from '../config/site';
 import BaseLayout from '../layouts/BaseLayout.astro';
-import { sortNewestFirst } from '../lib/posts';
+import {
+  buildCategoryIndex,
+  buildColumnIndex,
+  getCategoryHref,
+  getColumnHref,
+  sortNewestFirst,
+} from '../lib/posts';
 
 const posts = sortNewestFirst(await getCollection('posts'));
-const featured = posts.filter((post) => post.data.featured);
-const latest = posts.filter((post) => !post.data.featured).slice(0, 3);
+const categoryIndex = buildCategoryIndex(posts);
+const columnIndex = buildColumnIndex(posts);
+const featured = posts.find((post) => post.data.featured);
+const latest = posts.filter((post) => post !== featured).slice(0, 4);
 ---
 
 <BaseLayout title={SITE.name} description={SITE.description}>
   <section class="home-hero" aria-labelledby="home-title">
     <div class="home-hero__copy">
       <p class="eyebrow">{SITE.mark}</p>
-      <h1 id="home-title">关于技术、成长与日常的长期笔记。</h1>
-      <p class="home-hero__intro">
-        把实践过程、阶段思考与具体观察写清楚，也让值得保留的内容拥有稳定的静态归档。
-      </p>
-      <div class="home-hero__actions">
-        <a class="button" href="/posts/">浏览全部文章</a>
-        <a class="text-link" href="/about/">了解这个博客</a>
-      </div>
+      <h1 id="home-title" aria-label="xmo 的博客">
+        <span class="home-title__xmo" aria-hidden="true">
+          <span>x</span><span>m</span><span>o</span>
+        </span>
+        <span class="home-title__suffix" aria-hidden="true">的博客</span>
+      </h1>
     </div>
 
-    <aside class="editorial-note" aria-label="博客说明">
-      <span>WRITE</span>
-      <strong>缓慢记录</strong>
-      <span>ARCHIVE</span>
-      <strong>长期整理</strong>
-    </aside>
+    <svg
+      class="home-brand-mark"
+      viewBox="0 0 300 120"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M18 18 82 102M82 18 18 102" />
+        <path d="M112 102V18l35 48 35-48v84" />
+        <ellipse cx="242" cy="60" rx="40" ry="43" />
+      </g>
+    </svg>
+  </section>
+
+  <section class="home-taxonomy" aria-label="内容索引">
+    <div class="home-taxonomy__group">
+      <div class="home-taxonomy__heading">
+        <p class="eyebrow">CATEGORIES</p>
+        <h2>分类</h2>
+        <a href="/categories/">全部分类</a>
+      </div>
+      <ul class="home-taxonomy__list">
+        {categoryIndex.map((category) => (
+          <li>
+            <a href={getCategoryHref(category.label)}>
+              <span>{category.label}</span>
+              <small>{category.posts.length}</small>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+
+    <div class="home-taxonomy__group">
+      <div class="home-taxonomy__heading">
+        <p class="eyebrow">COLUMNS</p>
+        <h2>专栏</h2>
+        <a href="/columns/">全部专栏</a>
+      </div>
+      <ul class="home-taxonomy__list">
+        {columnIndex.map((column) => (
+          <li>
+            <a href={getColumnHref(column.label)}>
+              <span>{column.label}</span>
+              <small>{column.posts.length}</small>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
   </section>
 
   <section class="home-section" aria-labelledby="featured-title">
@@ -42,9 +93,9 @@ const latest = posts.filter((post) => !post.data.featured).slice(0, 3);
       <p>从真实的写作归档中挑选。</p>
     </div>
 
-    {featured.length > 0 ? (
+    {featured ? (
       <div class="post-grid post-grid--featured">
-        {featured.map((post) => <PostCard entry={post} headingLevel="h3" />)}
+        <PostCard entry={featured} headingLevel="h3" />
       </div>
     ) : (
       <p class="empty-state">暂时还没有设为精选的文章。</p>
@@ -61,11 +112,11 @@ const latest = posts.filter((post) => !post.data.featured).slice(0, 3);
     </div>
 
     {latest.length > 0 ? (
-      <div class="post-grid">
-        {latest.map((post) => <PostCard entry={post} headingLevel="h3" />)}
+      <div class="post-row-list">
+        {latest.map((post) => <PostRow entry={post} headingLevel="h3" />)}
       </div>
     ) : (
-      <p class="empty-state">新的文章还在整理中，可以先读上面的精选。</p>
+      <p class="empty-state">新的文章还在整理中。</p>
     )}
   </section>
 </BaseLayout>

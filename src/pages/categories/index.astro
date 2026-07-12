@@ -1,0 +1,55 @@
+---
+import { getCollection } from 'astro:content';
+
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { buildCategoryIndex, getCategoryHref } from '../../lib/posts';
+
+const categoryIndex = buildCategoryIndex(await getCollection('posts'));
+const dateFormatter = new Intl.DateTimeFormat('zh-CN', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+});
+---
+
+<BaseLayout title="分类" description="按主分类浏览已经发布的文章。">
+  <section class="taxonomy-directory" aria-labelledby="category-directory-title">
+    <header class="page-header">
+      <p class="eyebrow">CATEGORY INDEX</p>
+      <h1 id="category-directory-title">文章分类</h1>
+      <p>每篇文章只归入一个主分类，数量与更新时间来自当前公开归档。</p>
+    </header>
+
+    {categoryIndex.length > 0 ? (
+      <ul class="taxonomy-directory__list">
+        {categoryIndex.map((category) => {
+          const latestDate = category.posts[0].data.pubDate;
+
+          return (
+            <li>
+              <a
+                class="taxonomy-directory__link"
+                href={getCategoryHref(category.label)}
+              >
+                <strong>{category.label}</strong>
+                <span>{category.posts.length} 篇文章</span>
+                <small>
+                  最近更新
+                  {' '}
+                  <time datetime={latestDate.toISOString().slice(0, 10)}>
+                    {dateFormatter.format(latestDate)}
+                  </time>
+                </small>
+              </a>
+            </li>
+          );
+        })}
+      </ul>
+    ) : (
+      <div class="empty-state">
+        <p>公开文章还没有可浏览的分类。</p>
+        <a class="standalone-action" href="/posts/">浏览文章归档</a>
+      </div>
+    )}
+  </section>
+</BaseLayout>

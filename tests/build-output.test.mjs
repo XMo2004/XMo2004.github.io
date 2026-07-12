@@ -45,10 +45,16 @@ before(runCleanBuild);
 
 test('clean build emits every public entry point as a non-empty file', async () => {
   const tagSlug = normalizeTag('建站');
+  const categorySlug = normalizeTag('技术');
+  const columnSlug = normalizeTag('博客搭建手记');
   const expectedFiles = [
     'index.html',
     'posts/index.html',
     'posts/welcome/index.html',
+    'categories/index.html',
+    `categories/${categorySlug}/index.html`,
+    'columns/index.html',
+    `columns/${columnSlug}/index.html`,
     'tags/index.html',
     `tags/${tagSlug}/index.html`,
     'about/index.html',
@@ -96,7 +102,7 @@ test('robots allows crawling and points to the absolute sitemap URL', async () =
   );
 });
 
-test('sitemap contains article and tag destinations', async () => {
+test('sitemap contains article and taxonomy destinations', async () => {
   const outputFiles = await readdir(distRoot);
   const sitemapFiles = outputFiles.filter(
     (fileName) => fileName.startsWith('sitemap-') && fileName !== 'sitemap-index.xml',
@@ -109,6 +115,22 @@ test('sitemap contains article and tag destinations', async () => {
   assert.ok(
     sitemap.includes(
       new URL(`/tags/${normalizeTag('建站')}/`, 'https://xmo2004.github.io').href,
+    ),
+  );
+  assert.ok(
+    sitemap.includes(
+      new URL(
+        `/categories/${normalizeTag('技术')}/`,
+        'https://xmo2004.github.io',
+      ).href,
+    ),
+  );
+  assert.ok(
+    sitemap.includes(
+      new URL(
+        `/columns/${normalizeTag('博客搭建手记')}/`,
+        'https://xmo2004.github.io',
+      ).href,
     ),
   );
 });

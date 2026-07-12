@@ -126,10 +126,14 @@ test('global styles define the editorial tokens and accessibility safeguards', a
 test('SiteHeader keeps all primary destinations available and marks the current one', async () => {
   const source = await readSource('src/components/SiteHeader.astro');
 
-  for (const label of ['首页', '文章', '标签', '关于']) {
+  for (const label of ['首页', '文章', '分类', '专栏', '标签', '关于']) {
     assert.match(source, new RegExp(label));
   }
 
+  assert.match(source, /href:\s*['"]\/categories\/['"]/);
+  assert.match(source, /normalizedPath\.startsWith\(['"]\/categories\/['"]\)/);
+  assert.match(source, /href:\s*['"]\/columns\/['"]/);
+  assert.match(source, /normalizedPath\.startsWith\(['"]\/columns\/['"]\)/);
   assert.match(source, /aria-current/);
   assert.match(source, /ThemeToggle/);
 });
@@ -145,9 +149,10 @@ test('ThemeToggle exposes state and persists the selected theme', async () => {
   assert.match(source, /dataset\.theme/);
 });
 
-test('post components use safe post and tag routes', async () => {
-  const [cardSource, tagListSource] = await Promise.all([
+test('post components use safe post and taxonomy routes', async () => {
+  const [cardSource, rowSource, tagListSource] = await Promise.all([
     readSource('src/components/PostCard.astro'),
+    readSource('src/components/PostRow.astro'),
     readSource('src/components/TagList.astro'),
   ]);
 
@@ -158,25 +163,99 @@ test('post components use safe post and tag routes', async () => {
   assert.match(cardSource, /<Heading>/);
   assert.match(cardSource, /<article/);
   assert.match(cardSource, /<time/);
+  assert.match(rowSource, /CollectionEntry<'posts'>/);
+  assert.match(rowSource, /headingLevel\?:\s*'h2'\s*\|\s*'h3'/);
+  assert.match(rowSource, /entry\.body/);
+  assert.match(rowSource, /estimateReadingMinutes/);
+  assert.match(rowSource, /getPostHref/);
+  assert.match(rowSource, /getCategoryHref/);
+  assert.match(rowSource, /getColumnHref/);
+  assert.match(rowSource, /normalizeTag/);
+  assert.match(rowSource, /columnOrder/);
+  assert.match(rowSource, /padStart\(2,\s*['"]0['"]\)/);
+  assert.match(rowSource, /post-row__stretched-link/);
+  assert.match(rowSource, /post-row__taxonomy-link/);
+  assert.match(
+    rowSource,
+    /\.post-row__stretched-link::after\s*\{[^}]*position:\s*absolute;[^}]*inset:\s*0;[^}]*\}/s,
+  );
+  assert.match(
+    rowSource,
+    /\.post-row__taxonomy-link\s*\{[^}]*position:\s*relative;[^}]*z-index:\s*1;[^}]*\}/s,
+  );
+  assert.match(rowSource, /cover\s*&&/);
+  assert.match(rowSource, /<article/);
+  assert.match(rowSource, /<time/);
   assert.match(tagListSource, /normalizeTag/);
   assert.match(tagListSource, /<ul/);
   assert.match(tagListSource, /\/tags\//);
 });
 
-test('index and archive pages use the real collection in newest-first order', async () => {
-  const [homeSource, postsSource] = await Promise.all([
+test('homepage and archive pages use dense real-content indexes and rows', async () => {
+  const [homeSource, postsSource, tagSource] = await Promise.all([
     readSource('src/pages/index.astro'),
     readSource('src/pages/posts/index.astro'),
+    readSource('src/pages/tags/[tag].astro'),
   ]);
 
   assert.match(homeSource, /getCollection\(["']posts["']\)/);
   assert.match(homeSource, /sortNewestFirst/);
-  assert.match(homeSource, /关于技术、成长与日常的长期笔记。/);
-  assert.match(homeSource, /featured/);
-  assert.match(homeSource, /<PostCard\s+entry=\{post\}\s+headingLevel=["']h3["']/);
+  assert.match(homeSource, /buildCategoryIndex/);
+  assert.match(homeSource, /buildColumnIndex/);
+  assert.match(homeSource, /const\s+categoryIndex\s*=\s*buildCategoryIndex\(posts\)/);
+  assert.match(homeSource, /const\s+columnIndex\s*=\s*buildColumnIndex\(posts\)/);
+  assert.match(homeSource, /const\s+featured\s*=\s*posts\.find/);
+  assert.match(homeSource, /post\s*!==\s*featured/);
+  assert.match(homeSource, /slice\(0,\s*4\)/);
+  assert.match(homeSource, /<PostCard\s+entry=\{featured\}\s+headingLevel=["']h3["']/);
+  assert.match(homeSource, /<PostRow\s+entry=\{post\}\s+headingLevel=["']h3["']/);
+  assert.match(homeSource, /aria-label=["']xmo 的博客["']/i);
+  assert.match(homeSource, /aria-hidden=["']true["']/);
+  assert.match(homeSource, /<svg/);
+  assert.doesNotMatch(homeSource, /关于技术、成长与日常的长期笔记。/);
+  assert.doesNotMatch(homeSource, /home-hero__actions|editorial-note/);
   assert.match(postsSource, /getCollection\(["']posts["']\)/);
   assert.match(postsSource, /sortNewestFirst/);
-  assert.match(postsSource, /<PostCard\s+entry=\{post\}\s+headingLevel=["']h2["']/);
+  assert.match(postsSource, /<PostRow\s+entry=\{post\}\s+headingLevel=["']h2["']/);
+  assert.match(tagSource, /<PostRow\s+entry=\{post\}\s+headingLevel=["']h2["']/);
+  assert.doesNotMatch(`${postsSource}\n${tagSource}`, /<PostCard/);
+});
+
+test('category and column routes are generated from the real post collection', async () => {
+  const [
+    categoryIndexSource,
+    categorySource,
+    columnIndexSource,
+    columnSource,
+  ] = await Promise.all([
+    readSource('src/pages/categories/index.astro'),
+    readSource('src/pages/categories/[category].astro'),
+    readSource('src/pages/columns/index.astro'),
+    readSource('src/pages/columns/[column].astro'),
+  ]);
+
+  for (const source of [categoryIndexSource, categorySource]) {
+    assert.match(source, /getCollection\(['"]posts['"]\)/);
+    assert.match(source, /buildCategoryIndex/);
+  }
+
+  for (const source of [columnIndexSource, columnSource]) {
+    assert.match(source, /getCollection\(['"]posts['"]\)/);
+    assert.match(source, /buildColumnIndex/);
+  }
+
+  assert.match(categoryIndexSource, /posts\.length/);
+  assert.match(categoryIndexSource, /pubDate/);
+  assert.match(categorySource, /getStaticPaths/);
+  assert.match(categorySource, /<PostRow\s+entry=\{post\}\s+headingLevel=['"]h2['"]/);
+  assert.match(categorySource, /href=['"]\/categories\/['"]/);
+
+  assert.match(columnIndexSource, /posts\.length/);
+  assert.match(columnIndexSource, /pubDate/);
+  assert.match(columnSource, /getStaticPaths/);
+  assert.match(columnSource, /columnOrder/);
+  assert.match(columnSource, /<PostRow\s+entry=\{post\}\s+headingLevel=['"]h2['"]/);
+  assert.match(columnSource, /href=['"]\/columns\/['"]/);
 });
 
 test('supporting pages keep their copy honest and offer recovery', async () => {

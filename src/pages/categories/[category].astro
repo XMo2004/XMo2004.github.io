@@ -1,0 +1,45 @@
+---
+import type { CollectionEntry } from 'astro:content';
+import { getCollection } from 'astro:content';
+
+import PostRow from '../../components/PostRow.astro';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { buildCategoryIndex } from '../../lib/posts';
+
+interface Props {
+  label: string;
+  posts: CollectionEntry<'posts'>[];
+}
+
+export async function getStaticPaths() {
+  const categoryIndex = buildCategoryIndex(await getCollection('posts'));
+
+  return categoryIndex.map((category) => ({
+    params: { category: category.slug },
+    props: {
+      label: category.label,
+      posts: category.posts,
+    },
+  }));
+}
+
+const { label, posts } = Astro.props;
+---
+
+<BaseLayout
+  title={`分类：${label}`}
+  description={`浏览分类“${label}”下的 ${posts.length} 篇文章。`}
+>
+  <section class="taxonomy-page" aria-labelledby="category-page-title">
+    <header class="page-header taxonomy-page__header">
+      <a class="taxonomy-page__back" href="/categories/">全部分类</a>
+      <p class="eyebrow">CATEGORY ARCHIVE</p>
+      <h1 id="category-page-title">{label}</h1>
+      <p>这个分类下共有 {posts.length} 篇文章，按发布时间倒序排列。</p>
+    </header>
+
+    <div class="post-row-list">
+      {posts.map((post) => <PostRow entry={post} headingLevel="h2" />)}
+    </div>
+  </section>
+</BaseLayout>

@@ -1,0 +1,52 @@
+---
+import type { CollectionEntry } from 'astro:content';
+import { getCollection } from 'astro:content';
+
+import PostRow from '../../components/PostRow.astro';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import {
+  buildColumnIndex,
+  type OrderedColumnPostEntry,
+} from '../../lib/posts';
+
+interface Props {
+  label: string;
+  posts: OrderedColumnPostEntry<CollectionEntry<'posts'>>[];
+}
+
+export async function getStaticPaths() {
+  const columnIndex = buildColumnIndex(await getCollection('posts'));
+
+  return columnIndex.map((column) => ({
+    params: { column: column.slug },
+    props: {
+      label: column.label,
+      posts: column.posts,
+    },
+  }));
+}
+
+const { label, posts } = Astro.props;
+---
+
+<BaseLayout
+  title={`专栏：${label}`}
+  description={`按既定顺序阅读专栏“${label}”的 ${posts.length} 篇文章。`}
+>
+  <section class="taxonomy-page column-page" aria-labelledby="column-page-title">
+    <header class="page-header taxonomy-page__header">
+      <a class="taxonomy-page__back" href="/columns/">全部专栏</a>
+      <p class="eyebrow">ORDERED COLUMN</p>
+      <h1 id="column-page-title">{label}</h1>
+      <p>这个专栏共有 {posts.length} 篇文章，按专栏序号排列。</p>
+    </header>
+
+    <ol class="post-row-list column-page__list">
+      {posts.map((post) => (
+        <li data-column-order={post.data.columnOrder}>
+          <PostRow entry={post} headingLevel="h2" />
+        </li>
+      ))}
+    </ol>
+  </section>
+</BaseLayout>
