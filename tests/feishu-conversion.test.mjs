@@ -304,7 +304,7 @@ test('uses the bullet marker width when nesting under a task item', () => {
 });
 
 test('escapes pipes inside inline code when rendering a GFM table cell', () => {
-  const text = textBlock('cell-text', 'cell', 'a|b');
+  const text = textBlock('cell-text', 'cell', 'a|b and a\\|b');
   text.text.elements[0].text_run.text_element_style.inline_code = true;
   const cell = {
     block_id: 'cell',
@@ -327,7 +327,10 @@ test('escapes pipes inside inline code when rendering a GFM table cell', () => {
   const { markdown } = blocksToMarkdown(
     pageWith(['table'], [table, cell, text]),
   );
-  assert.match(markdown, /^\| `a\\\|b` \|$/m);
+  assert.match(
+    markdown,
+    /^\| <code>a&#124;b and a&#92;&#124;b<\/code> \|$/m,
+  );
   assert.match(markdown, /^\| --- \|$/m);
 });
 

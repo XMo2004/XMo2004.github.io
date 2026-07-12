@@ -634,6 +634,16 @@ function inlineCode(value) {
   return `${fence}${padding}${value}${padding}${fence}`;
 }
 
+function tableInlineCode(value) {
+  const escaped = value
+    .replace(/&/g, '&amp;')
+    .replace(/\\/g, '&#92;')
+    .replace(/\|/g, '&#124;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  return `<code>${escaped}</code>`;
+}
+
 function protectLeadingIndentation(value) {
   return value.replace(/^[ \t]+/gm, (indentation) => {
     if (!indentation.includes('\t') && indentation.length < 4) {
@@ -665,7 +675,11 @@ function escapeTablePipes(value) {
   return escaped;
 }
 
-function renderElements(block, warnings, { raw = false } = {}) {
+function renderElements(
+  block,
+  warnings,
+  { raw = false, tableCell = false } = {},
+) {
   const textData = textDataFor(block);
   if (textData === undefined) {
     return '';
@@ -681,7 +695,9 @@ function renderElements(block, warnings, { raw = false } = {}) {
       let rendered = raw
         ? textRun.content
         : style.inline_code
-          ? inlineCode(textRun.content)
+          ? tableCell
+            ? tableInlineCode(textRun.content)
+            : inlineCode(textRun.content)
           : escapeMarkdown(textRun.content);
 
       if (!raw) {
@@ -812,10 +828,9 @@ export function blocksToMarkdown(items) {
           return (cell.children ?? [])
             .map((childId) =>
               escapeTablePipes(
-                renderElements(blocks.get(childId), warnings).replace(
-                  /\n/g,
-                  '<br>',
-                ),
+                renderElements(blocks.get(childId), warnings, {
+                  tableCell: true,
+                }).replace(/\n/g, '<br>'),
               ),
             )
             .join('<br>');
