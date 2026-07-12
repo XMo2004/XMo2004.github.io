@@ -1,9 +1,19 @@
 import { documentIdFromUrl, validateSlug } from './ids.mjs';
 
 const PUBLISHING_STATUSES = new Set(['草稿', '已发布', '已下线']);
+const FILE_TOKEN = /^[A-Za-z0-9_-]+$/;
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
 function fieldError(recordId, fieldName, detail) {
   return new Error(`record_id=${recordId} 的字段「${fieldName}」${detail}`);
+}
+
+function requireRecordId(value) {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error('record_id 必须是非空字符串');
+  }
+  return value;
 }
 
 function normalizeText(value, recordId, fieldName, { optional = false } = {}) {
@@ -107,10 +117,24 @@ function normalizeDate(value, recordId) {
   if (value instanceof Date) {
     date = new Date(value.getTime());
   } else if (
-    (typeof value === 'number' && Number.isFinite(value)) ||
-    (typeof value === 'string' && value.trim())
+    typeof value === 'number' &&
+    Number.isFinite(value) &&
+    Number.isInteger(value)
   ) {
     date = new Date(value);
+  } else if (typeof value === 'string' && ISO_DATE.test(value)) {
+    date = new Date(`${value}T00:00:00.000Z`);
+    if (
+      !Number.isNaN(date.getTime()) &&
+      date.toISOString().slice(0, 10) !== value
+    ) {
+      throw fieldError(recordId, '发布日期', '格式无效');
+    }
+  } else if (typeof value === 'string' && ISO_TIMESTAMP.test(value)) {
+    date = new Date(value);
+    if (!Number.isNaN(date.getTime()) && date.toISOString() !== value) {
+      throw fieldError(recordId, '发布日期', '格式无效');
+    }
   } else {
     throw fieldError(recordId, '发布日期', '不能为空或格式无效');
   }
@@ -148,17 +172,19 @@ function normalizeCover(value, recordId) {
   }
 
   const attachment = value[0];
+  const fileToken = attachment?.file_token;
   if (
     attachment === null ||
     typeof attachment !== 'object' ||
-    typeof attachment.file_token !== 'string' ||
-    !attachment.file_token
+    typeof fileToken !== 'string' ||
+    fileToken !== fileToken.trim() ||
+    !FILE_TOKEN.test(fileToken)
   ) {
     throw fieldError(recordId, '封面', '格式无效');
   }
 
   return {
-    file_token: attachment.file_token,
+    file_token: fileToken,
     name: attachment.name,
     type: attachment.type,
     extra: structuredClone(attachment.extra),
@@ -167,7 +193,7 @@ function normalizeCover(value, recordId) {
 }
 
 export function normalizeRecord(record) {
-  const recordId = record?.record_id ?? '<missing>';
+  const recordId = requireRecordId(record?.record_id);
   const fields =
     record?.fields !== null && typeof record?.fields === 'object'
       ? record.fields

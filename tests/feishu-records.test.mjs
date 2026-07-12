@@ -58,6 +58,16 @@ test('documentIdFromUrl rejects untrusted schemes, hosts, paths, and unsafe toke
   }
 });
 
+test('documentIdFromUrl rejects credentials and explicit ports', () => {
+  for (const url of [
+    'https://secret@example.feishu.cn/docx/doxcnExample123',
+    'https://user:pass@example.feishu.cn/docx/doxcnExample123',
+    'https://example.feishu.cn:444/docx/doxcnExample123',
+  ]) {
+    assert.throws(() => documentIdFromUrl(url), /document|文档|URL/i, url);
+  }
+});
+
 test('validateSlug accepts only lowercase kebab-case slugs', () => {
   for (const slug of ['a', 'article-2', '2026-notes']) {
     assert.equal(validateSlug(slug), slug);
@@ -181,6 +191,51 @@ test('normalizeRecord allows an empty title and preserves every publishing statu
   }
 });
 
+test('normalizeRecord accepts integer milliseconds, Date objects, and strict ISO strings', () => {
+  const sourceDate = new Date('2026-07-12T00:00:00.000Z');
+  const fromDate = normalizeRecord({
+    record_id: 'rec_date_object',
+    fields: validFields({ 发布日期: sourceDate }),
+  }).pubDate;
+  const fromDateOnly = normalizeRecord({
+    record_id: 'rec_date_only',
+    fields: validFields({ 发布日期: '2026-07-12' }),
+  }).pubDate;
+
+  assert.deepEqual(fromDate, sourceDate);
+  assert.notEqual(fromDate, sourceDate);
+  assert.equal(fromDateOnly.toISOString(), '2026-07-12T00:00:00.000Z');
+});
+
+test('normalizeRecord rejects non-integer milliseconds and non-strict date strings', () => {
+  for (const value of [
+    1_783_785_600_000.5,
+    Number.POSITIVE_INFINITY,
+    '2026-02-30',
+    '07/12/2026',
+    '2026-07-12T00:00:00Z',
+    '2026-07-12T08:00:00.000+08:00',
+    '1783785600000',
+  ]) {
+    assertRecordError(validFields({ 发布日期: value }), '发布日期');
+  }
+});
+
+test('normalizeRecord requires a non-empty string record_id', () => {
+  for (const recordId of [undefined, '', '   ', 123]) {
+    const record = { fields: validFields() };
+    if (recordId !== undefined) {
+      record.record_id = recordId;
+    }
+
+    assert.throws(() => normalizeRecord(record), (error) => {
+      assert.match(error.message, /record_id/);
+      assert.doesNotMatch(error.message, /<missing>/);
+      return true;
+    });
+  }
+});
+
 test('normalizeRecord requires publishing control fields', () => {
   for (const [fieldName, value] of [
     ['文档链接', undefined],
@@ -192,6 +247,22 @@ test('normalizeRecord requires publishing control fields', () => {
     assertRecordError(validFields({ [fieldName]: value }), fieldName);
   }
 });
+
+test('normalizeRecord rejects unsafe cover file tokens', () => {
+  for (const fileToken of [
+    '   ',
+    'folder/token',
+    'boxcn\u0000Token',
+    ' boxcnToken',
+    'boxcnToken ',
+  ]) {
+    assertRecordError(
+      validFields({ 封面: [{ file_token: fileToken }] }),
+      '封面',
+    );
+  }
+});
+
 test('normalizeRecord reports the record and field for malformed values', () => {
   for (const [fieldName, value] of [
     ['标题', 123],

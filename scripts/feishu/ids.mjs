@@ -14,6 +14,9 @@ export function documentIdFromUrl(value) {
   const pathMatch = DOCUMENT_PATH.exec(url.pathname);
   if (
     url.protocol !== 'https:' ||
+    url.username !== '' ||
+    url.password !== '' ||
+    url.port !== '' ||
     !TRUSTED_DOCUMENT_HOST.test(url.hostname) ||
     !pathMatch
   ) {
