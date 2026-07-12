@@ -67,6 +67,7 @@ test('clean build emits every public entry point as a non-empty file', async () 
     'tags/index.html',
     `tags/${tagSlug}/index.html`,
     'about/index.html',
+    'search-index.json',
     'rss.xml',
     'sitemap-index.xml',
     'robots.txt',
@@ -120,6 +121,69 @@ test('article output omits both contents variants for a lone body h1', async () 
   assert.doesNotMatch(articleHtml, /<details class="post-toc-compact"/);
   assert.doesNotMatch(articleHtml, /post-layout--with-toc/);
   assert.doesNotMatch(articleHtml, /<summary>本页目录<\/summary>/);
+});
+
+test('search index contains only deterministic public article data', async () => {
+  const source = await readOutput('search-index.json');
+  const index = JSON.parse(source);
+  const requiredEntryFields = [
+    'href',
+    'title',
+    'description',
+    'pubDate',
+    'category',
+    'tags',
+    'readingMinutes',
+    'searchText',
+  ];
+  const allowedEntryFields = new Set([
+    ...requiredEntryFields,
+    'column',
+    'columnOrder',
+  ]);
+
+  assert.equal(index.version, 1);
+  assert.deepEqual(index.entries.map(({ href }) => href), [
+    '/posts/published-from-feishu/',
+    '/posts/welcome/',
+  ]);
+  assert.equal(index.entries[0].category, '技术');
+  assert.equal(index.entries[0].column, '博客搭建手记');
+  assert.match(index.entries[0].searchText, /用飞书写作/);
+
+  for (const entry of index.entries) {
+    assert.ok(
+      requiredEntryFields.every((field) => Object.hasOwn(entry, field)),
+      'search entries should contain every required public field',
+    );
+    assert.ok(
+      Object.keys(entry).every((field) => allowedEntryFields.has(field)),
+      'search entries should not contain private or unknown fields',
+    );
+    assert.equal(typeof entry.href, 'string');
+    assert.equal(typeof entry.title, 'string');
+    assert.equal(typeof entry.description, 'string');
+    assert.match(entry.pubDate, /^\d{4}-\d{2}-\d{2}$/);
+    assert.equal(typeof entry.category, 'string');
+    assert.ok(Array.isArray(entry.tags));
+    assert.ok(entry.tags.every((tag) => typeof tag === 'string'));
+    assert.ok(Number.isInteger(entry.readingMinutes));
+    assert.equal(typeof entry.searchText, 'string');
+    assert.equal(
+      Object.hasOwn(entry, 'column'),
+      Object.hasOwn(entry, 'columnOrder'),
+    );
+
+    if (Object.hasOwn(entry, 'column')) {
+      assert.equal(typeof entry.column, 'string');
+      assert.ok(Number.isInteger(entry.columnOrder));
+    }
+  }
+
+  assert.doesNotMatch(
+    source,
+    /recvp|dspq|file_token|document_id|record_id|source[ _-]?id|my\.feishu\.cn|file:\/\/|\/Users\/|\/home\/|[a-z]:\\|Documents\/Blog|\.worktrees/iu,
+  );
 });
 
 test('RSS identifies the site and links to the published article URL', async () => {
