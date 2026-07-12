@@ -244,6 +244,91 @@ test('search client supports safe rendering and the complete keyboard flow', asy
   assert.match(script, /搜索暂不可用/);
 });
 
+test('search responsive styles preserve header utilities and touch targets', async () => {
+  const styles = await readSource('src/styles/global.css');
+
+  assert.match(
+    styles,
+    /\.site-header__utilities\s*\{(?=[^}]*display:\s*flex;)(?=[^}]*align-items:\s*center;)[^}]*\}/s,
+  );
+  assert.match(
+    styles,
+    /\.search-toggle\s*\{(?=[^}]*min-width:\s*2\.75rem;)(?=[^}]*min-height:\s*2\.75rem;)[^}]*\}/s,
+  );
+  assert.match(
+    styles,
+    /\.search-dialog__close\s*\{(?=[^}]*min-width:\s*2\.75rem;)(?=[^}]*min-height:\s*2\.75rem;)[^}]*\}/s,
+  );
+  assert.match(
+    styles,
+    /\.search-dialog__input\s*\{[^}]*min-height:\s*2\.75rem;[^}]*\}/s,
+  );
+  assert.match(
+    styles,
+    /\.search-dialog__result\s+a\s*\{[^}]*min-height:\s*2\.75rem;[^}]*\}/s,
+  );
+});
+
+test('search responsive dialog inherits editorial tokens and keeps content scrollable', async () => {
+  const styles = await readSource('src/styles/global.css');
+
+  assert.match(
+    styles,
+    /\.search-dialog\s*\{(?=[^}]*width:\s*min\(46rem,\s*calc\(100vw\s*-\s*1\.5rem\)\);)(?=[^}]*max-height:\s*min\(44rem,\s*calc\(100dvh\s*-\s*1\.5rem\)\);)(?=[^}]*border:[^;}]*var\(--line\);)(?=[^}]*background:\s*var\(--surface\);)(?=[^}]*color:\s*var\(--ink\);)(?=[^}]*box-shadow:\s*var\(--shadow-soft\);)[^}]*\}/s,
+  );
+  assert.match(styles, /\.search-dialog::backdrop\s*\{[^}]*background:/s);
+  assert.match(
+    styles,
+    /\.search-dialog__panel\s*\{(?=[^}]*grid-template-rows:\s*auto\s+auto\s+auto\s+minmax\(0,\s*1fr\)\s+auto;)(?=[^}]*max-height:\s*inherit;)[^}]*\}/s,
+  );
+  assert.match(
+    styles,
+    /\.search-dialog__results\s*\{(?=[^}]*min-width:\s*0;)(?=[^}]*overflow-y:\s*auto;)[^}]*\}/s,
+  );
+  assert.match(
+    styles,
+    /\.search-dialog__result-title\s*\{[^}]*font-family:\s*var\(--font-serif\);[^}]*\}/s,
+  );
+  assert.match(
+    styles,
+    /\.search-dialog__result-description,\s*\.search-dialog__result-meta\s*\{[^}]*color:\s*var\(--muted\);[^}]*\}/s,
+  );
+  assert.doesNotMatch(
+    styles,
+    /\.search-dialog(?:__[\w-]+)?[^,{]*\{[^}]*(?:white-space:\s*nowrap|text-overflow:\s*ellipsis|-webkit-line-clamp)/s,
+  );
+});
+
+test('search responsive states expose focus, selection, and archive recovery', async () => {
+  const styles = await readSource('src/styles/global.css');
+
+  assert.match(
+    styles,
+    /\.search-toggle:focus-visible,\s*\.search-dialog__close:focus-visible,\s*\.search-dialog__input:focus-visible,\s*\.search-dialog__result\s+a:focus-visible\s*\{/s,
+  );
+  assert.match(
+    styles,
+    /\.search-dialog__result\s+a\[aria-current=["']true["']\]\s*\{(?=[^}]*background:\s*var\(--paper\);)(?=[^}]*outline:[^;}]*var\(--accent-text\);)[^}]*\}/s,
+  );
+  assert.match(
+    styles,
+    /\.search-dialog__fallback\s*\{(?=[^}]*min-height:\s*2\.75rem;)(?=[^}]*display:\s*inline-flex;)[^}]*\}/s,
+  );
+});
+
+test('search responsive behavior fits narrow screens and reduced motion', async () => {
+  const styles = await readSource('src/styles/global.css');
+
+  assert.match(
+    styles,
+    /@media\s*\(max-width:\s*48rem\)\s*\{[\s\S]*?\.search-toggle\s+kbd\s*\{[^}]*display:\s*none;[^}]*\}[\s\S]*?\.search-dialog\s*\{(?=[^}]*width:\s*calc\(100vw\s*-\s*1rem\);)(?=[^}]*max-height:\s*calc\(100dvh\s*-\s*1rem\);)[^}]*\}/,
+  );
+  assert.match(
+    styles,
+    /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?\.search-dialog,\s*\.search-dialog__result\s*\{(?=[^}]*animation:\s*none;)(?=[^}]*transition:\s*none;)(?=[^}]*opacity:\s*1;)(?=[^}]*transform:\s*none;)[^}]*\}/,
+  );
+});
+
 test('ThemeToggle exposes state and persists the selected theme', async () => {
   const source = await readSource('src/components/ThemeToggle.astro');
 
