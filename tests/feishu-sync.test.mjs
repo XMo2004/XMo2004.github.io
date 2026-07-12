@@ -19,6 +19,7 @@ import { parse as parseYaml } from 'yaml';
 import { contentAddressedMedia } from '../scripts/feishu/assets.mjs';
 import {
   createMediaBudget,
+  publicSyncFailureMessage,
   syncFeishu,
   validateSyncEnvironment,
 } from '../scripts/feishu/sync.mjs';
@@ -26,6 +27,27 @@ import {
 const APP_TOKEN = 'app-token';
 const TABLE_ID = 'table-id';
 const DOCUMENT_ID = 'doxcnExample123';
+
+test('public sync failures never expose Feishu internal identifiers', () => {
+  const internalValues = [
+    'rec_private_123',
+    'doxcnPrivateDocument456',
+    'app_private_token',
+    'table_private_token',
+    'media_private_token',
+  ];
+  const publicMessage = publicSyncFailureMessage(
+    new Error(
+      `record_id=${internalValues[0]} requested document "${internalValues[1]}" ` +
+        `via /apps/${internalValues[2]}/tables/${internalValues[3]}/media/${internalValues[4]}`,
+    ),
+  );
+
+  assert.match(publicMessage, /飞书同步失败/);
+  for (const value of internalValues) {
+    assert.doesNotMatch(publicMessage, new RegExp(value));
+  }
+});
 
 function publishedRecord({ id = 'rec-one', slug = 'first-post', fields = {} } = {}) {
   return {

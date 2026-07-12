@@ -102,6 +102,10 @@ export function validateSyncEnvironment(env = process.env) {
   };
 }
 
+export function publicSyncFailureMessage() {
+  return '飞书同步失败：错误详情已脱敏。请检查飞书应用权限、博客文章字段和文档内容后重试。';
+}
+
 function normalizePublishedRecords(items) {
   if (!Array.isArray(items)) {
     throw new Error('Feishu published records response must be an array.');
@@ -796,8 +800,8 @@ if (
     for (const warning of result.warnings) {
       console.warn(`飞书转换提示：${JSON.stringify(warning)}`);
     }
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
+  } catch {
+    console.error(publicSyncFailureMessage());
     process.exitCode = 1;
   }
 }
