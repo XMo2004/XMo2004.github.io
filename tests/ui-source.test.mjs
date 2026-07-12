@@ -349,6 +349,19 @@ test('PostLayout derives both adaptive contents views from filtered h2 through h
   );
 });
 
+test('PostLayout shows compact contents only on narrow screens', async () => {
+  const source = await readSource('src/layouts/PostLayout.astro');
+
+  assert.match(
+    source,
+    /\.post-toc-compact\s*\{[^}]*display:\s*none;[^}]*\}/s,
+  );
+  assert.match(
+    source,
+    /@media\s*\(max-width:\s*64rem\)\s*\{[\s\S]*?\.post-toc-compact\s*\{[^}]*display:\s*block;[^}]*\}/,
+  );
+});
+
 test('article layouts opt into safe BlogPosting metadata only when supplied', async () => {
   const [baseSource, postSource] = await Promise.all([
     readSource('src/layouts/BaseLayout.astro'),
