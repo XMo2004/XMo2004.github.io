@@ -57,7 +57,7 @@ const latest = posts.filter((post) => !post.data.featured).slice(0, 3);
         <p class="eyebrow">RECENT NOTES</p>
         <h2 id="latest-title">最新文章</h2>
       </div>
-      <a href="/posts/">查看文章归档</a>
+      <a class="standalone-action" href="/posts/">查看文章归档</a>
     </div>
 
     {latest.length > 0 ? (

@@ -295,6 +295,9 @@ th {
 
 .wordmark {
   width: fit-content;
+  min-height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
   color: var(--ink);
   font-size: 0.8rem;
   font-weight: 750;
@@ -417,6 +420,9 @@ th {
 }
 
 .site-footer__inner a {
+  min-height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
   color: inherit;
   font-weight: 650;
 }
@@ -491,7 +497,7 @@ button {
 }
 
 .tag-list a {
-  min-height: 2.25rem;
+  min-height: 2.75rem;
   padding-inline: var(--space-3);
   display: inline-flex;
   align-items: center;
@@ -510,7 +516,7 @@ button {
 }
 
 .tag-list--compact a {
-  min-height: 2rem;
+  min-height: 2.75rem;
   padding-inline: var(--space-2);
   font-size: 0.8rem;
 }
@@ -531,6 +537,12 @@ button {
   align-items: center;
   color: var(--ink);
   font-weight: 650;
+}
+
+.standalone-action {
+  min-height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
 }
 
 .home-hero {

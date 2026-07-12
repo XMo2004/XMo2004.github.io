@@ -25,7 +25,7 @@ const posts = sortNewestFirst(await getCollection('posts'));
   ) : (
     <div class="empty-state">
       <p>文章还在整理中，过些时候再来看看。</p>
-      <a href="/">返回首页</a>
+      <a class="standalone-action" href="/">返回首页</a>
     </div>
   )}
 </BaseLayout>

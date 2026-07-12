@@ -37,7 +37,14 @@ test('BaseLayout starts the saved or system theme before paint', async () => {
 });
 
 test('global styles define the editorial tokens and accessibility safeguards', async () => {
-  const source = await readSource('src/styles/global.css');
+  const [source, homeSource, archiveSource, aboutSource, notFoundSource] =
+    await Promise.all([
+      readSource('src/styles/global.css'),
+      readSource('src/pages/index.astro'),
+      readSource('src/pages/posts/index.astro'),
+      readSource('src/pages/about.astro'),
+      readSource('src/pages/404.astro'),
+    ]);
 
   assert.match(source, /--paper:\s*#f4f0e7/i);
   assert.match(source, /--terracotta:\s*#b84f35/i);
@@ -46,6 +53,39 @@ test('global styles define the editorial tokens and accessibility safeguards', a
   assert.match(source, /@media\s*\(prefers-reduced-motion:\s*reduce\)/);
   assert.match(source, /@media\s*\(max-width:/);
   assert.match(source, /text-wrap:\s*pretty/);
+  assert.match(
+    source,
+    /\.tag-list a\s*\{[^}]*min-height:\s*2\.75rem;[^}]*\}/s,
+  );
+  assert.match(
+    source,
+    /\.tag-list--compact a\s*\{[^}]*min-height:\s*2\.75rem;[^}]*\}/s,
+  );
+  assert.match(
+    source,
+    /\.wordmark\s*\{(?=[^}]*min-height:\s*2\.75rem;)(?=[^}]*display:\s*inline-flex;)[^}]*\}/s,
+  );
+  assert.match(
+    source,
+    /\.site-footer__inner a\s*\{(?=[^}]*min-height:\s*2\.75rem;)(?=[^}]*display:\s*inline-flex;)[^}]*\}/s,
+  );
+  assert.match(
+    source,
+    /\.text-link\s*\{[^}]*min-height:\s*2\.75rem;[^}]*\}/s,
+  );
+  assert.match(
+    source,
+    /\.standalone-action\s*\{(?=[^}]*min-height:\s*2\.75rem;)(?=[^}]*display:\s*inline-flex;)[^}]*\}/s,
+  );
+
+  for (const pageSource of [
+    homeSource,
+    archiveSource,
+    aboutSource,
+    notFoundSource,
+  ]) {
+    assert.match(pageSource, /class=["']standalone-action["']/);
+  }
 });
 
 test('SiteHeader keeps all primary destinations available and marks the current one', async () => {
