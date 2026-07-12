@@ -18,18 +18,30 @@ const PUBLIC_RECORD_FIELDS = new Set([
   '封面',
   '发布日期',
 ]);
+const PUBLIC_RECORD_RULES = new Set([
+  'positive-safe-integer',
+  'paired',
+]);
 const publicFieldByError = new WeakMap();
+const publicRuleByError = new WeakMap();
 
-function fieldError(recordId, fieldName, detail) {
+function fieldError(recordId, fieldName, detail, publicRule) {
   const error = new Error(`record_id=${recordId} 的字段「${fieldName}」${detail}`);
   if (PUBLIC_RECORD_FIELDS.has(fieldName)) {
     publicFieldByError.set(error, fieldName);
+  }
+  if (PUBLIC_RECORD_RULES.has(publicRule)) {
+    publicRuleByError.set(error, publicRule);
   }
   return error;
 }
 
 export function getPublicRecordFieldName(error) {
   return error instanceof Error ? publicFieldByError.get(error) : undefined;
+}
+
+export function getPublicRecordRule(error) {
+  return error instanceof Error ? publicRuleByError.get(error) : undefined;
 }
 
 function requireRecordId(value) {
@@ -163,7 +175,12 @@ function normalizeColumnOrder(value, recordId) {
     return null;
   }
   if (!Number.isSafeInteger(value) || value <= 0) {
-    throw fieldError(recordId, '专栏序号', '必须是正安全整数');
+    throw fieldError(
+      recordId,
+      '专栏序号',
+      '必须是正安全整数',
+      'positive-safe-integer',
+    );
   }
   return value;
 }
@@ -265,10 +282,20 @@ export function normalizeRecord(record) {
   const columnOrder = normalizeColumnOrder(fields.专栏序号, recordId);
 
   if (column !== null && columnOrder === null) {
-    throw fieldError(recordId, '专栏序号', '必须与「专栏」同时填写');
+    throw fieldError(
+      recordId,
+      '专栏序号',
+      '必须与「专栏」同时填写',
+      'paired',
+    );
   }
   if (column === null && columnOrder !== null) {
-    throw fieldError(recordId, '专栏', '必须与「专栏序号」同时填写');
+    throw fieldError(
+      recordId,
+      '专栏',
+      '必须与「专栏序号」同时填写',
+      'paired',
+    );
   }
 
   return {

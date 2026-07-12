@@ -299,6 +299,8 @@ test('public sync diagnostics map each synchronization boundary to a stable allo
   const expected = {
     recordsValidate:
       '飞书同步失败 [records-validate: 发布字段校验; field: 分类]：错误详情已脱敏，请重试。',
+    recordsRule:
+      '飞书同步失败 [records-validate: 发布字段校验; field: 专栏序号; rule: positive-safe-integer]：错误详情已脱敏，请重试。',
     preflight:
       '飞书同步失败 [preflight: 手动文章与分类预检]：错误详情已脱敏，请重试。',
     build:
@@ -320,6 +322,19 @@ test('public sync diagnostics map each synchronization boundary to a stable allo
       tableId: TABLE_ID,
     }),
     expected.recordsValidate,
+  );
+
+  const recordsRuleRoot = await makeRoot(t);
+  assert.equal(
+    await publicMessageForRejectedSync({
+      root: recordsRuleRoot,
+      client: stableClient({
+        records: [publishedRecord({ fields: { 专栏序号: '2' } })],
+      }).client,
+      appToken: APP_TOKEN,
+      tableId: TABLE_ID,
+    }),
+    expected.recordsRule,
   );
 
   const preflightRoot = await makeRoot(t);

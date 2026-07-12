@@ -29,6 +29,7 @@ import {
 } from './manifest.mjs';
 import {
   getPublicRecordFieldName,
+  getPublicRecordRule,
   normalizeRecord,
 } from './records.mjs';
 
@@ -64,6 +65,7 @@ export const PUBLIC_SYNC_FAILURE_PHASES = Object.freeze({
 });
 const syncFailurePhase = new WeakMap();
 const recordValidationFields = new WeakMap();
+const recordValidationRules = new WeakMap();
 
 async function inSyncPhase(phase, operation) {
   try {
@@ -147,7 +149,16 @@ export function publicSyncFailureMessage(error) {
       Array.isArray(fields) && fields.length > 0
         ? `; field: ${fields.join(',')}`
         : '';
-    return `飞书同步失败 [${phase}: ${PUBLIC_SYNC_FAILURE_PHASES[phase]}${fieldDetail}]：错误详情已脱敏，请重试。`;
+    const rules =
+      phase === 'records-validate' && error instanceof Error
+        ? recordValidationRules.get(error)
+        : undefined;
+    const rule =
+      Array.isArray(fields) && fields.length === 1 && rules instanceof Map
+        ? rules.get(fields[0])
+        : undefined;
+    const ruleDetail = typeof rule === 'string' ? `; rule: ${rule}` : '';
+    return `飞书同步失败 [${phase}: ${PUBLIC_SYNC_FAILURE_PHASES[phase]}${fieldDetail}${ruleDetail}]：错误详情已脱敏，请重试。`;
   }
   return '飞书同步失败：错误详情已脱敏。请检查飞书应用权限、博客文章字段和文档内容后重试。';
 }
@@ -160,6 +171,7 @@ function normalizePublishedRecords(items) {
   const records = [];
   const issues = [];
   const publicFields = new Set();
+  const publicRules = new Map();
   for (const [index, item] of items.entries()) {
     try {
       const record = normalizeRecord(item);
@@ -173,6 +185,10 @@ function normalizePublishedRecords(items) {
       const publicField = getPublicRecordFieldName(error);
       if (publicField !== undefined) {
         publicFields.add(publicField);
+        const publicRule = getPublicRecordRule(error);
+        if (publicRule !== undefined) {
+          publicRules.set(publicField, publicRule);
+        }
       }
       const recordId =
         typeof item?.record_id === 'string' && item.record_id.length > 0
@@ -207,6 +223,9 @@ function normalizePublishedRecords(items) {
     const error = new Error(`Invalid Feishu publishing records:\n${issues.map((item) => `- ${item}`).join('\n')}`);
     if (publicFields.size > 0) {
       recordValidationFields.set(error, [...publicFields]);
+    }
+    if (publicRules.size > 0) {
+      recordValidationRules.set(error, publicRules);
     }
     throw error;
   }
