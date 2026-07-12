@@ -209,6 +209,29 @@ test('buildSearchEntry requires the Markdown body', () => {
   );
 });
 
+test('buildSearchEntry rejects MDX before hidden code can enter the public index', () => {
+  assert.throws(
+    () =>
+      buildSearchEntry({
+        id: 'manual/private-runtime.mdx',
+        body: `import secret from '/Users/xmo/private/token.ts'
+export const apiKey = 'sk-private'
+
+# Public article
+
+{apiKey}`,
+        data: {
+          title: 'MDX article',
+          description: 'Public description',
+          pubDate: new Date('2026-05-01'),
+          category: '技术',
+          tags: [],
+        },
+      }),
+    /MDX/i,
+  );
+});
+
 test('normalizeSearchQuery applies NFKC, zh-CN lowercase, and whitespace normalization', () => {
   assert.equal(
     normalizeSearchQuery('  ＦＥＩＳＨＵ\n\t Astro  '),

@@ -599,6 +599,10 @@ test('search client supports safe rendering and the complete keyboard flow', asy
     script,
     /if\s*\(\s*event\.key\s*===\s*['"]Escape['"]\s*\)\s*\{(?=[^}]*event\.preventDefault\(\);)(?=[^}]*dialog\.close\(\);)[^}]*\}/,
   );
+  assert.match(
+    script,
+    /if\s*\(\s*event\.target\s*!==\s*input\s*\)\s*\{\s*return;\s*\}\s*if\s*\(\s*event\.key\s*===\s*['"]ArrowDown['"]\s*\)/,
+  );
   assert.match(script, /aria-current/);
   assert.match(script, /\.click\(\)/);
   assert.match(script, /event\.target\s*===\s*dialog[\s\S]*?dialog\.close\(\)/);

@@ -221,6 +221,9 @@ function isEditableTarget(target: EventTarget | null): boolean {
       dialog.close();
       return;
     }
+    if (event.target !== input) {
+      return;
+    }
     if (event.key === 'ArrowDown') {
       event.preventDefault();
       updateActiveResult(activeIndex + 1);

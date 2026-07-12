@@ -474,6 +474,12 @@ export function markdownToSearchText(markdown: string): string {
 }
 
 export function buildSearchEntry(post: SearchSourcePost): SearchEntry {
+  if (/\.mdx$/iu.test(post.id)) {
+    throw new Error(
+      `Post "${post.id}" uses MDX, whose non-visible code cannot be included in the public search index.`,
+    );
+  }
+
   if (typeof post.body !== 'string') {
     throw new Error(`Post "${post.id}" does not expose its Markdown body.`);
   }
