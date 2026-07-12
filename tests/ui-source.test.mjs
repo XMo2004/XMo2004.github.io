@@ -6,6 +6,348 @@ async function readSource(relativePath) {
   return readFile(new URL(`../${relativePath}`, import.meta.url), 'utf8');
 }
 
+function splitCssTopLevel(source, separator) {
+  const parts = [];
+  let start = 0;
+  let parentheses = 0;
+  let brackets = 0;
+  let quote;
+
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+    if (quote !== undefined) {
+      if (character === '\\') {
+        index += 1;
+      } else if (character === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      quote = character;
+    } else if (character === '(') {
+      parentheses += 1;
+    } else if (character === ')') {
+      parentheses -= 1;
+    } else if (character === '[') {
+      brackets += 1;
+    } else if (character === ']') {
+      brackets -= 1;
+    } else if (
+      character === separator &&
+      parentheses === 0 &&
+      brackets === 0
+    ) {
+      parts.push(source.slice(start, index));
+      start = index + 1;
+    }
+  }
+
+  parts.push(source.slice(start));
+  return parts;
+}
+
+function findCssBlockEnd(source, openingBrace) {
+  let depth = 1;
+  let quote;
+
+  for (let index = openingBrace + 1; index < source.length; index += 1) {
+    const character = source[index];
+    if (quote !== undefined) {
+      if (character === '\\') {
+        index += 1;
+      } else if (character === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      quote = character;
+    } else if (character === '{') {
+      depth += 1;
+    } else if (character === '}') {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+
+  throw new Error('Unclosed CSS block in style contract fixture.');
+}
+
+function parseCssDeclarations(body) {
+  return splitCssTopLevel(body, ';').flatMap((entry, index) => {
+    const colon = entry.indexOf(':');
+    if (colon < 0) return [];
+
+    const property = entry.slice(0, colon).trim().toLowerCase();
+    const rawValue = entry.slice(colon + 1).trim();
+    if (property === '' || rawValue === '') return [];
+
+    const important = /\s*!important\s*$/i.test(rawValue);
+    const value = rawValue
+      .replace(/\s*!important\s*$/i, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return [{ property, value, important, index }];
+  });
+}
+
+function parseCssCascade(source) {
+  const rules = [];
+  const state = { order: 0 };
+  const withoutComments = source.replace(/\/\*[\s\S]*?\*\//g, '');
+
+  function visit(segment, mediaQueries = []) {
+    let cursor = 0;
+    while (cursor < segment.length) {
+      const openingBrace = segment.indexOf('{', cursor);
+      if (openingBrace < 0) return;
+
+      const prelude = segment.slice(cursor, openingBrace).trim();
+      const closingBrace = findCssBlockEnd(segment, openingBrace);
+      const body = segment.slice(openingBrace + 1, closingBrace);
+
+      if (/^@media\b/i.test(prelude)) {
+        visit(body, [
+          ...mediaQueries,
+          prelude.replace(/^@media\b/i, '').trim(),
+        ]);
+      } else if (!prelude.startsWith('@')) {
+        const declarations = parseCssDeclarations(body);
+        const order = state.order;
+        state.order += 1;
+        for (const selector of splitCssTopLevel(prelude, ',')) {
+          const normalizedSelector = selector.trim().replace(/\s+/g, ' ');
+          if (normalizedSelector !== '' && declarations.length > 0) {
+            rules.push({
+              selector: normalizedSelector,
+              declarations,
+              mediaQueries,
+              order,
+            });
+          }
+        }
+      }
+
+      cursor = closingBrace + 1;
+    }
+  }
+
+  visit(withoutComments);
+  return rules;
+}
+
+function cssLengthToPixels(value) {
+  const match = /^(-?\d+(?:\.\d+)?)(px|rem)$/i.exec(value?.trim() ?? '');
+  if (!match) return Number.NaN;
+  const amount = Number(match[1]);
+  return match[2].toLowerCase() === 'rem' ? amount * 16 : amount;
+}
+
+function mediaQueryMatches(query, environment) {
+  return splitCssTopLevel(query, ',').some((branch) => {
+    const features = [
+      ...branch.matchAll(/\(\s*([a-z-]+)\s*:\s*([^)]+)\)/gi),
+    ];
+    if (features.length === 0) return false;
+
+    return features.every(([, name, rawValue]) => {
+      const value = rawValue.trim().toLowerCase();
+      if (name.toLowerCase() === 'max-width') {
+        return environment.viewportWidth <= cssLengthToPixels(value);
+      }
+      if (name.toLowerCase() === 'min-width') {
+        return environment.viewportWidth >= cssLengthToPixels(value);
+      }
+      if (name.toLowerCase() === 'prefers-reduced-motion') {
+        return value === 'reduce'
+          ? environment.reducedMotion
+          : !environment.reducedMotion;
+      }
+      return false;
+    });
+  });
+}
+
+function cssSpecificity(selector) {
+  const ids = selector.match(/#[\w-]+/g)?.length ?? 0;
+  const withoutPseudoElements = selector.replace(/::[\w-]+/g, '');
+  const classes = withoutPseudoElements.match(/\.[\w-]+/g)?.length ?? 0;
+  const attributes = withoutPseudoElements.match(/\[[^\]]+\]/g)?.length ?? 0;
+  const pseudoClasses =
+    withoutPseudoElements.match(/:(?!:)[\w-]+(?:\([^)]*\))?/g)?.length ?? 0;
+  const elementSource = withoutPseudoElements
+    .replace(/#[\w-]+|\.[\w-]+|\[[^\]]+\]|:(?!:)[\w-]+(?:\([^)]*\))?/g, ' ')
+    .replace(/[>+~*]/g, ' ');
+  const elements = elementSource
+    .trim()
+    .split(/\s+/)
+    .filter((token) => /^[a-z][\w-]*$/i.test(token)).length;
+  return [ids, classes + attributes + pseudoClasses, elements];
+}
+
+function selectorAppliesToTarget(selector, target) {
+  if (selector === target) return true;
+  if (selector === ':focus-visible') return target.endsWith(':focus-visible');
+
+  const targetWithoutState = target
+    .replace(/\[[^\]]+\]/g, '')
+    .replace(/:focus-visible\b/g, '')
+    .trim();
+  return selector === targetWithoutState;
+}
+
+function compareSpecificity(first, second) {
+  for (let index = 0; index < first.length; index += 1) {
+    if (first[index] !== second[index]) return first[index] - second[index];
+  }
+  return 0;
+}
+
+function effectiveCssDeclarations(rules, target, environment) {
+  const winners = new Map();
+
+  for (const rule of rules) {
+    if (
+      !selectorAppliesToTarget(rule.selector, target) ||
+      !rule.mediaQueries.every((query) => mediaQueryMatches(query, environment))
+    ) {
+      continue;
+    }
+
+    const specificity = cssSpecificity(rule.selector);
+    for (const declaration of rule.declarations) {
+      const current = winners.get(declaration.property);
+      const wins =
+        current === undefined ||
+        Number(declaration.important) > Number(current.important) ||
+        (declaration.important === current.important &&
+          (compareSpecificity(specificity, current.specificity) > 0 ||
+            (compareSpecificity(specificity, current.specificity) === 0 &&
+              (rule.order > current.order ||
+                (rule.order === current.order &&
+                  declaration.index >= current.declarationIndex)))));
+
+      if (wins) {
+        winners.set(declaration.property, {
+          value: declaration.value,
+          important: declaration.important,
+          specificity,
+          order: rule.order,
+          declarationIndex: declaration.index,
+        });
+      }
+    }
+  }
+
+  return Object.fromEntries(
+    [...winners].map(([property, winner]) => [property, winner.value]),
+  );
+}
+
+function assertMinimumCssLength(declarations, property, label) {
+  const value = declarations[property];
+  assert.ok(
+    cssLengthToPixels(value) >= 44,
+    `${label} ${property} must remain at least 2.75rem at 320px; received ${value ?? 'unset'}`,
+  );
+}
+
+function assertEffectiveSearchStyleCascade(styles) {
+  const rules = parseCssCascade(styles);
+  const compactEnvironment = {
+    viewportWidth: 320,
+    reducedMotion: false,
+  };
+  const reducedMotionEnvironment = {
+    viewportWidth: 320,
+    reducedMotion: true,
+  };
+  const compact = (target) =>
+    effectiveCssDeclarations(rules, target, compactEnvironment);
+
+  const toggle = compact('.search-toggle');
+  assertMinimumCssLength(toggle, 'min-width', 'search-toggle');
+  assertMinimumCssLength(toggle, 'min-height', 'search-toggle');
+
+  const close = compact('.search-dialog__close');
+  assertMinimumCssLength(close, 'min-width', 'search-dialog__close');
+  assertMinimumCssLength(close, 'min-height', 'search-dialog__close');
+  assertMinimumCssLength(
+    compact('.search-dialog__input'),
+    'min-height',
+    'search-dialog__input',
+  );
+  assertMinimumCssLength(
+    compact('.search-dialog__result a'),
+    'min-height',
+    'search-dialog__result a',
+  );
+
+  assert.equal(
+    compact('.search-dialog__results')['overflow-y'],
+    'auto',
+    'search-dialog__results overflow-y must remain auto at 320px',
+  );
+  assert.equal(
+    compact('.search-toggle kbd').display,
+    'none',
+    'search-toggle kbd display must remain none at 320px',
+  );
+
+  const dialog = compact('.search-dialog');
+  assert.equal(
+    dialog.width,
+    'calc(100vw - 1rem)',
+    'search-dialog mobile width must preserve the viewport inset',
+  );
+  assert.equal(
+    dialog['max-height'],
+    'calc(100dvh - 1rem)',
+    'search-dialog mobile max-height must preserve the viewport inset',
+  );
+
+  for (const [label, target] of [
+    ['search-dialog', '.search-dialog[open]'],
+    ['search-dialog__result', '.search-dialog__result'],
+  ]) {
+    const declarations = effectiveCssDeclarations(
+      rules,
+      target,
+      reducedMotionEnvironment,
+    );
+    for (const [property, expected] of [
+      ['animation', 'none'],
+      ['transition', 'none'],
+      ['opacity', '1'],
+      ['transform', 'none'],
+    ]) {
+      assert.equal(
+        declarations[property],
+        expected,
+        `reduced-motion ${label} ${property} must resolve to ${expected}`,
+      );
+    }
+  }
+
+  for (const target of [
+    '.search-toggle:focus-visible',
+    '.search-dialog__close:focus-visible',
+    '.search-dialog__input:focus-visible',
+    '.search-dialog__result a:focus-visible',
+  ]) {
+    const declarations = compact(target);
+    const outline = declarations.outline;
+    assert.ok(
+      outline !== undefined &&
+        !/\bnone\b/i.test(outline) &&
+        !/^0(?:[a-z%]+)?(?:\s|$)/i.test(outline) &&
+        declarations['outline-style'] !== 'none',
+      `${target} focus-visible outline must remain visible; received ${outline ?? 'unset'}`,
+    );
+  }
+}
+
 test('BaseLayout provides Chinese document metadata and an accessible page shell', async () => {
   const [source, footerSource] = await Promise.all([
     readSource('src/layouts/BaseLayout.astro'),
@@ -326,6 +668,61 @@ test('search responsive behavior fits narrow screens and reduced motion', async 
   assert.match(
     styles,
     /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?\.search-dialog,\s*\.search-dialog__result\s*\{(?=[^}]*animation:\s*none;)(?=[^}]*transition:\s*none;)(?=[^}]*opacity:\s*1;)(?=[^}]*transform:\s*none;)[^}]*\}/,
+  );
+});
+
+test('effective search style cascade rejects late destructive overrides', async () => {
+  const styles = await readSource('src/styles/global.css');
+  const lateTouchTargetOverride = `${styles}
+    @media (max-width: 48rem) {
+      .search-toggle { min-width: 1rem; min-height: 1rem; }
+    }
+  `;
+  const lateOverflowOverride = `${styles}
+    @media (max-width: 48rem) {
+      .search-dialog__results { overflow-y: hidden; }
+    }
+  `;
+  const outOfRangeOverride = `${styles}
+    @media (min-width: 60rem) {
+      .search-toggle { min-width: 1rem; min-height: 1rem; }
+      .search-dialog__results { overflow-y: hidden; }
+    }
+  `;
+  const lateMotionOverride = `${styles}
+    @media (prefers-reduced-motion: reduce) {
+      .search-dialog[open], .search-dialog__result {
+        animation: search-result-enter 1s;
+        transition: opacity 1s;
+        opacity: 0;
+        transform: translateY(1rem);
+      }
+    }
+  `;
+  const lateFocusOverride = `${styles}
+    .search-toggle:focus-visible,
+    .search-dialog__close:focus-visible,
+    .search-dialog__input:focus-visible,
+    .search-dialog__result a:focus-visible { outline: none; }
+  `;
+
+  assert.doesNotThrow(() => assertEffectiveSearchStyleCascade(styles));
+  assert.doesNotThrow(() => assertEffectiveSearchStyleCascade(outOfRangeOverride));
+  assert.throws(
+    () => assertEffectiveSearchStyleCascade(lateTouchTargetOverride),
+    /search-toggle min-width/,
+  );
+  assert.throws(
+    () => assertEffectiveSearchStyleCascade(lateOverflowOverride),
+    /search-dialog__results overflow-y/,
+  );
+  assert.throws(
+    () => assertEffectiveSearchStyleCascade(lateMotionOverride),
+    /reduced-motion search-dialog animation/,
+  );
+  assert.throws(
+    () => assertEffectiveSearchStyleCascade(lateFocusOverride),
+    /focus-visible outline/,
   );
 });
 
