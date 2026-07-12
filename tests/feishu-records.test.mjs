@@ -13,6 +13,9 @@ function validFields(overrides = {}) {
     Slug: 'article-title',
     摘要: '文章摘要',
     标签: ['技术'],
+    分类: '技术',
+    专栏: '博客搭建手记',
+    专栏序号: 2,
     发布日期: 1_783_785_600_000,
     状态: '已发布',
     精选: true,
@@ -132,6 +135,9 @@ test('normalizeRecord handles rich text, hyperlink, attachment, and object-tag B
     slug: 'article-title',
     description: '第一段摘要',
     tags: ['技术', 'Astro'],
+    category: '技术',
+    column: '博客搭建手记',
+    columnOrder: 2,
     pubDate: new Date(1_783_785_600_000),
     status: '已发布',
     featured: true,
@@ -156,6 +162,8 @@ test('normalizeRecord handles string Bitable values and defaults optional fields
         'https://workspace.larksuite.com/docx/doxcnLarkSuite456?from=space',
       摘要: '  字符串摘要  ',
       标签: [' 技术 ', '', '技术', ' Astro '],
+      分类: '  技术  ',
+      专栏: '  博客搭建手记  ',
       发布日期: '2026-07-12T00:00:00.000Z',
       状态: '草稿',
       精选: undefined,
@@ -172,6 +180,9 @@ test('normalizeRecord handles string Bitable values and defaults optional fields
     slug: 'article-title',
     description: '字符串摘要',
     tags: ['技术', 'Astro'],
+    category: '技术',
+    column: '博客搭建手记',
+    columnOrder: 2,
     pubDate: new Date('2026-07-12T00:00:00.000Z'),
     status: '草稿',
     featured: false,
@@ -245,6 +256,39 @@ test('normalizeRecord requires publishing control fields', () => {
     ['状态', undefined],
   ]) {
     assertRecordError(validFields({ [fieldName]: value }), fieldName);
+  }
+});
+
+test('normalizeRecord requires a non-empty string category', () => {
+  for (const value of [undefined, '', '   ', 123, ['技术'], { text: '技术' }]) {
+    assertRecordError(validFields({ 分类: value }), '分类');
+  }
+});
+
+test('normalizeRecord allows the column and order pair to be omitted', () => {
+  const record = normalizeRecord({
+    record_id: 'rec_without_column',
+    fields: validFields({ 专栏: undefined, 专栏序号: undefined }),
+  });
+
+  assert.equal(record.column, null);
+  assert.equal(record.columnOrder, null);
+});
+
+test('normalizeRecord requires column and column order to be provided together', () => {
+  assertRecordError(validFields({ 专栏序号: undefined }), '专栏序号');
+  assertRecordError(validFields({ 专栏: undefined }), '专栏');
+});
+
+test('normalizeRecord accepts only positive safe integer column orders without coercion', () => {
+  for (const value of [
+    0,
+    -1,
+    1.5,
+    '2',
+    Number.MAX_SAFE_INTEGER + 1,
+  ]) {
+    assertRecordError(validFields({ 专栏序号: value }), '专栏序号');
   }
 });
 

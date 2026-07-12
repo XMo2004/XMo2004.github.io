@@ -32,7 +32,7 @@ npm run verify
 npm run sync:feishu
 ```
 
-应用权限、多维表格九字段、GitHub secrets 和发布自动化的完整步骤见 [飞书发布配置](docs/FEISHU_SETUP.md)。
+应用权限、多维表格十二字段（其中「分类」发布必填，「专栏」与「专栏序号」成对填写）、GitHub secrets 和发布自动化的完整步骤见 [飞书发布配置](docs/FEISHU_SETUP.md)。
 
 ## 自动化
 

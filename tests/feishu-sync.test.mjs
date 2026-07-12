@@ -60,6 +60,9 @@ function publishedRecord({ id = 'rec-one', slug = 'first-post', fields = {} } = 
       Slug: slug,
       摘要: '这是一篇由飞书同步的测试文章。',
       标签: ['飞书', '测试'],
+      分类: '技术',
+      专栏: '博客搭建手记',
+      专栏序号: 2,
       发布日期: Date.parse('2026-07-11T16:00:00.000Z'),
       状态: '已发布',
       精选: true,
@@ -253,6 +256,9 @@ test('sync creates valid Markdown, localized media, and a deterministic manifest
     description: '这是一篇由飞书同步的测试文章。',
     pubDate: '2026-07-12',
     tags: ['飞书', '测试'],
+    category: '技术',
+    column: '博客搭建手记',
+    columnOrder: 2,
     featured: true,
     cover: coverAsset.publicPath,
     slug: 'first-post',
@@ -277,6 +283,62 @@ test('sync creates valid Markdown, localized media, and a deterministic manifest
     manifest.records[0].assets.map(({ hash }) => hash).sort(),
     [bodyAsset.hash, coverAsset.hash].sort(),
   );
+});
+
+test('sync omits both optional column fields instead of publishing null values', async (t) => {
+  const root = await makeRoot(t);
+  const { client } = stableClient({
+    records: [
+      publishedRecord({
+        fields: { 专栏: undefined, 专栏序号: undefined },
+      }),
+    ],
+  });
+
+  await syncFeishu({ root, client, appToken: APP_TOKEN, tableId: TABLE_ID });
+
+  const source = await readFile(
+    join(root, 'src/content/posts/feishu/first-post.md'),
+    'utf8',
+  );
+  const { frontmatter } = parseMarkdownFile(source);
+  assert.equal(frontmatter.category, '技术');
+  assert.equal(Object.hasOwn(frontmatter, 'column'), false);
+  assert.equal(Object.hasOwn(frontmatter, 'columnOrder'), false);
+  assert.doesNotMatch(source, /^column(?:Order)?:/m);
+});
+
+test('changing only public taxonomy metadata rewrites the generated post', async (t) => {
+  const root = await makeRoot(t);
+  const first = stableClient();
+  await syncFeishu({
+    root,
+    client: first.client,
+    appToken: APP_TOKEN,
+    tableId: TABLE_ID,
+  });
+  const before = await readFile(
+    join(root, 'src/content/posts/feishu/first-post.md'),
+    'utf8',
+  );
+
+  const second = stableClient({
+    records: [publishedRecord({ fields: { 分类: '成长' } })],
+  });
+  const result = await syncFeishu({
+    root,
+    client: second.client,
+    appToken: APP_TOKEN,
+    tableId: TABLE_ID,
+  });
+  const after = await readFile(
+    join(root, 'src/content/posts/feishu/first-post.md'),
+    'utf8',
+  );
+
+  assert.equal(result.changed, true);
+  assert.notEqual(after, before);
+  assert.equal(parseMarkdownFile(after).frontmatter.category, '成长');
 });
 
 test('changing only Feishu internal identifiers does not rewrite public output', async (t) => {

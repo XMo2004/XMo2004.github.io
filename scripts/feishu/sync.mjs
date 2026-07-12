@@ -310,6 +310,10 @@ function postFrontmatter(article) {
     description: article.description,
     pubDate: dateInShanghai(article.pubDate),
     tags: article.tags,
+    category: article.category,
+    ...(article.column === null
+      ? {}
+      : { column: article.column, columnOrder: article.columnOrder }),
     featured: article.featured,
     ...(article.cover === undefined ? {} : { cover: article.cover }),
     slug: article.slug,

@@ -112,6 +112,39 @@ function normalizeTags(value, recordId) {
   return [...new Set(tags.filter(Boolean))];
 }
 
+function normalizeSingleSelect(
+  value,
+  recordId,
+  fieldName,
+  { optional = false } = {},
+) {
+  if (value == null && optional) {
+    return null;
+  }
+  if (typeof value !== 'string') {
+    throw fieldError(recordId, fieldName, '不能为空且必须是单选文本');
+  }
+
+  const normalized = value.trim();
+  if (!normalized) {
+    if (optional) {
+      return null;
+    }
+    throw fieldError(recordId, fieldName, '不能为空');
+  }
+  return normalized;
+}
+
+function normalizeColumnOrder(value, recordId) {
+  if (value == null) {
+    return null;
+  }
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw fieldError(recordId, '专栏序号', '必须是正安全整数');
+  }
+  return value;
+}
+
 function normalizeDate(value, recordId) {
   let date;
   if (value instanceof Date) {
@@ -202,6 +235,18 @@ export function normalizeRecord(record) {
     fields.文档链接,
     recordId,
   );
+  const category = normalizeSingleSelect(fields.分类, recordId, '分类');
+  const column = normalizeSingleSelect(fields.专栏, recordId, '专栏', {
+    optional: true,
+  });
+  const columnOrder = normalizeColumnOrder(fields.专栏序号, recordId);
+
+  if (column !== null && columnOrder === null) {
+    throw fieldError(recordId, '专栏序号', '必须与「专栏」同时填写');
+  }
+  if (column === null && columnOrder !== null) {
+    throw fieldError(recordId, '专栏', '必须与「专栏序号」同时填写');
+  }
 
   return {
     recordId,
@@ -211,6 +256,9 @@ export function normalizeRecord(record) {
     slug: normalizeSlug(fields.Slug, recordId),
     description: normalizeText(fields.摘要, recordId, '摘要'),
     tags: normalizeTags(fields.标签, recordId),
+    category,
+    column,
+    columnOrder,
     pubDate: normalizeDate(fields.发布日期, recordId),
     status: normalizeStatus(fields.状态, recordId),
     featured: normalizeFeatured(fields.精选, recordId),
