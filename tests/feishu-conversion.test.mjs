@@ -273,6 +273,93 @@ test('indents every line of a non-list block nested under a list item', () => {
   );
 });
 
+test('uses the bullet marker width when nesting under a task item', () => {
+  const parent = {
+    block_id: 'todo-parent',
+    block_type: 17,
+    parent_id: 'page',
+    children: ['todo-child'],
+    todo: {
+      elements: [
+        { text_run: { content: '父任务', text_element_style: {} } },
+      ],
+      style: { done: true },
+    },
+  };
+  const child = {
+    block_id: 'todo-child',
+    block_type: 12,
+    parent_id: 'todo-parent',
+    bullet: {
+      elements: [
+        { text_run: { content: '子项', text_element_style: {} } },
+      ],
+    },
+  };
+
+  const { markdown } = blocksToMarkdown(
+    pageWith(['todo-parent'], [parent, child]),
+  );
+  assert.match(markdown, /^- \[x\] 父任务\n {2}- 子项$/m);
+});
+
+test('escapes pipes inside inline code when rendering a GFM table cell', () => {
+  const text = textBlock('cell-text', 'cell', 'a|b');
+  text.text.elements[0].text_run.text_element_style.inline_code = true;
+  const cell = {
+    block_id: 'cell',
+    block_type: 32,
+    parent_id: 'table',
+    children: ['cell-text'],
+    table_cell: {},
+  };
+  const table = {
+    block_id: 'table',
+    block_type: 31,
+    parent_id: 'page',
+    children: ['cell'],
+    table: {
+      cells: ['cell'],
+      property: { row_size: 1, column_size: 1 },
+    },
+  };
+
+  const { markdown } = blocksToMarkdown(
+    pageWith(['table'], [table, cell, text]),
+  );
+  assert.match(markdown, /^\| `a\\\|b` \|$/m);
+  assert.match(markdown, /^\| --- \|$/m);
+});
+
+test('protects paragraph-leading indentation from becoming a code block', () => {
+  const block = textBlock(
+    'leading-indent',
+    'page',
+    '    这仍是段落\n\t这也是段落',
+  );
+  const { markdown } = blocksToMarkdown(pageWith(['leading-indent'], [block]));
+
+  assert.doesNotMatch(markdown, /^ {4}|^\t/m);
+  assert.match(markdown, /^&nbsp;&nbsp;&nbsp;&nbsp;这仍是段落$/m);
+  assert.match(markdown, /^(?:&nbsp;){4}这也是段落$/m);
+});
+
+test('empty and whitespace-only inline code does not add visible content', () => {
+  const empty = textBlock('empty-inline-code', 'page', '');
+  empty.text.elements[0].text_run.text_element_style.inline_code = true;
+  assert.equal(
+    blocksToMarkdown(pageWith(['empty-inline-code'], [empty])).markdown,
+    '',
+  );
+
+  const space = textBlock('space-inline-code', 'page', ' ');
+  space.text.elements[0].text_run.text_element_style.inline_code = true;
+  assert.equal(
+    blocksToMarkdown(pageWith(['space-inline-code'], [space])).markdown,
+    ' \n',
+  );
+});
+
 test('maps official C++ code language and rejects unknown language enums', () => {
   const code = {
     block_id: 'cpp-code',

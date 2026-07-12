@@ -625,10 +625,44 @@ function maxBacktickRun(value) {
 }
 
 function inlineCode(value) {
+  if (value.length === 0 || /^\s+$/.test(value)) {
+    return value;
+  }
   const fence = '`'.repeat(Math.max(1, maxBacktickRun(value) + 1));
   const needsPadding = /^\s|\s$|^`|`$/.test(value);
   const padding = needsPadding ? ' ' : '';
   return `${fence}${padding}${value}${padding}${fence}`;
+}
+
+function protectLeadingIndentation(value) {
+  return value.replace(/^[ \t]+/gm, (indentation) => {
+    if (!indentation.includes('\t') && indentation.length < 4) {
+      return indentation;
+    }
+    return [...indentation]
+      .map((character) =>
+        character === '\t' ? '&nbsp;'.repeat(4) : '&nbsp;',
+      )
+      .join('');
+  });
+}
+
+function escapeTablePipes(value) {
+  let escaped = '';
+  let precedingBackslashes = 0;
+  for (const character of value) {
+    if (character === '\\') {
+      escaped += character;
+      precedingBackslashes += 1;
+      continue;
+    }
+    if (character === '|' && precedingBackslashes % 2 === 0) {
+      escaped += '\\';
+    }
+    escaped += character;
+    precedingBackslashes = 0;
+  }
+  return escaped;
 }
 
 function renderElements(block, warnings, { raw = false } = {}) {
@@ -637,10 +671,13 @@ function renderElements(block, warnings, { raw = false } = {}) {
     return '';
   }
 
-  return textData.elements
+  const rendered = textData.elements
     .map((element) => {
       const textRun = element.text_run;
       const style = textRun.text_element_style ?? {};
+      if (!raw && /^\s*$/.test(textRun.content)) {
+        return textRun.content;
+      }
       let rendered = raw
         ? textRun.content
         : style.inline_code
@@ -676,6 +713,7 @@ function renderElements(block, warnings, { raw = false } = {}) {
       return rendered;
     })
     .join('');
+  return raw ? rendered : protectLeadingIndentation(rendered);
 }
 
 function codeFence(value) {
@@ -723,7 +761,8 @@ export function blocksToMarkdown(items) {
                 ? '- [x]'
                 : '- [ ]';
         const line = `${indentation}${marker} ${renderElements(block, warnings)}`;
-        const childIndentation = `${indentation}${' '.repeat(marker.length + 1)}`;
+        const markerWidth = block.block_type === 13 ? 3 : 2;
+        const childIndentation = `${indentation}${' '.repeat(markerWidth)}`;
         const children = (block.children ?? []).map((childId) =>
           renderBlock(childId, childIndentation),
         );
@@ -772,7 +811,12 @@ export function blocksToMarkdown(items) {
           const cell = blocks.get(cellId);
           return (cell.children ?? [])
             .map((childId) =>
-              renderElements(blocks.get(childId), warnings).replace(/\n/g, '<br>'),
+              escapeTablePipes(
+                renderElements(blocks.get(childId), warnings).replace(
+                  /\n/g,
+                  '<br>',
+                ),
+              ),
             )
             .join('<br>');
         });
