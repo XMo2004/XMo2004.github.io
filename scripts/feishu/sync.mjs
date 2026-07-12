@@ -52,7 +52,8 @@ export const MAX_MEDIA_PER_ARTICLE = 30;
 export const MAX_MEDIA_PER_SYNC = 500;
 export const MAX_MEDIA_BYTES_PER_SYNC = 250 * 1024 * 1024;
 export const PUBLIC_SYNC_FAILURE_PHASES = Object.freeze({
-  records: '记录获取与校验',
+  'records-read': '多维表格读取',
+  'records-validate': '发布字段校验',
   preflight: '手动文章与分类预检',
   build: '文档与素材生成',
   stage: '暂存文件写入',
@@ -833,10 +834,11 @@ export async function syncFeishu({
     }),
   );
 
-  const records = await inSyncPhase('records', async () =>
-    normalizePublishedRecords(
-      await client.listPublishedRecords(appToken, tableId),
-    ),
+  const rawRecords = await inSyncPhase('records-read', () =>
+    client.listPublishedRecords(appToken, tableId),
+  );
+  const records = await inSyncPhase('records-validate', async () =>
+    normalizePublishedRecords(rawRecords),
   );
   await inSyncPhase('preflight', async () => {
     const manualPosts = await manualPostMetadata(workspaceRoot);

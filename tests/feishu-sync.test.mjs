@@ -49,7 +49,7 @@ test('public sync failures never expose Feishu internal identifiers', () => {
   }
 });
 
-test('public sync failures expose only the allowlisted records phase and never the malicious cause', async (t) => {
+test('public sync failures expose only the allowlisted records-read phase and never the malicious cause', async (t) => {
   const root = await makeRoot(t);
   const { client } = stableClient();
   const privateValues = [
@@ -79,7 +79,7 @@ test('public sync failures expose only the allowlisted records phase and never t
   const publicMessage = publicSyncFailureMessage(failure);
   assert.equal(
     publicMessage,
-    '飞书同步失败 [records: 记录获取与校验]：错误详情已脱敏，请重试。',
+    '飞书同步失败 [records-read: 多维表格读取]：错误详情已脱敏，请重试。',
   );
   for (const value of privateValues) {
     assert.doesNotMatch(publicMessage, new RegExp(value.replaceAll('/', '\\/')));
@@ -297,6 +297,8 @@ async function publicMessageForRejectedSync(options) {
 
 test('public sync diagnostics map each synchronization boundary to a stable allowlisted phase', async (t) => {
   const expected = {
+    recordsValidate:
+      '飞书同步失败 [records-validate: 发布字段校验]：错误详情已脱敏，请重试。',
     preflight:
       '飞书同步失败 [preflight: 手动文章与分类预检]：错误详情已脱敏，请重试。',
     build:
@@ -306,6 +308,19 @@ test('public sync diagnostics map each synchronization boundary to a stable allo
     replace:
       '飞书同步失败 [replace: 发布文件替换]：错误详情已脱敏，请重试。',
   };
+
+  const recordsValidateRoot = await makeRoot(t);
+  assert.equal(
+    await publicMessageForRejectedSync({
+      root: recordsValidateRoot,
+      client: stableClient({
+        records: [publishedRecord({ fields: { 分类: undefined } })],
+      }).client,
+      appToken: APP_TOKEN,
+      tableId: TABLE_ID,
+    }),
+    expected.recordsValidate,
+  );
 
   const preflightRoot = await makeRoot(t);
   await writeFile(
