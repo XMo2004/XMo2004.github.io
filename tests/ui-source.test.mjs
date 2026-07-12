@@ -595,6 +595,10 @@ test('search client supports safe rendering and the complete keyboard flow', asy
   for (const key of ['ArrowDown', 'ArrowUp', 'Enter', 'Escape']) {
     assert.match(script, new RegExp(key));
   }
+  assert.match(
+    script,
+    /if\s*\(\s*event\.key\s*===\s*['"]Escape['"]\s*\)\s*\{(?=[^}]*event\.preventDefault\(\);)(?=[^}]*dialog\.close\(\);)[^}]*\}/,
+  );
   assert.match(script, /aria-current/);
   assert.match(script, /\.click\(\)/);
   assert.match(script, /event\.target\s*===\s*dialog[\s\S]*?dialog\.close\(\)/);
