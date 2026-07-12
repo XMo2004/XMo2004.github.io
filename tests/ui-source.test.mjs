@@ -16,6 +16,10 @@ test('BaseLayout provides Chinese document metadata and an accessible page shell
   assert.match(source, /跳到正文/);
   assert.match(source, /rel=["']canonical["']/);
   assert.match(source, /<main\s+id=["']main-content["']/);
+  assert.match(
+    source,
+    /<main\s+(?=[^>]*id=["']main-content["'])(?=[^>]*tabindex=["']-1["'])[^>]*>/,
+  );
   assert.match(source, /SiteHeader/);
   assert.match(source, /SiteFooter/);
   assert.match(footerSource, /new Date\(\)\.getFullYear\(\)/);
