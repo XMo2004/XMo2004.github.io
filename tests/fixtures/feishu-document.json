@@ -1,0 +1,322 @@
+{
+  "items": [
+    {
+      "block_id": "page-root",
+      "block_type": 1,
+      "children": [
+        "heading-two",
+        "formatted-paragraph",
+        "bullet-parent",
+        "ordered-item",
+        "quote-item",
+        "todo-done",
+        "todo-open",
+        "code-block",
+        "divider-block",
+        "image-block",
+        "table-block"
+      ],
+      "page": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "Fixture document title",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "heading-two",
+      "block_type": 4,
+      "parent_id": "page-root",
+      "heading2": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "二级标题",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "formatted-paragraph",
+      "block_type": 2,
+      "parent_id": "page-root",
+      "text": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "Markdown *特殊* 内容：",
+              "text_element_style": {}
+            }
+          },
+          {
+            "text_run": {
+              "content": "粗体",
+              "text_element_style": { "bold": true }
+            }
+          },
+          {
+            "text_run": {
+              "content": " ",
+              "text_element_style": {}
+            }
+          },
+          {
+            "text_run": {
+              "content": "斜体",
+              "text_element_style": { "italic": true }
+            }
+          },
+          {
+            "text_run": {
+              "content": " ",
+              "text_element_style": {}
+            }
+          },
+          {
+            "text_run": {
+              "content": "删除",
+              "text_element_style": { "strikethrough": true }
+            }
+          },
+          {
+            "text_run": {
+              "content": " ",
+              "text_element_style": {}
+            }
+          },
+          {
+            "text_run": {
+              "content": "a`b",
+              "text_element_style": { "inline_code": true }
+            }
+          },
+          {
+            "text_run": {
+              "content": " ",
+              "text_element_style": {}
+            }
+          },
+          {
+            "text_run": {
+              "content": "链接",
+              "text_element_style": {
+                "link": { "url": "https://example.com/docs_(1)" }
+              }
+            }
+          },
+          {
+            "text_run": {
+              "content": " 下划线",
+              "text_element_style": { "underline": true }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "bullet-parent",
+      "block_type": 12,
+      "parent_id": "page-root",
+      "children": ["bullet-child"],
+      "bullet": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "父级列表",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "bullet-child",
+      "block_type": 12,
+      "parent_id": "bullet-parent",
+      "bullet": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "嵌套列表",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "ordered-item",
+      "block_type": 13,
+      "parent_id": "page-root",
+      "ordered": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "有序项目",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "quote-item",
+      "block_type": 15,
+      "parent_id": "page-root",
+      "quote": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "引用内容",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "todo-done",
+      "block_type": 17,
+      "parent_id": "page-root",
+      "todo": {
+        "style": { "done": true },
+        "elements": [
+          {
+            "text_run": {
+              "content": "已经完成",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "todo-open",
+      "block_type": 17,
+      "parent_id": "page-root",
+      "todo": {
+        "style": { "done": false },
+        "elements": [
+          {
+            "text_run": {
+              "content": "尚未完成",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "code-block",
+      "block_type": 14,
+      "parent_id": "page-root",
+      "code": {
+        "style": { "language": 30 },
+        "elements": [
+          {
+            "text_run": {
+              "content": "const fence = \"```\";\nconsole.log(fence);",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "divider-block",
+      "block_type": 22,
+      "parent_id": "page-root",
+      "divider": {}
+    },
+    {
+      "block_id": "image-block",
+      "block_type": 27,
+      "parent_id": "page-root",
+      "image": { "token": "img_v2_example" }
+    },
+    {
+      "block_id": "table-block",
+      "block_type": 31,
+      "parent_id": "page-root",
+      "children": ["cell-a", "cell-b", "cell-c", "cell-d"],
+      "table": {
+        "cells": ["cell-a", "cell-b", "cell-c", "cell-d"],
+        "property": { "row_size": 2, "column_size": 2 }
+      }
+    },
+    {
+      "block_id": "cell-a",
+      "block_type": 32,
+      "parent_id": "table-block",
+      "children": ["cell-a-text"],
+      "table_cell": {}
+    },
+    {
+      "block_id": "cell-b",
+      "block_type": 32,
+      "parent_id": "table-block",
+      "children": ["cell-b-text"],
+      "table_cell": {}
+    },
+    {
+      "block_id": "cell-c",
+      "block_type": 32,
+      "parent_id": "table-block",
+      "children": ["cell-c-text"],
+      "table_cell": {}
+    },
+    {
+      "block_id": "cell-d",
+      "block_type": 32,
+      "parent_id": "table-block",
+      "children": ["cell-d-text"],
+      "table_cell": {}
+    },
+    {
+      "block_id": "cell-a-text",
+      "block_type": 2,
+      "parent_id": "cell-a",
+      "text": {
+        "elements": [
+          { "text_run": { "content": "列 A", "text_element_style": {} } }
+        ]
+      }
+    },
+    {
+      "block_id": "cell-b-text",
+      "block_type": 2,
+      "parent_id": "cell-b",
+      "text": {
+        "elements": [
+          { "text_run": { "content": "列 B", "text_element_style": {} } }
+        ]
+      }
+    },
+    {
+      "block_id": "cell-c-text",
+      "block_type": 2,
+      "parent_id": "cell-c",
+      "text": {
+        "elements": [
+          { "text_run": { "content": "值 | A", "text_element_style": {} } }
+        ]
+      }
+    },
+    {
+      "block_id": "cell-d-text",
+      "block_type": 2,
+      "parent_id": "cell-d",
+      "text": {
+        "elements": [
+          { "text_run": { "content": "值 B", "text_element_style": { "bold": true } } }
+        ]
+      }
+    }
+  ]
+}
