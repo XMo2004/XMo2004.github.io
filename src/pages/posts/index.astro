@@ -1,0 +1,31 @@
+---
+import { getCollection } from 'astro:content';
+
+import PostCard from '../../components/PostCard.astro';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { sortNewestFirst } from '../../lib/posts';
+
+const posts = sortNewestFirst(await getCollection('posts'));
+---
+
+<BaseLayout
+  title="文章归档"
+  description="按时间倒序整理技术、成长与日常文章。"
+>
+  <header class="page-header">
+    <p class="eyebrow">ALL NOTES</p>
+    <h1>文章归档</h1>
+    <p>按发布时间倒序，收拢每一篇已经归档的笔记。</p>
+  </header>
+
+  {posts.length > 0 ? (
+    <div class="post-grid post-grid--archive">
+      {posts.map((post) => <PostCard entry={post} />)}
+    </div>
+  ) : (
+    <div class="empty-state">
+      <p>文章还在整理中，过些时候再来看看。</p>
+      <a href="/">返回首页</a>
+    </div>
+  )}
+</BaseLayout>

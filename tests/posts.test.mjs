@@ -3,7 +3,43 @@ import test from 'node:test';
 
 import * as postHelpers from '../src/lib/posts.ts';
 
-const { estimateReadingMinutes, normalizeTag, sortNewestFirst } = postHelpers;
+const {
+  estimateReadingMinutes,
+  getPostHref,
+  getPostSlug,
+  normalizeTag,
+  sortNewestFirst,
+} = postHelpers;
+
+test('getPostSlug prefers an explicit content slug', () => {
+  const post = {
+    id: 'manual/file-name.md',
+    data: { slug: 'published-route' },
+  };
+
+  assert.equal(getPostSlug(post), 'published-route');
+});
+
+test('getPostSlug falls back to the extensionless entry id basename', () => {
+  const post = {
+    id: 'manual/nested/file-name.mdx',
+    data: {},
+  };
+
+  assert.equal(getPostSlug(post), 'file-name');
+});
+
+test('getPostHref encodes a fallback slug as one safe path segment', () => {
+  const post = {
+    id: 'manual/技术 笔记.md',
+    data: {},
+  };
+
+  assert.equal(
+    getPostHref(post),
+    '/posts/%E6%8A%80%E6%9C%AF%20%E7%AC%94%E8%AE%B0/',
+  );
+});
 
 test('estimateReadingMinutes returns at least one minute for a short paragraph', () => {
   assert.equal(estimateReadingMinutes('这是一个短段落。'), 1);

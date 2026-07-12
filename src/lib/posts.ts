@@ -2,6 +2,26 @@ const CHINESE_CHARACTERS_PER_MINUTE = 450;
 const ENGLISH_WORDS_PER_MINUTE = 220;
 const UTF8_ENCODER = new TextEncoder();
 
+interface PostRouteEntry {
+  id: string;
+  data: {
+    slug?: string;
+  };
+}
+
+export function getPostSlug(entry: PostRouteEntry): string {
+  if (entry.data.slug !== undefined) {
+    return entry.data.slug;
+  }
+
+  const basename = entry.id.split(/[\\/]/).at(-1) ?? entry.id;
+  return basename.replace(/\.mdx?$/i, '');
+}
+
+export function getPostHref(entry: PostRouteEntry): string {
+  return `/posts/${encodeURIComponent(getPostSlug(entry))}/`;
+}
+
 function canonicalizeTag(tag: string): string {
   return tag.trim().normalize('NFKC').toLowerCase();
 }

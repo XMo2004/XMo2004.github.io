@@ -1,0 +1,31 @@
+---
+import { normalizeTag } from '../lib/posts';
+
+interface Props {
+  tags?: readonly string[];
+  compact?: boolean;
+  class?: string;
+}
+
+const {
+  tags = [],
+  compact = false,
+  class: className,
+} = Astro.props;
+
+const classes = [
+  'tag-list',
+  compact && 'tag-list--compact',
+  className,
+].filter(Boolean);
+---
+
+{tags.length > 0 && (
+  <ul class:list={classes} aria-label="文章标签">
+    {tags.map((tag) => (
+      <li>
+        <a href={`/tags/${normalizeTag(tag)}/`}>{tag}</a>
+      </li>
+    ))}
+  </ul>
+)}

@@ -1,0 +1,142 @@
+---
+import TagList from '../components/TagList.astro';
+import BaseLayout from './BaseLayout.astro';
+
+interface ArticleHeading {
+  depth: number;
+  slug: string;
+  text: string;
+}
+
+interface AdjacentPost {
+  href: string;
+  title: string;
+}
+
+interface Props {
+  title: string;
+  description: string;
+  pubDate: Date;
+  updatedDate?: Date;
+  tags?: readonly string[];
+  readingMinutes?: number;
+  sourceUrl?: string;
+  headings?: readonly ArticleHeading[];
+  previous?: AdjacentPost;
+  next?: AdjacentPost;
+}
+
+const {
+  title,
+  description,
+  pubDate,
+  updatedDate,
+  tags = [],
+  readingMinutes,
+  sourceUrl,
+  headings = [],
+  previous,
+  next,
+} = Astro.props;
+
+const dateFormatter = new Intl.DateTimeFormat('zh-CN', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+});
+const hasTableOfContents = headings.length > 0;
+const hasAdjacentPosts = previous !== undefined || next !== undefined;
+---
+
+<BaseLayout title={title} description={description} ogType="article">
+  <article class="post-article">
+    <header class="post-header">
+      <a class="post-header__back" href="/posts/">文章归档</a>
+      <h1>{title}</h1>
+      <p class="post-header__description">{description}</p>
+
+      <dl class="article-meta">
+        <div>
+          <dt>发布</dt>
+          <dd>
+            <time datetime={pubDate.toISOString()}>{dateFormatter.format(pubDate)}</time>
+          </dd>
+        </div>
+
+        {updatedDate && (
+          <div>
+            <dt>更新</dt>
+            <dd>
+              <time datetime={updatedDate.toISOString()}>
+                {dateFormatter.format(updatedDate)}
+              </time>
+            </dd>
+          </div>
+        )}
+
+        {readingMinutes !== undefined && (
+          <div>
+            <dt>阅读</dt>
+            <dd>{readingMinutes} 分钟</dd>
+          </div>
+        )}
+
+        {sourceUrl && (
+          <div>
+            <dt>来源</dt>
+            <dd>
+              <a href={sourceUrl} target="_blank" rel="noopener noreferrer">
+                在飞书查看源文
+              </a>
+            </dd>
+          </div>
+        )}
+      </dl>
+
+      {tags.length > 0 && <TagList tags={tags} compact />}
+    </header>
+
+    <div
+      class:list={[
+        'post-layout',
+        hasTableOfContents && 'post-layout--with-toc',
+      ]}
+    >
+      {hasTableOfContents && (
+        <aside class="post-toc" aria-labelledby="post-toc-title">
+          <p id="post-toc-title">目录</p>
+          <nav aria-label="文章目录">
+            <ol>
+              {headings.map((heading) => (
+                <li class={`post-toc__depth-${heading.depth}`}>
+                  <a href={`#${heading.slug}`}>{heading.text}</a>
+                </li>
+              ))}
+            </ol>
+          </nav>
+        </aside>
+      )}
+
+      <div class="post-layout__content">
+        <div class="prose"><slot /></div>
+
+        {hasAdjacentPosts && (
+          <nav class="post-pagination" aria-label="相邻文章">
+            {previous && (
+              <a class="post-pagination__previous" href={previous.href} rel="prev">
+                <span>上一篇</span>
+                <strong>{previous.title}</strong>
+              </a>
+            )}
+            {next && (
+              <a class="post-pagination__next" href={next.href} rel="next">
+                <span>下一篇</span>
+                <strong>{next.title}</strong>
+              </a>
+            )}
+          </nav>
+        )}
+      </div>
+    </div>
+  </article>
+</BaseLayout>

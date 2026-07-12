@@ -1,0 +1,45 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout
+  title="关于"
+  description="关于这个博客记录什么，以及内容如何从飞书进入静态归档。"
+>
+  <article class="about-page">
+    <header class="page-header about-page__header">
+      <p class="eyebrow">ABOUT XMO / NOTES</p>
+      <h1>关于这个博客</h1>
+      <p>
+        这里记录技术、成长与日常。主题可以不同，但每篇文章都尽量从真实的问题、过程或观察出发。
+      </p>
+    </header>
+
+    <div class="about-page__grid">
+      <section aria-labelledby="writing-title">
+        <p class="section-number" aria-hidden="true">01</p>
+        <h2 id="writing-title">先写清楚，再发布</h2>
+        <p>
+          飞书是日常的写作桌面，用来起草、修改和整理内容。写作不需要迁就站点工具，发布也不会改变文章原本想表达的东西。
+        </p>
+      </section>
+
+      <section aria-labelledby="archive-title">
+        <p class="section-number" aria-hidden="true">02</p>
+        <h2 id="archive-title">留下可迁移的归档</h2>
+        <p>
+          发布后的文章会保存为 Markdown 文件，进入 Git 管理的站点仓库，再生成静态页面。这样既保留飞书写作的便利，也让内容拥有清晰、可版本化的归档。
+        </p>
+      </section>
+    </div>
+
+    <section class="about-page__principle" aria-labelledby="principle-title">
+      <p class="eyebrow">A SMALL PRINCIPLE</p>
+      <h2 id="principle-title">不追赶数量，只保留值得重读的内容。</h2>
+      <p>
+        这里不设定固定更新频率。比起及时填满页面，更重要的是让以后回来看的人仍能理解当时的问题、判断与结论。
+      </p>
+      <a href="/posts/">去文章归档看看</a>
+    </section>
+  </article>
+</BaseLayout>

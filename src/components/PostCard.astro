@@ -1,0 +1,58 @@
+---
+import type { CollectionEntry } from 'astro:content';
+
+import { SITE } from '../config/site';
+import { getPostHref, getPostSlug, normalizeTag } from '../lib/posts';
+
+interface Props {
+  entry: CollectionEntry<'posts'>;
+}
+
+const { entry } = Astro.props;
+const { title, description, pubDate, tags, cover } = entry.data;
+const routeEntry = {
+  id: entry.id,
+  data: { slug: entry.data.slug ?? getPostSlug(entry) },
+};
+const postHref = getPostHref(routeEntry);
+const dateTime = pubDate.toISOString().slice(0, 10);
+const displayDate = new Intl.DateTimeFormat('zh-CN', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+}).format(pubDate);
+const year = String(pubDate.getFullYear());
+const firstTag = tags[0];
+---
+
+<article class="post-card">
+  <div class="post-card__cover" aria-hidden={cover ? undefined : 'true'}>
+    {cover ? (
+      <img src={cover} alt="" loading="lazy" decoding="async" />
+    ) : (
+      <div class="post-card__type-cover">
+        <span class="post-card__year">{year}</span>
+        {firstTag && <span>{firstTag}</span>}
+        <span class="post-card__mark">{SITE.mark}</span>
+      </div>
+    )}
+  </div>
+
+  <div class="post-card__body">
+    <time datetime={dateTime}>{displayDate}</time>
+    <h3>
+      <a class="post-card__title" href={postHref}>{title}</a>
+    </h3>
+    <p>{description}</p>
+
+    {tags.length > 0 && (
+      <ul class="tag-list tag-list--compact post-card__tags" aria-label="文章标签">
+        {tags.map((tag) => (
+          <li>
+            <a href={`/tags/${normalizeTag(tag)}/`}>{tag}</a>
+          </li>
+        ))}
+      </ul>
+    )}
+  </div>
+</article>
