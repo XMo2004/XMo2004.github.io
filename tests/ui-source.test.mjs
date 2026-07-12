@@ -254,3 +254,14 @@ test('tag pages keep touch targets accessible and collapse safely on mobile', as
     /@media\s*\(max-width:[^)]+\)[\s\S]*\.tag-directory__link/s,
   );
 });
+
+test('content schema refines source URLs through the trusted Feishu URL helper', async () => {
+  const source = await readSource('src/content.config.ts');
+
+  assert.match(source, /isTrustedFeishuUrl/);
+  assert.match(
+    source,
+    /sourceUrl:\s*z\s*\.url\(\)\s*\.refine\(\s*isTrustedFeishuUrl/s,
+  );
+  assert.doesNotMatch(source, /z\s*\.string\(\)\s*\.url\(\)/s);
+});

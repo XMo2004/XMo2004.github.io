@@ -1,5 +1,6 @@
 const CHINESE_CHARACTERS_PER_MINUTE = 450;
 const ENGLISH_WORDS_PER_MINUTE = 220;
+const TRUSTED_FEISHU_DOMAINS = ['feishu.cn', 'larksuite.com'] as const;
 const UTF8_ENCODER = new TextEncoder();
 
 interface PostRouteEntry {
@@ -57,6 +58,21 @@ export function getPostSlug(entry: PostRouteEntry): string {
 
 export function getPostHref(entry: PostRouteEntry): string {
   return `/posts/${encodeURIComponent(getPostSlug(entry))}/`;
+}
+
+export function isTrustedFeishuUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+
+    return (
+      url.protocol === 'https:' &&
+      TRUSTED_FEISHU_DOMAINS.some(
+        (domain) => url.hostname === domain || url.hostname.endsWith(`.${domain}`),
+      )
+    );
+  } catch {
+    return false;
+  }
 }
 
 function canonicalizeTag(tag: string): string {
@@ -186,6 +202,21 @@ export function buildTagIndex<T extends TaggedPostEntry>(
 export function buildPostRouteRecords<T extends NavigablePostEntry>(
   posts: readonly T[],
 ): PostRouteRecord<T>[] {
+  const postIdBySlug = new Map<string, string>();
+
+  for (const post of posts) {
+    const slug = getPostSlug(post);
+    const firstPostId = postIdBySlug.get(slug);
+
+    if (firstPostId !== undefined) {
+      throw new Error(
+        `Post route collision for slug "${slug}": entries "${firstPostId}" and "${post.id}" map to the same public URL.`,
+      );
+    }
+
+    postIdBySlug.set(slug, post.id);
+  }
+
   const sortedPosts = sortNewestFirst(posts);
 
   return sortedPosts.map((post, index) => {

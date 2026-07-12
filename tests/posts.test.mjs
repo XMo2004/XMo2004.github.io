@@ -9,6 +9,7 @@ const {
   estimateReadingMinutes,
   getPostHref,
   getPostSlug,
+  isTrustedFeishuUrl,
   normalizeTag,
   serializeJsonLd,
   sortNewestFirst,
@@ -211,6 +212,103 @@ test('buildPostRouteRecords sorts routes and builds adjacent URLs from public sl
   });
   assert.doesNotMatch(routes[1].props.previous.href, /manual|feishu/);
   assert.doesNotMatch(routes[1].props.next.href, /manual|feishu/);
+});
+
+test('buildPostRouteRecords rejects duplicate explicit slugs with both entry ids', () => {
+  const firstPost = {
+    id: 'manual/first.md',
+    data: {
+      title: 'First',
+      slug: 'shared-route',
+      pubDate: new Date('2026-06-01'),
+    },
+  };
+  const secondPost = {
+    id: 'feishu/second.md',
+    data: {
+      title: 'Second',
+      slug: 'shared-route',
+      pubDate: new Date('2026-01-01'),
+    },
+  };
+
+  assert.throws(() => buildPostRouteRecords([firstPost, secondPost]), (error) => {
+    assert.match(error.message, /shared-route/);
+    assert.match(error.message, /manual\/first\.md/);
+    assert.match(error.message, /feishu\/second\.md/);
+    return true;
+  });
+});
+
+test('buildPostRouteRecords rejects matching fallback basenames across directories', () => {
+  const manualPost = {
+    id: 'manual/guide.md',
+    data: {
+      title: 'Manual guide',
+      pubDate: new Date('2026-06-01'),
+    },
+  };
+  const feishuPost = {
+    id: 'feishu/guide.mdx',
+    data: {
+      title: 'Feishu guide',
+      pubDate: new Date('2026-01-01'),
+    },
+  };
+
+  assert.throws(() => buildPostRouteRecords([manualPost, feishuPost]), (error) => {
+    assert.match(error.message, /guide/);
+    assert.match(error.message, /manual\/guide\.md/);
+    assert.match(error.message, /feishu\/guide\.mdx/);
+    return true;
+  });
+});
+
+test('buildPostRouteRecords rejects an explicit slug matching another fallback basename', () => {
+  const explicitPost = {
+    id: 'manual/published.md',
+    data: {
+      title: 'Published',
+      slug: 'guide',
+      pubDate: new Date('2026-06-01'),
+    },
+  };
+  const fallbackPost = {
+    id: 'feishu/guide.md',
+    data: {
+      title: 'Guide',
+      pubDate: new Date('2026-01-01'),
+    },
+  };
+
+  assert.throws(() => buildPostRouteRecords([explicitPost, fallbackPost]), (error) => {
+    assert.match(error.message, /guide/);
+    assert.match(error.message, /manual\/published\.md/);
+    assert.match(error.message, /feishu\/guide\.md/);
+    return true;
+  });
+});
+
+test('isTrustedFeishuUrl accepts HTTPS Feishu and LarkSuite document hosts', () => {
+  assert.equal(isTrustedFeishuUrl('https://example.feishu.cn/docx/abc'), true);
+  assert.equal(
+    isTrustedFeishuUrl('https://example.larksuite.com/docx/abc'),
+    true,
+  );
+});
+
+test('isTrustedFeishuUrl rejects non-HTTPS schemes and deceptive hostnames', () => {
+  const rejectedUrls = [
+    'javascript:alert(1)',
+    'data:text/html,unsafe',
+    'mailto:someone@example.com',
+    'http://example.feishu.cn/docx/abc',
+    'https://feishu.cn.evil.example/',
+  ];
+
+  for (const url of rejectedUrls) {
+    assert.equal(isTrustedFeishuUrl(url), false, `${url} should be rejected`);
+  }
 });
 
 test('serializeJsonLd escapes script-closing markup while preserving JSON values', () => {
