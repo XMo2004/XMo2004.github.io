@@ -51,17 +51,16 @@
 
 同步 workflow 只引用这四个飞书 secrets。提交生成内容时使用 GitHub 自动提供的 `GITHUB_TOKEN`，无需再创建一个提交用 PAT。
 
-同时检查 **Settings → Actions → General → Workflow permissions**。仓库需要允许 workflow 使用读写权限；分支保护规则也要允许 `github-actions[bot]` 把生成内容推回默认分支。
+同时检查 **Settings → Actions → General → Workflow permissions**。仓库默认权限可以保持只读；`sync-feishu.yml` 只在同步任务中显式申请 `contents: write`。如果组织策略禁止 workflow 写入，需为这个仓库放行；分支保护规则也要允许 `github-actions[bot]` 把生成内容推回默认分支。
 
 首次上线还要打开 **Settings → Pages → Build and deployment**，把 **Source** 设为 **GitHub Actions**。在 **Settings → Environments → github-pages** 中，把部署分支限制为 `main`；这样手动运行也不会意外发布其他分支。
 
 ## 4. 从飞书触发同步
 
-`.github/workflows/sync-feishu.yml` 支持三种入口：
+`.github/workflows/sync-feishu.yml` 支持两种入口：
 
 - 每 30 分钟运行一次的定时同步；cron 使用 UTC。
-- GitHub Actions 页面里的手动 `workflow_dispatch`；点击 **Run workflow** 时必须选择 `main`，非 `main` 手动运行会在读取飞书或写入仓库前明确失败。
-- 飞书自动化发送的 `repository_dispatch`，事件类型必须是 `feishu_publish`。
+- `workflow_dispatch`：既可在 GitHub Actions 页面点击 **Run workflow** 手动运行，也可由飞书自动化调用本节下方的固定 API。运行分支必须是 `main`，非 `main` 手动运行会在读取飞书或写入仓库前明确失败。
 
 ### 创建最小权限 PAT
 
@@ -148,7 +147,7 @@ git diff -- src/content/posts/feishu public/media/feishu .feishu-manifest.json
 
 ### 素材下载失败
 
-403 通常是应用没有文档或素材下载权限，404 表示附件 token 已失效或素材已删除。重新共享原文档并确认「下载云文档中的图片和附件」权限已经生效。封面字段只保留一个有效附件。
+403 通常是应用没有文档或素材下载权限，404 表示附件 token 已失效或素材已删除。重新共享原文档并确认「下载云文档中的图片和附件」权限已经生效。封面字段只保留一个有效附件。为避免把可执行内容或超大文件发布到同源站点，同步不接受 SVG；单个图片上限 10 MiB，每篇文章最多 30 个不同素材，单次同步最多 500 个素材、总计 250 MiB。
 
 ### 出现 99991400、1254290 或网络错误
 

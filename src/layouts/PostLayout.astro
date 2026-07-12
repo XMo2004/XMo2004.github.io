@@ -22,7 +22,6 @@ interface Props {
   updatedDate?: Date;
   tags?: readonly string[];
   readingMinutes?: number;
-  sourceUrl?: string;
   headings?: readonly ArticleHeading[];
   previous?: AdjacentPost;
   next?: AdjacentPost;
@@ -36,7 +35,6 @@ const {
   updatedDate,
   tags = [],
   readingMinutes,
-  sourceUrl,
   headings = [],
   previous,
   next,
@@ -107,16 +105,6 @@ const jsonLd = {
           </div>
         )}
 
-        {sourceUrl && (
-          <div>
-            <dt>来源</dt>
-            <dd>
-              <a href={sourceUrl} target="_blank" rel="noopener noreferrer">
-                在飞书查看源文
-              </a>
-            </dd>
-          </div>
-        )}
       </dl>
 
       {tags.length > 0 && <TagList tags={tags} compact />}

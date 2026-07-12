@@ -6,8 +6,6 @@ tags:
   - 飞书发布
   - 自动化
 featured: true
-sourceUrl: https://my.feishu.cn/docx/DsPQdqjsgo8QSuxnc9acw7nunAh
-feishuRecordId: recvp8XEPhZWjk
 slug: published-from-feishu
 ---
 

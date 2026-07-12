@@ -199,7 +199,6 @@ test('PostLayout renders only the article extras supplied by a caller', async ()
   for (const prop of [
     'updatedDate',
     'readingMinutes',
-    'sourceUrl',
     'headings',
     'previous',
     'next',
@@ -210,6 +209,7 @@ test('PostLayout renders only the article extras supplied by a caller', async ()
   assert.match(source, /<article/);
   assert.match(source, /class=["']prose["']/);
   assert.match(source, /<slot\s*\/>/);
+  assert.doesNotMatch(source, /sourceUrl|在飞书查看源文/);
 });
 
 test('article layouts opt into safe BlogPosting metadata only when supplied', async () => {
@@ -259,13 +259,11 @@ test('tag pages keep touch targets accessible and collapse safely on mobile', as
   );
 });
 
-test('content schema refines source URLs through the trusted Feishu URL helper', async () => {
-  const source = await readSource('src/content.config.ts');
+test('article routes never expose an internal Feishu source URL', async () => {
+  const [routeSource, schemaSource] = await Promise.all([
+    readSource('src/pages/posts/[...id].astro'),
+    readSource('src/content.config.ts'),
+  ]);
 
-  assert.match(source, /isTrustedFeishuUrl/);
-  assert.match(
-    source,
-    /sourceUrl:\s*z\s*\.url\(\)\s*\.refine\(\s*isTrustedFeishuUrl/s,
-  );
-  assert.doesNotMatch(source, /z\s*\.string\(\)\s*\.url\(\)/s);
+  assert.doesNotMatch(`${routeSource}\n${schemaSource}`, /sourceUrl|feishuRecordId/);
 });

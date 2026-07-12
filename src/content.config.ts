@@ -2,7 +2,7 @@ import { defineCollection } from 'astro:content';
 import { glob } from 'astro/loaders';
 import { z } from 'astro/zod';
 
-import { isTrustedFeishuUrl, validateTagSet } from './lib/posts';
+import { validateTagSet } from './lib/posts';
 
 const tagsSchema = z
   .array(z.string().trim().min(1, 'Tags must not be empty.'))
@@ -29,14 +29,6 @@ const posts = defineCollection({
     tags: tagsSchema,
     featured: z.boolean().default(false),
     cover: z.string().optional(),
-    sourceUrl: z
-      .url()
-      .refine(isTrustedFeishuUrl, {
-        message:
-          'Source URL must use HTTPS on a trusted feishu.cn or larksuite.com host.',
-      })
-      .optional(),
-    feishuRecordId: z.string().optional(),
     slug: z
       .string()
       .regex(

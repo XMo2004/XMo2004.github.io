@@ -1,3 +1,5 @@
+import { MAX_MEDIA_BYTES } from './assets.mjs';
+
 const DEFAULT_BASE_URL = 'https://open.feishu.cn';
 const AUTH_PATH = '/open-apis/auth/v3/tenant_access_token/internal';
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
@@ -51,6 +53,49 @@ function buildUrl(baseUrl, path, query) {
     }
   }
   return url;
+}
+
+function mediaLimitError() {
+  return new Error('Feishu media exceeds the 10 MiB single-file limit.');
+}
+
+async function readMediaBytes(response) {
+  const declaredLength = response.headers.get('content-length');
+  if (/^\d+$/.test(declaredLength ?? '')) {
+    const length = Number(declaredLength);
+    if (!Number.isSafeInteger(length) || length > MAX_MEDIA_BYTES) {
+      throw mediaLimitError();
+    }
+  }
+
+  if (response.body === null || typeof response.body.getReader !== 'function') {
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.byteLength > MAX_MEDIA_BYTES) throw mediaLimitError();
+    return bytes;
+  }
+
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const chunk = value instanceof Uint8Array ? value : new Uint8Array(value);
+    total += chunk.byteLength;
+    if (total > MAX_MEDIA_BYTES) {
+      await reader.cancel().catch(() => {});
+      throw mediaLimitError();
+    }
+    chunks.push(chunk);
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
 }
 
 async function responsePayload(response, context) {
@@ -339,7 +384,7 @@ export function createFeishuClient({
       throw new Error(`Feishu media "${fileToken}" response has no Content-Type.`);
     }
     return {
-      bytes: new Uint8Array(await response.arrayBuffer()),
+      bytes: await readMediaBytes(response),
       contentType,
     };
   }

@@ -1,16 +1,9 @@
-export const FEISHU_MANIFEST_VERSION = 1;
+export const FEISHU_MANIFEST_VERSION = 2;
 
 export function buildFeishuManifest(articles) {
   const records = [...articles]
-    .sort(
-      (first, second) =>
-        first.slug.localeCompare(second.slug, 'en') ||
-        first.recordId.localeCompare(second.recordId, 'en'),
-    )
+    .sort((first, second) => first.slug.localeCompare(second.slug, 'en'))
     .map((article) => ({
-      recordId: article.recordId,
-      documentId: article.documentId,
-      revisionId: article.revisionId,
       slug: article.slug,
       assets: [...article.assets]
         .sort((first, second) => first.filename.localeCompare(second.filename, 'en'))

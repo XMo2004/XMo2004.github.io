@@ -44,6 +44,41 @@ const SHANGHAI_DATE = new Intl.DateTimeFormat('en-US', {
   month: '2-digit',
   day: '2-digit',
 });
+export const MAX_MEDIA_PER_ARTICLE = 30;
+export const MAX_MEDIA_PER_SYNC = 500;
+export const MAX_MEDIA_BYTES_PER_SYNC = 250 * 1024 * 1024;
+
+export function createMediaBudget({
+  maxDistinct = MAX_MEDIA_PER_SYNC,
+  maxBytes = MAX_MEDIA_BYTES_PER_SYNC,
+} = {}) {
+  if (!Number.isSafeInteger(maxDistinct) || maxDistinct < 1) {
+    throw new Error('maxDistinct must be a positive safe integer.');
+  }
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) {
+    throw new Error('maxBytes must be a positive safe integer.');
+  }
+
+  let distinct = 0;
+  let bytes = 0;
+  return Object.freeze({
+    reserveDownload() {
+      if (distinct >= maxDistinct) {
+        throw new Error(`A sync may download at most ${maxDistinct} distinct media assets.`);
+      }
+      distinct += 1;
+    },
+    accountBytes(value) {
+      if (!Number.isSafeInteger(value) || value < 0) {
+        throw new Error('Downloaded media byte count must be a non-negative safe integer.');
+      }
+      if (bytes + value > maxBytes) {
+        throw new Error(`A sync may download at most ${maxBytes} bytes of media.`);
+      }
+      bytes += value;
+    },
+  });
+}
 
 function requiredString(value, name) {
   if (typeof value !== 'string' || value.trim().length === 0) {
@@ -273,8 +308,6 @@ function postFrontmatter(article) {
     tags: article.tags,
     featured: article.featured,
     ...(article.cover === undefined ? {} : { cover: article.cover }),
-    sourceUrl: article.documentUrl,
-    feishuRecordId: article.recordId,
     slug: article.slug,
   };
 }
@@ -289,14 +322,20 @@ async function buildNextState(client, records) {
   const assets = new Map();
   const downloadCache = new Map();
   const warnings = [];
+  const mediaBudget = createMediaBudget();
 
   async function download(fileToken, extra) {
     const cacheKey = `${fileToken}\u0000${extra ?? ''}`;
     let pending = downloadCache.get(cacheKey);
     if (pending === undefined) {
+      mediaBudget.reserveDownload();
       pending = client
         .downloadMedia(fileToken, extra)
-        .then((value) => contentAddressedMedia(value));
+        .then((value) => contentAddressedMedia(value))
+        .then((asset) => {
+          mediaBudget.accountBytes(asset.bytes.byteLength);
+          return asset;
+        });
       downloadCache.set(cacheKey, pending);
     }
     return pending;
@@ -307,6 +346,21 @@ async function buildNextState(client, records) {
     const converted = blocksToMarkdown(stable.blocks);
     let markdown = converted.markdown;
     const articleAssets = new Map();
+    const articleMediaKeys = new Set(
+      converted.mediaReferences.map(({ token }) => `${token}\u0000`),
+    );
+    const preparedCoverExtra =
+      record.cover === null ? undefined : coverExtra(record);
+    if (record.cover !== null) {
+      articleMediaKeys.add(
+        `${record.cover.file_token}\u0000${preparedCoverExtra ?? ''}`,
+      );
+    }
+    if (articleMediaKeys.size > MAX_MEDIA_PER_ARTICLE) {
+      throw new Error(
+        `Article "${record.slug}" may reference at most ${MAX_MEDIA_PER_ARTICLE} distinct media assets.`,
+      );
+    }
     for (const reference of converted.mediaReferences) {
       const asset = await download(reference.token);
       addAsset(assets, asset);
@@ -327,7 +381,7 @@ async function buildNextState(client, records) {
     if (record.cover !== null) {
       const asset = await download(
         record.cover.file_token,
-        coverExtra(record),
+        preparedCoverExtra,
       );
       addAsset(assets, asset);
       articleAssets.set(asset.filename, asset);
@@ -341,10 +395,10 @@ async function buildNextState(client, records) {
       );
     }
     warnings.push(
-      ...converted.warnings.map((warning) => ({
-        recordId: record.recordId,
-        documentId: record.documentId,
-        ...warning,
+      ...converted.warnings.map(({ type, language }) => ({
+        slug: record.slug,
+        type,
+        ...(language === undefined ? {} : { language }),
       })),
     );
     articles.push({

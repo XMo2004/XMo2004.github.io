@@ -524,7 +524,7 @@ git commit -m "feat: synchronize published Feishu articles"
 
 - [ ] **Step 1: Write failing workflow policy tests**
 
-Assert `deploy.yml` has `pages: write`, `id-token: write`, a Node 24 setup, `npm ci`, `npm run verify`, `actions/upload-pages-artifact`, and `actions/deploy-pages`. Assert `sync-feishu.yml` handles `repository_dispatch` type `feishu_publish`, `workflow_dispatch`, cron `*/30 * * * *`, declares `contents: write`, maps exactly four Feishu secrets, runs `npm run sync:feishu`, and commits only generated content and the manifest.
+Assert `deploy.yml` gives Pages/OIDC write permissions only to its deploy job, uses a Node 24 setup, runs `npm ci` and `npm run verify`, and calls the Pages artifact actions. Assert `sync-feishu.yml` handles `workflow_dispatch` plus cron `*/30 * * * *`, declares `contents: write` only for synchronization, maps exactly four Feishu secrets, runs `npm run sync:feishu`, and commits only generated content and the manifest.
 
 - [ ] **Step 2: Run the policy tests and verify RED**
 

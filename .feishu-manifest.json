@@ -1,10 +1,7 @@
 {
-  "version": 1,
+  "version": 2,
   "records": [
     {
-      "recordId": "recvp8XEPhZWjk",
-      "documentId": "DsPQdqjsgo8QSuxnc9acw7nunAh",
-      "revisionId": 3,
       "slug": "published-from-feishu",
       "assets": []
     }

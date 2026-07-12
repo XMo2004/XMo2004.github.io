@@ -32,9 +32,16 @@ test('deploy workflow verifies with Node 24 and deploys a Pages artifact', async
   assert.match(manualGuard?.run ?? '', /exit 1/);
   assert.ok(steps.indexOf(manualGuard) < steps.indexOf(checkout));
   assert.equal(checkout?.with?.ref, 'main');
-  assert.equal(workflow.permissions.contents, 'read');
-  assert.equal(workflow.permissions.pages, 'write');
-  assert.equal(workflow.permissions['id-token'], 'write');
+  assert.equal(checkout?.with?.['persist-credentials'], false);
+  assert.deepEqual(workflow.permissions, {});
+  assert.deepEqual(workflow.jobs.build.permissions, {
+    contents: 'read',
+    pages: 'read',
+  });
+  assert.deepEqual(workflow.jobs.deploy.permissions, {
+    pages: 'write',
+    'id-token': 'write',
+  });
   assert.equal(String(setupNode?.with?.['node-version']), '24');
   assert.equal(workflow.concurrency['cancel-in-progress'], true);
   assert.match(commands, /npm ci/);
@@ -44,7 +51,7 @@ test('deploy workflow verifies with Node 24 and deploys a Pages artifact', async
   assert.ok(actions.some((action) => action.startsWith('actions/deploy-pages@')));
 });
 
-test('Feishu sync workflow exposes the three triggers and only four Feishu secrets', async () => {
+test('Feishu sync workflow exposes only the required triggers and four Feishu secrets', async () => {
   const { source, workflow } = await readWorkflow('sync-feishu.yml');
   const steps = workflow.jobs.sync.steps;
   const manualGuard = steps.find((step) => step.name === 'Reject non-main manual run');
@@ -55,7 +62,7 @@ test('Feishu sync workflow exposes the three triggers and only four Feishu secre
     ...new Set(source.match(/secrets\.(FEISHU_[A-Z0-9_]+)/g)?.map((value) => value.slice(8)) ?? []),
   ].sort();
 
-  assert.deepEqual(workflow.on.repository_dispatch.types, ['feishu_publish']);
+  assert.ok(!Object.hasOwn(workflow.on, 'repository_dispatch'));
   assert.ok(Object.hasOwn(workflow.on, 'workflow_dispatch'));
   assert.deepEqual(workflow.on.schedule, [{ cron: '*/30 * * * *' }]);
   assert.match(manualGuard?.if ?? '', /workflow_dispatch.*github\.ref.*refs\/heads\/main/);
@@ -63,6 +70,7 @@ test('Feishu sync workflow exposes the three triggers and only four Feishu secre
   assert.ok(steps.indexOf(manualGuard) < steps.indexOf(checkout));
   assert.equal(workflow.jobs.sync.permissions.contents, 'write');
   assert.equal(checkout?.with?.ref, 'main');
+  assert.equal(checkout?.with?.['persist-credentials'], false);
   assert.equal(String(setupNode?.with?.['node-version']), '24');
   assert.match(commands, /npm ci/);
   assert.match(commands, /npm run sync:feishu/);
@@ -80,6 +88,7 @@ test('Feishu workflow stages only generated posts, media, and the manifest', asy
   const syncIndex = steps.findIndex((step) => step.run === 'npm run sync:feishu');
   const verifyIndex = steps.findIndex((step) => step.run === 'npm run verify');
   const commitIndex = steps.findIndex((step) => step.id === 'commit');
+  const commit = steps[commitIndex];
 
   assert.match(
     source,
@@ -88,7 +97,10 @@ test('Feishu workflow stages only generated posts, media, and the manifest', asy
   assert.doesNotMatch(source, /git add\s+(?:-A|\.)/);
   assert.match(source, /git diff --cached --quiet/);
   assert.match(source, /git commit/);
-  assert.match(source, /git push origin HEAD:main/);
+  assert.equal(commit?.env?.GITHUB_TOKEN, '${{ github.token }}');
+  assert.match(source, /AUTHORIZATION: basic/);
+  assert.match(source, /push "https:\/\/github\.com\//);
+  assert.doesNotMatch(source, /persist-credentials:\s*true/);
   assert.ok(syncIndex >= 0, 'sync step is present');
   assert.ok(verifyIndex > syncIndex, 'verification runs after synchronization');
   assert.ok(commitIndex > verifyIndex, 'verification runs before content is committed');
@@ -99,21 +111,28 @@ test('a changed Feishu sync deploys Pages directly without a dispatch gap', asyn
     await Promise.all([readWorkflow('deploy.yml'), readWorkflow('sync-feishu.yml')]);
   const deployJob = sync.jobs.deploy;
   const deployActions = deployJob.steps.map((step) => step.uses).filter(Boolean);
-  const deployCheckout = deployJob.steps.find((step) =>
-    step.uses?.startsWith('actions/checkout@'),
+  const syncSteps = sync.jobs.sync.steps;
+  const verifiedArtifact = syncSteps.find((step) =>
+    step.uses?.startsWith('actions/upload-pages-artifact@'),
   );
+  const verifyIndex = syncSteps.findIndex((step) => step.run === 'npm run verify');
+  const uploadIndex = syncSteps.indexOf(verifiedArtifact);
+  const commitIndex = syncSteps.findIndex((step) => step.id === 'commit');
 
   assert.equal(sync.jobs.sync.outputs.changed, '${{ steps.commit.outputs.changed }}');
   assert.equal(deployJob.needs, 'sync');
   assert.equal(deployJob.if, "needs.sync.outputs.changed == 'true'");
-  assert.equal(deployJob.permissions.contents, 'read');
+  assert.ok(!Object.hasOwn(deployJob.permissions, 'contents'));
   assert.equal(deployJob.permissions.pages, 'write');
   assert.equal(deployJob.permissions['id-token'], 'write');
-  assert.equal(deployCheckout?.with?.ref, 'main');
   assert.equal(deployJob.environment.name, 'github-pages');
+  assert.ok(verifyIndex >= 0 && uploadIndex > verifyIndex && commitIndex > uploadIndex);
+  assert.equal(verifiedArtifact?.with?.path, './dist');
   assert.ok(deployActions.some((action) => action.startsWith('actions/configure-pages@')));
-  assert.ok(deployActions.some((action) => action.startsWith('actions/upload-pages-artifact@v3')));
-  assert.ok(deployActions.some((action) => action.startsWith('actions/deploy-pages@v4')));
+  assert.ok(deployActions.some((action) => action.startsWith('actions/deploy-pages@')));
+  assert.ok(!deployActions.some((action) => action.startsWith('actions/checkout@')));
+  assert.ok(!deployActions.some((action) => action.startsWith('actions/setup-node@')));
+  assert.ok(!deployJob.steps.some((step) => /npm\s/.test(step.run ?? '')));
   assert.match(syncSource, /id:\s*commit/);
   assert.match(syncSource, /changed=true/);
   assert.doesNotMatch(syncSource, /feishu_content_synced/);
@@ -155,8 +174,7 @@ test('setup documentation covers the complete Feishu and GitHub handoff without 
   assert.match(setup, /docs:document\.media:download/);
   assert.doesNotMatch(setup, /drive:media:download/);
   assert.match(setup, /共享|添加文档应用/);
-  assert.match(setup, /repository_dispatch/);
-  assert.match(setup, /feishu_publish/);
+  assert.doesNotMatch(setup, /repository_dispatch|feishu_publish/);
   assert.match(setup, /XMo2004\/XMo2004\.github\.io/);
   assert.match(setup, /actions\/workflows\/sync-feishu\.yml\/dispatches/);
   assert.match(setup, /\{"ref":"main"\}/);
@@ -186,4 +204,24 @@ test('setup documentation covers the complete Feishu and GitHub handoff without 
   assert.doesNotMatch(combined, /ghp_[A-Za-z0-9]{20,}/);
   assert.doesNotMatch(combined, /github_pat_[A-Za-z0-9_]{20,}/);
   assert.doesNotMatch(combined, /t-[A-Za-z0-9]{24,}/);
+});
+
+test('remote Actions are pinned to immutable SHAs and Dependabot maintains them', async () => {
+  const workflowNames = ['deploy.yml', 'sync-feishu.yml'];
+  for (const name of workflowNames) {
+    const source = await readSource(`.github/workflows/${name}`);
+    const remoteUses = [...source.matchAll(/uses:\s*([^\s#]+)/g)].map((match) => match[1]);
+    assert.ok(remoteUses.length > 0, `${name} has remote Actions`);
+    for (const action of remoteUses) {
+      if (action.startsWith('./')) continue;
+      assert.match(action, /^[^@\s]+@[0-9a-f]{40}$/, `${action} must use a full SHA`);
+    }
+  }
+
+  const dependabot = parse(await readSource('.github/dependabot.yml'));
+  const actionsUpdate = dependabot.updates.find(
+    (entry) => entry['package-ecosystem'] === 'github-actions',
+  );
+  assert.equal(actionsUpdate?.directory, '/');
+  assert.equal(actionsUpdate?.schedule?.interval, 'weekly');
 });

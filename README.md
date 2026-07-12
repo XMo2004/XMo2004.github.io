@@ -38,7 +38,7 @@ npm run sync:feishu
 
 `deploy.yml` 在 `main` 更新后使用 Node.js 24 执行 `npm ci` 和 `npm run verify`，通过后部署 GitHub Pages。
 
-`sync-feishu.yml` 每 30 分钟检查一次飞书，也支持手动运行和 `feishu_publish` repository dispatch。它只提交飞书生成的文章、素材与 manifest；内容确实变化并通过验证后，同一 workflow 会把提交推送到 `main` 并直接部署 Pages。
+`sync-feishu.yml` 每 30 分钟检查一次飞书，也支持通过 `workflow_dispatch` 手动运行或由飞书自动化触发。它只提交飞书生成的文章、素材与 manifest；内容确实变化并通过验证后，同一 workflow 会把提交推送到 `main` 并直接部署 Pages。
 
 ## 常用命令
 

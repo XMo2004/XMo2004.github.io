@@ -18,6 +18,7 @@ import { parse as parseYaml } from 'yaml';
 
 import { contentAddressedMedia } from '../scripts/feishu/assets.mjs';
 import {
+  createMediaBudget,
   syncFeishu,
   validateSyncEnvironment,
 } from '../scripts/feishu/sync.mjs';
@@ -138,6 +139,18 @@ function parseMarkdownFile(source) {
   return { frontmatter: parseYaml(match[1]), body: match[2] };
 }
 
+test('the synchronization media budget enforces distinct-count and byte totals', () => {
+  const budget = createMediaBudget({ maxDistinct: 2, maxBytes: 5 });
+
+  budget.reserveDownload();
+  budget.reserveDownload();
+  assert.throws(() => budget.reserveDownload(), /at most 2.*media/i);
+
+  budget.accountBytes(3);
+  budget.accountBytes(2);
+  assert.throws(() => budget.accountBytes(1), /at most 5 bytes.*media/i);
+});
+
 async function generatedSnapshot(root) {
   const entries = {};
 
@@ -220,10 +233,9 @@ test('sync creates valid Markdown, localized media, and a deterministic manifest
     tags: ['飞书', '测试'],
     featured: true,
     cover: coverAsset.publicPath,
-    sourceUrl: `https://example.feishu.cn/docx/${DOCUMENT_ID}`,
-    feishuRecordId: 'rec-one',
     slug: 'first-post',
   });
+  assert.doesNotMatch(source, /example\.feishu\.cn|rec-one|doxcnExample123/);
   assert.match(body, /来自飞书的正文/);
   assert.match(body, new RegExp(bodyAsset.publicPath));
   assert.doesNotMatch(body, /feishu-media:/);
@@ -235,12 +247,77 @@ test('sync creates valid Markdown, localized media, and a deterministic manifest
   const manifest = JSON.parse(
     await readFile(join(root, '.feishu-manifest.json'), 'utf8'),
   );
-  assert.equal(manifest.version, 1);
-  assert.deepEqual(manifest.records.map(({ recordId }) => recordId), ['rec-one']);
-  assert.equal(manifest.records[0].revisionId, 7);
+  assert.equal(manifest.version, 2);
+  assert.deepEqual(manifest.records.map(({ slug }) => slug), ['first-post']);
+  assert.deepEqual(Object.keys(manifest.records[0]).sort(), ['assets', 'slug']);
+  assert.doesNotMatch(JSON.stringify(manifest), /rec-one|doxcnExample123/);
   assert.deepEqual(
     manifest.records[0].assets.map(({ hash }) => hash).sort(),
     [bodyAsset.hash, coverAsset.hash].sort(),
+  );
+});
+
+test('changing only Feishu internal identifiers does not rewrite public output', async (t) => {
+  const root = await makeRoot(t);
+  const first = stableClient();
+  await syncFeishu({ root, client: first.client, appToken: APP_TOKEN, tableId: TABLE_ID });
+  const before = await generatedSnapshot(root);
+
+  const secondRecord = publishedRecord({ id: 'rec-two' });
+  secondRecord.fields.文档链接.link = 'https://example.feishu.cn/docx/doxcnOther456';
+  const second = stableClient({ records: [secondRecord] });
+
+  const result = await syncFeishu({
+    root,
+    client: second.client,
+    appToken: APP_TOKEN,
+    tableId: TABLE_ID,
+  });
+
+  assert.equal(result.changed, false);
+  assert.deepEqual(await generatedSnapshot(root), before);
+});
+
+test('conversion warnings expose only the public slug and warning details', async (t) => {
+  const root = await makeRoot(t);
+  const { client } = stableClient({
+    records: [publishedRecord({ fields: { 封面: [] } })],
+  });
+  client.listDocumentBlocks = async () => [
+    {
+      block_id: 'private-page-id',
+      block_type: 1,
+      children: ['private-paragraph-id'],
+      page: { elements: [] },
+    },
+    {
+      block_id: 'private-paragraph-id',
+      block_type: 2,
+      parent_id: 'private-page-id',
+      text: {
+        elements: [
+          {
+            text_run: {
+              content: '带下划线的正文',
+              text_element_style: { underline: true },
+            },
+          },
+        ],
+      },
+    },
+  ];
+
+  const result = await syncFeishu({
+    root,
+    client,
+    appToken: APP_TOKEN,
+    tableId: TABLE_ID,
+  });
+
+  assert.deepEqual(result.warnings, [{ slug: 'first-post', type: 'underline' }]);
+  assert.doesNotMatch(
+    JSON.stringify(result.warnings),
+    /rec-one|doxcnExample123|private-page-id|private-paragraph-id/,
   );
 });
 
@@ -326,6 +403,34 @@ test('media tokens that prefix one another are localized independently', async (
     assert.match(source, new RegExp(asset.publicPath));
   }
   assert.doesNotMatch(source, /feishu-media:/);
+});
+
+test('an article with more than 30 distinct media assets fails before download', async (t) => {
+  const root = await makeRoot(t);
+  const { client, calls } = stableClient({
+    records: [publishedRecord({ fields: { 封面: [] } })],
+  });
+  const imageIds = Array.from({ length: 31 }, (_, index) => `image-${index}`);
+  client.listDocumentBlocks = async () => [
+    {
+      block_id: 'page',
+      block_type: 1,
+      children: imageIds,
+      page: { elements: [] },
+    },
+    ...imageIds.map((blockId, index) => ({
+      block_id: blockId,
+      block_type: 27,
+      parent_id: 'page',
+      image: { token: `token-${index}` },
+    })),
+  ];
+
+  await assert.rejects(
+    () => syncFeishu({ root, client, appToken: APP_TOKEN, tableId: TABLE_ID }),
+    /30.*media|media.*30/i,
+  );
+  assert.deepEqual(calls.media, []);
 });
 
 test('media localization never rewrites literal URLs inside author code', async (t) => {
@@ -488,7 +593,8 @@ test('a changing document is retried once and only the stable revision is writte
   const manifest = JSON.parse(
     await readFile(join(root, '.feishu-manifest.json'), 'utf8'),
   );
-  assert.equal(manifest.records[0].revisionId, 3);
+  assert.equal(manifest.version, 2);
+  assert.deepEqual(Object.keys(manifest.records[0]).sort(), ['assets', 'slug']);
 });
 
 test('a document that changes twice aborts without replacing the previous tree', async (t) => {

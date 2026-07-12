@@ -1,12 +1,13 @@
 import { createHash } from 'node:crypto';
 
+export const MAX_MEDIA_BYTES = 10 * 1024 * 1024;
+
 const EXTENSIONS = new Map([
   ['image/avif', 'avif'],
   ['image/bmp', 'bmp'],
   ['image/gif', 'gif'],
   ['image/jpeg', 'jpg'],
   ['image/png', 'png'],
-  ['image/svg+xml', 'svg'],
   ['image/webp', 'webp'],
   ['image/x-icon', 'ico'],
   ['image/vnd.microsoft.icon', 'ico'],
@@ -25,9 +26,15 @@ function normalizedContentType(value) {
 
 function normalizedBytes(value) {
   if (value instanceof Uint8Array) {
+    if (value.byteLength > MAX_MEDIA_BYTES) {
+      throw new Error('Media exceeds the 10 MiB single-file limit.');
+    }
     return new Uint8Array(value);
   }
   if (value instanceof ArrayBuffer) {
+    if (value.byteLength > MAX_MEDIA_BYTES) {
+      throw new Error('Media exceeds the 10 MiB single-file limit.');
+    }
     return new Uint8Array(value.slice(0));
   }
   throw new Error('Media bytes must be a Uint8Array or ArrayBuffer.');

@@ -5,7 +5,10 @@ import {
   createFeishuClient,
   createFeishuClientFromEnv,
 } from '../scripts/feishu/client.mjs';
-import { contentAddressedMedia } from '../scripts/feishu/assets.mjs';
+import {
+  MAX_MEDIA_BYTES,
+  contentAddressedMedia,
+} from '../scripts/feishu/assets.mjs';
 
 function json(value, init = {}) {
   return new Response(JSON.stringify(value), {
@@ -420,6 +423,32 @@ test('media download stays in memory and receives a content-addressed filename',
     '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824.png',
   );
   assert.equal(asset.publicPath, `/media/feishu/${asset.filename}`);
+});
+
+test('media download rejects oversized declared and streamed bodies', async () => {
+  for (const responseFactory of [
+    () =>
+      new Response(new Uint8Array([1]), {
+        headers: {
+          'content-type': 'image/png',
+          'content-length': String(MAX_MEDIA_BYTES + 1),
+        },
+      }),
+    () =>
+      new Response(new Uint8Array(MAX_MEDIA_BYTES + 1), {
+        headers: { 'content-type': 'image/png' },
+      }),
+  ]) {
+    const client = createFeishuClient({
+      appId: 'id',
+      appSecret: 'secret',
+      minIntervalMs: 0,
+      fetchImpl: async (url) =>
+        new URL(url).pathname.includes('/auth/') ? token() : responseFactory(),
+    });
+
+    await assert.rejects(() => client.downloadMedia('oversized'), /10 mib|media.*limit/i);
+  }
 });
 
 test('pagination refuses a repeated page token instead of looping forever', async () => {
