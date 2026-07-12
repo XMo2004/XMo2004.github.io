@@ -49,6 +49,44 @@ test('public sync failures never expose Feishu internal identifiers', () => {
   }
 });
 
+test('public sync failures expose only the allowlisted records phase and never the malicious cause', async (t) => {
+  const root = await makeRoot(t);
+  const { client } = stableClient();
+  const privateValues = [
+    'rec_private_records_123',
+    'doxcnPrivateRecords456',
+    'media_private_records_token',
+    'https://example.feishu.cn/docx/doxcnPrivateRecords456',
+    'super_private_app_secret',
+  ];
+  client.listPublishedRecords = async () => {
+    throw new Error(`replace: ${privateValues.join(' ')}`);
+  };
+
+  let failure;
+  try {
+    await syncFeishu({
+      root,
+      client,
+      appToken: APP_TOKEN,
+      tableId: TABLE_ID,
+    });
+  } catch (error) {
+    failure = error;
+  }
+
+  assert.ok(failure instanceof Error);
+  const publicMessage = publicSyncFailureMessage(failure);
+  assert.equal(
+    publicMessage,
+    '飞书同步失败 [records: 记录获取与校验]：错误详情已脱敏，请重试。',
+  );
+  for (const value of privateValues) {
+    assert.doesNotMatch(publicMessage, new RegExp(value.replaceAll('/', '\\/')));
+  }
+  assert.doesNotMatch(publicMessage, /replace/);
+});
+
 function publishedRecord({ id = 'rec-one', slug = 'first-post', fields = {} } = {}) {
   return {
     record_id: id,
@@ -217,6 +255,90 @@ async function generatedSnapshot(root) {
   await visit(join(root, '.feishu-manifest.json'));
   return entries;
 }
+
+async function publicMessageForRejectedSync(options) {
+  let failure;
+  await assert.rejects(
+    () => syncFeishu(options),
+    (error) => {
+      failure = error;
+      return true;
+    },
+  );
+  return publicSyncFailureMessage(failure);
+}
+
+test('public sync diagnostics map each synchronization boundary to a stable allowlisted phase', async (t) => {
+  const expected = {
+    preflight:
+      '飞书同步失败 [preflight: 手动文章与分类预检]：错误详情已脱敏，请重试。',
+    build:
+      '飞书同步失败 [build: 文档与素材生成]：错误详情已脱敏，请重试。',
+    stage:
+      '飞书同步失败 [stage: 暂存文件写入]：错误详情已脱敏，请重试。',
+    replace:
+      '飞书同步失败 [replace: 发布文件替换]：错误详情已脱敏，请重试。',
+  };
+
+  const preflightRoot = await makeRoot(t);
+  await writeFile(
+    join(preflightRoot, 'src/content/posts/manual/welcome.md'),
+    '---\ntitle: Missing taxonomy\nslug: welcome\n---\n',
+  );
+  assert.equal(
+    await publicMessageForRejectedSync({
+      root: preflightRoot,
+      client: stableClient().client,
+      appToken: APP_TOKEN,
+      tableId: TABLE_ID,
+    }),
+    expected.preflight,
+  );
+
+  const buildRoot = await makeRoot(t);
+  const buildClient = stableClient().client;
+  buildClient.getDocument = async () => {
+    throw new Error('doxcn_private_build https://private.example.test');
+  };
+  assert.equal(
+    await publicMessageForRejectedSync({
+      root: buildRoot,
+      client: buildClient,
+      appToken: APP_TOKEN,
+      tableId: TABLE_ID,
+    }),
+    expected.build,
+  );
+
+  const stageRoot = await makeRoot(t);
+  assert.equal(
+    await publicMessageForRejectedSync({
+      root: stageRoot,
+      client: stableClient({
+        records: [publishedRecord({ slug: 'a'.repeat(300) })],
+      }).client,
+      appToken: APP_TOKEN,
+      tableId: TABLE_ID,
+    }),
+    expected.stage,
+  );
+
+  const replaceRoot = await makeRoot(t);
+  assert.equal(
+    await publicMessageForRejectedSync({
+      root: replaceRoot,
+      client: stableClient().client,
+      appToken: APP_TOKEN,
+      tableId: TABLE_ID,
+      transactionOperations: {
+        rename: async () => {
+          throw new Error('rec_private_replace file_private_replace_token');
+        },
+      },
+    }),
+    expected.replace,
+  );
+});
 
 test('sync creates valid Markdown, localized media, and a deterministic manifest', async (t) => {
   const root = await makeRoot(t);

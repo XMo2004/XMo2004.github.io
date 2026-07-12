@@ -51,6 +51,29 @@ const SHANGHAI_DATE = new Intl.DateTimeFormat('en-US', {
 export const MAX_MEDIA_PER_ARTICLE = 30;
 export const MAX_MEDIA_PER_SYNC = 500;
 export const MAX_MEDIA_BYTES_PER_SYNC = 250 * 1024 * 1024;
+export const PUBLIC_SYNC_FAILURE_PHASES = Object.freeze({
+  records: '记录获取与校验',
+  preflight: '手动文章与分类预检',
+  build: '文档与素材生成',
+  stage: '暂存文件写入',
+  replace: '发布文件替换',
+});
+const syncFailurePhase = new WeakMap();
+
+async function inSyncPhase(phase, operation) {
+  try {
+    return await operation();
+  } catch (error) {
+    const failure =
+      error instanceof Error
+        ? error
+        : new Error('Feishu synchronization failed with a non-Error cause.', {
+            cause: error,
+          });
+    syncFailurePhase.set(failure, phase);
+    throw failure;
+  }
+}
 
 export function createMediaBudget({
   maxDistinct = MAX_MEDIA_PER_SYNC,
@@ -106,7 +129,17 @@ export function validateSyncEnvironment(env = process.env) {
   };
 }
 
-export function publicSyncFailureMessage() {
+export function publicSyncFailureMessage(error) {
+  const candidate =
+    error instanceof Error ? syncFailurePhase.get(error) : undefined;
+  const phase =
+    typeof candidate === 'string' &&
+    Object.hasOwn(PUBLIC_SYNC_FAILURE_PHASES, candidate)
+      ? candidate
+      : undefined;
+  if (phase !== undefined) {
+    return `飞书同步失败 [${phase}: ${PUBLIC_SYNC_FAILURE_PHASES[phase]}]：错误详情已脱敏，请重试。`;
+  }
   return '飞书同步失败：错误详情已脱敏。请检查飞书应用权限、博客文章字段和文档内容后重试。';
 }
 
@@ -798,24 +831,38 @@ export async function syncFeishu({
   }
 
   const operations = transactionOperations(operationOverrides);
-  await recoverInterruptedTransactions(workspaceRoot, {
-    transactionOperations: operations,
+  await inSyncPhase('replace', () =>
+    recoverInterruptedTransactions(workspaceRoot, {
+      transactionOperations: operations,
+    }),
+  );
+
+  const records = await inSyncPhase('records', async () =>
+    normalizePublishedRecords(
+      await client.listPublishedRecords(appToken, tableId),
+    ),
+  );
+  await inSyncPhase('preflight', async () => {
+    const manualPosts = await manualPostMetadata(workspaceRoot);
+    rejectManualSlugCollisions(manualPosts, records);
+    validateNextTaxonomy(manualPosts, records);
+  });
+  const next = await inSyncPhase('build', () =>
+    buildNextState(client, records),
+  );
+  const stage = await inSyncPhase('stage', async () => {
+    const manifest = buildFeishuManifest(next.articles);
+    return writeStage({ ...next, manifest });
   });
 
-  const records = normalizePublishedRecords(
-    await client.listPublishedRecords(appToken, tableId),
-  );
-  const manualPosts = await manualPostMetadata(workspaceRoot);
-  rejectManualSlugCollisions(manualPosts, records);
-  validateNextTaxonomy(manualPosts, records);
-  const next = await buildNextState(client, records);
-  const manifest = buildFeishuManifest(next.articles);
-  const stage = await writeStage({ ...next, manifest });
-
   try {
-    const changed = !(await outputsEqual(workspaceRoot, stage));
+    const changed = !(await inSyncPhase('stage', () =>
+      outputsEqual(workspaceRoot, stage),
+    ));
     if (changed) {
-      await replaceOutputs(workspaceRoot, stage, operations);
+      await inSyncPhase('replace', () =>
+        replaceOutputs(workspaceRoot, stage, operations),
+      );
     }
     return {
       changed,
@@ -824,7 +871,9 @@ export async function syncFeishu({
       warnings: next.warnings,
     };
   } finally {
-    await rm(stage.stageRoot, { recursive: true, force: true });
+    await inSyncPhase('stage', () =>
+      rm(stage.stageRoot, { recursive: true, force: true }),
+    );
   }
 }
 
@@ -858,8 +907,8 @@ if (
     for (const warning of result.warnings) {
       console.warn(`飞书转换提示：${JSON.stringify(warning)}`);
     }
-  } catch {
-    console.error(publicSyncFailureMessage());
+  } catch (error) {
+    console.error(publicSyncFailureMessage(error));
     process.exitCode = 1;
   }
 }
