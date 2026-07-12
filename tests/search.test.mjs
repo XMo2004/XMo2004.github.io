@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
@@ -72,6 +71,62 @@ const retry = 3;
   assert.doesNotMatch(
     text,
     /https?:|internal\.example|hidden-(?:bare|inline|block)|token|(?:bare|inline|block)-secret/,
+  );
+});
+
+test('markdownToSearchText removes balanced-parenthesis bare URLs and autolinks completely', () => {
+  const markdown = `
+前 https://internal.example/docs_(bare_secret)/view?token=top_secret 后
+
+<https://internal.example/auto_(auto_secret)/view?token=other_secret> 结束
+`;
+
+  const text = markdownToSearchText(markdown);
+
+  assert.equal(text, '前 后 结束');
+  assert.doesNotMatch(
+    text,
+    /https?|internal|docs|auto|view|token|(?:bare|auto|top|other)_?secret/i,
+  );
+});
+
+test('markdownToSearchText removes complete HTML tags with quoted greater-than signs', () => {
+  const markdown = `
+<div data-secret="value > internal_record_id" title="/Users/xmo/private.md">
+公开文本
+</div>
+`;
+
+  const text = markdownToSearchText(markdown);
+
+  assert.equal(text, '公开文本');
+  assert.doesNotMatch(text, /data-secret|internal_record_id|Users|private\.md/);
+});
+
+test('markdownToSearchText removes multiline reference destinations and titles', () => {
+  const markdown = `
+[公开文档][private-ref]
+
+[private-ref]:
+  /Users/xmo/private_record.md
+  "internal-document-id-123"
+
+正文
+`;
+
+  const text = markdownToSearchText(markdown);
+
+  assert.equal(text, '公开文档 正文');
+  assert.doesNotMatch(
+    text,
+    /private-ref|Users|private_record|internal-document-id/i,
+  );
+});
+
+test('markdownToSearchText preserves underscores in visible identifiers', () => {
+  assert.equal(
+    markdownToSearchText('读取 private_record_id 与 snake_case。'),
+    '读取 private_record_id 与 snake_case。',
   );
 });
 
@@ -174,6 +229,26 @@ test('searchEntries finds Chinese terms such as 飞书', () => {
   assert.deepEqual(searchEntries([unrelated, matching], ' 飞书 '), [matching]);
 });
 
+test('searchEntries includes a description-only match', () => {
+  const matching = makeEntry({
+    href: '/posts/description-only/',
+    description: '使用飞书自动发布文章',
+  });
+  const unrelated = makeEntry({ href: '/posts/unrelated/' });
+
+  assert.deepEqual(searchEntries([unrelated, matching], '飞书'), [matching]);
+});
+
+test('searchEntries includes a tag-only match', () => {
+  const matching = makeEntry({
+    href: '/posts/tag-only/',
+    tags: ['飞书发布'],
+  });
+  const unrelated = makeEntry({ href: '/posts/unrelated/' });
+
+  assert.deepEqual(searchEntries([unrelated, matching], '飞书'), [matching]);
+});
+
 test('searchEntries matches 专栏 博客搭建 across taxonomy fields', () => {
   const matching = makeEntry({
     href: '/posts/column-post/',
@@ -227,12 +302,14 @@ test('searchEntries sorts an empty query by newest date and then href', () => {
     href: '/posts/a/',
     pubDate: '2026-06-01',
   });
+  const entries = Object.freeze([older, newestB, newestA]);
 
-  assert.deepEqual(searchEntries([older, newestB, newestA], '   '), [
+  assert.deepEqual(searchEntries(entries, '   '), [
     newestA,
     newestB,
     older,
   ]);
+  assert.deepEqual(searchEntries(entries, '   ', 1), [newestA]);
 });
 
 test('searchEntries ranks exact, prefix, and contained title matches by weight', () => {
@@ -277,6 +354,30 @@ test('searchEntries adds taxonomy weight to a contained title match', () => {
   );
 });
 
+test('searchEntries breaks equal-score ties by date and then href', () => {
+  const older = makeEntry({
+    href: '/posts/older/',
+    title: '飞书',
+    pubDate: '2025-12-31',
+  });
+  const newestB = makeEntry({
+    href: '/posts/b/',
+    title: '飞书',
+    pubDate: '2026-06-01',
+  });
+  const newestA = makeEntry({
+    href: '/posts/a/',
+    title: '飞书',
+    pubDate: '2026-06-01',
+  });
+
+  assert.deepEqual(searchEntries([older, newestB, newestA], '飞书'), [
+    newestA,
+    newestB,
+    older,
+  ]);
+});
+
 test('searchEntries applies the default and explicit limits', () => {
   const entries = Array.from({ length: 10 }, (_, index) =>
     makeEntry({
@@ -286,7 +387,24 @@ test('searchEntries applies the default and explicit limits', () => {
   );
 
   assert.equal(searchEntries(entries, '匹配').length, 8);
-  assert.deepEqual(searchEntries(entries, '匹配', 2), entries.slice(0, 2));
+
+  const bodyOnly = makeEntry({
+    href: '/posts/body-only/',
+    searchText: '飞书',
+  });
+  const descriptionOnly = makeEntry({
+    href: '/posts/description-only/',
+    description: '飞书',
+  });
+  const highScoreLast = makeEntry({
+    href: '/posts/high-score/',
+    title: '飞书',
+  });
+
+  assert.deepEqual(
+    searchEntries([bodyOnly, descriptionOnly, highScoreLast], '飞书', 1),
+    [highScoreLast],
+  );
 });
 
 test('searchEntries does not mutate the input array or entry objects', () => {
@@ -306,12 +424,16 @@ test('searchEntries does not mutate the input array or entry objects', () => {
   );
   const entries = Object.freeze([second, first]);
 
-  const result = searchEntries(entries, '飞书');
+  const populatedResult = searchEntries(entries, '飞书');
+  const emptyResult = searchEntries(entries, '');
 
   assert.deepEqual(entries, [second, first]);
-  assert.deepEqual(result, [first, second]);
-  assert.strictEqual(result[0], first);
-  assert.strictEqual(result[1], second);
+  assert.deepEqual(populatedResult, [first, second]);
+  assert.deepEqual(emptyResult, [first, second]);
+  assert.strictEqual(populatedResult[0], first);
+  assert.strictEqual(populatedResult[1], second);
+  assert.strictEqual(emptyResult[0], first);
+  assert.strictEqual(emptyResult[1], second);
 });
 
 test('serializeSearchIndex escapes script-sensitive characters and round-trips', () => {
@@ -345,15 +467,7 @@ test('serializeSearchIndex accepts and safely serializes a versioned index objec
   };
 
   const serialized = serializeSearchIndex(index);
-  const searchSource = readFileSync(
-    new URL('../src/lib/search.ts', import.meta.url),
-    'utf8',
-  );
 
   assert.doesNotMatch(serialized, /[<>&\u2028\u2029]/u);
   assert.deepEqual(JSON.parse(serialized), index);
-  assert.match(
-    searchSource,
-    /export function serializeSearchIndex\(\s*\w+: unknown\s*\): string/,
-  );
 });

@@ -1,7 +1,21 @@
 import { estimateReadingMinutes, getPostHref } from './posts.ts';
 
 const MAX_SEARCH_TEXT_LENGTH = 12_000;
-const BARE_URL_PATTERN = /\b(?:https?:\/\/|mailto:)[^\s<>()[\]{}"'，。！？；：、]+/giu;
+const URL_SCHEMES = ['https://', 'http://', 'mailto:'] as const;
+const URL_TERMINATORS = new Set([
+  '<',
+  '>',
+  '"',
+  "'",
+  '`',
+  '，',
+  '。',
+  '！',
+  '？',
+  '；',
+  '：',
+  '、',
+]);
 
 const SEARCH_WEIGHTS = {
   titleExact: 120,
@@ -43,6 +57,242 @@ export interface SearchEntry {
 interface ScoredSearchEntry {
   entry: SearchEntry;
   score: number;
+}
+
+function getUrlSchemeLength(value: string, start: number): number {
+  for (const scheme of URL_SCHEMES) {
+    if (value.slice(start, start + scheme.length).toLowerCase() === scheme) {
+      return scheme.length;
+    }
+  }
+
+  return 0;
+}
+
+function findBareUrlEnd(
+  value: string,
+  start: number,
+  schemeLength: number,
+): number {
+  let parenthesisDepth = 0;
+  let index = start + schemeLength;
+
+  while (index < value.length) {
+    const character = value[index];
+
+    if (/\s/u.test(character) || URL_TERMINATORS.has(character)) {
+      break;
+    }
+
+    if (character === '(') {
+      parenthesisDepth += 1;
+    } else if (character === ')') {
+      if (parenthesisDepth === 0) {
+        break;
+      }
+
+      parenthesisDepth -= 1;
+    }
+
+    index += 1;
+  }
+
+  return index;
+}
+
+function removeUrls(value: string): string {
+  let result = '';
+  let index = 0;
+
+  while (index < value.length) {
+    if (value[index] === '<') {
+      const schemeLength = getUrlSchemeLength(value, index + 1);
+
+      if (schemeLength > 0) {
+        const urlEnd = findBareUrlEnd(value, index + 1, schemeLength);
+
+        if (value[urlEnd] === '>') {
+          result += ' ';
+          index = urlEnd + 1;
+          continue;
+        }
+      }
+    }
+
+    const schemeLength = getUrlSchemeLength(value, index);
+    const previousCharacter = value[index - 1] ?? '';
+
+    if (schemeLength > 0 && !/[a-z0-9_]/iu.test(previousCharacter)) {
+      result += ' ';
+      index = findBareUrlEnd(value, index, schemeLength);
+      continue;
+    }
+
+    result += value[index];
+    index += 1;
+  }
+
+  return result;
+}
+
+function findHtmlTagEnd(value: string, start: number): number {
+  let quote: '"' | "'" | undefined;
+
+  for (let index = start + 1; index < value.length; index += 1) {
+    const character = value[index];
+
+    if (quote !== undefined) {
+      if (character === quote) {
+        quote = undefined;
+      }
+
+      continue;
+    }
+
+    if (character === '"' || character === "'") {
+      quote = character;
+    } else if (character === '>') {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+function findClosingRawElement(
+  lowerCaseValue: string,
+  tagName: string,
+  start: number,
+): number {
+  const closingPrefix = `</${tagName}`;
+  let index = lowerCaseValue.indexOf(closingPrefix, start);
+
+  while (index !== -1) {
+    const characterAfterName = lowerCaseValue[index + closingPrefix.length];
+
+    if (
+      characterAfterName === undefined ||
+      /[\s>]/u.test(characterAfterName)
+    ) {
+      return index;
+    }
+
+    index = lowerCaseValue.indexOf(closingPrefix, index + closingPrefix.length);
+  }
+
+  return -1;
+}
+
+function removeHtmlMarkup(value: string): string {
+  const rawElementNames = new Set(['script', 'style', 'template']);
+  const lowerCaseValue = value.toLowerCase();
+  let result = '';
+  let index = 0;
+
+  while (index < value.length) {
+    if (value.startsWith('<!--', index)) {
+      const commentEnd = value.indexOf('-->', index + 4);
+      index = commentEnd === -1 ? value.length : commentEnd + 3;
+      result += ' ';
+      continue;
+    }
+
+    if (value[index] !== '<') {
+      result += value[index];
+      index += 1;
+      continue;
+    }
+
+    const tagEnd = findHtmlTagEnd(value, index);
+
+    if (tagEnd === -1) {
+      result += value[index];
+      index += 1;
+      continue;
+    }
+
+    const tagSource = value.slice(index + 1, tagEnd).trim();
+    const tagNameMatch = /^\/?\s*([a-z][a-z0-9:-]*)/iu.exec(tagSource);
+    const isDeclaration = tagSource.startsWith('!') || tagSource.startsWith('?');
+
+    if (tagNameMatch === null && !isDeclaration) {
+      result += value[index];
+      index += 1;
+      continue;
+    }
+
+    const tagName = tagNameMatch?.[1].toLowerCase();
+    const isClosing = tagSource.startsWith('/');
+    const isSelfClosing = /\/\s*$/u.test(tagSource);
+
+    if (
+      tagName !== undefined &&
+      rawElementNames.has(tagName) &&
+      !isClosing &&
+      !isSelfClosing
+    ) {
+      const closingStart = findClosingRawElement(
+        lowerCaseValue,
+        tagName,
+        tagEnd + 1,
+      );
+
+      if (closingStart === -1) {
+        result += ' ';
+        break;
+      }
+
+      const closingEnd = findHtmlTagEnd(value, closingStart);
+      index = closingEnd === -1 ? value.length : closingEnd + 1;
+      result += ' ';
+      continue;
+    }
+
+    result += ' ';
+    index = tagEnd + 1;
+  }
+
+  return result;
+}
+
+function isReferenceTitleLine(line: string): boolean {
+  const firstCharacter = line.trimStart()[0];
+  return firstCharacter === '"' || firstCharacter === "'" || firstCharacter === '(';
+}
+
+function removeReferenceDefinitions(value: string): string {
+  const lines = value.split('\n');
+  const visibleLines: string[] = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const definition = /^[ \t]{0,3}\[[^\]\n]+\]:[ \t]*(.*)$/u.exec(lines[index]);
+
+    if (definition === null) {
+      visibleLines.push(lines[index]);
+      continue;
+    }
+
+    if (
+      definition[1].trim() === '' &&
+      lines[index + 1] !== undefined &&
+      lines[index + 1].trim() !== ''
+    ) {
+      index += 1;
+    }
+
+    while (
+      lines[index + 1] !== undefined &&
+      lines[index + 1].trim() !== '' &&
+      (/^[ \t]+/u.test(lines[index + 1]) ||
+        isReferenceTitleLine(lines[index + 1]))
+    ) {
+      index += 1;
+    }
+
+    visibleLines.push('');
+  }
+
+  return visibleLines.join('\n');
 }
 
 function replaceInlineLinkTargets(markdown: string): string {
@@ -166,8 +416,8 @@ export function markdownToSearchText(markdown: string): string {
 
   let text = markdown
     .normalize('NFKC')
-    .replace(BARE_URL_PATTERN, ' ')
     .replace(/\r\n?/gu, '\n');
+  text = removeUrls(text);
 
   text = text.replace(
     /^[ \t]{0,3}(`{3,}|~{3,})[^\n]*\n([\s\S]*?)^[ \t]{0,3}\1[ \t]*(?=\n|$)/gmu,
@@ -188,12 +438,9 @@ export function markdownToSearchText(markdown: string): string {
     (_match, character: string) => preserve(character),
   );
 
-  text = text.replace(/<(script|style|template)\b[^>]*>[\s\S]*?<\/\1\s*>/giu, ' ');
-  text = text.replace(/<!--[\s\S]*?-->/gu, ' ');
-  text = text.replace(/^[ \t]{0,3}\[[^\]\n]+\]:[^\n]*(?=\n|$)/gmu, ' ');
+  text = removeReferenceDefinitions(text);
   text = replaceInlineLinkTargets(text);
-  text = text.replace(/<\/?[a-z][^>]*>/giu, ' ');
-  text = text.replace(/<![^>]*>|<\?[^>]*\?>/gu, ' ');
+  text = removeHtmlMarkup(text);
   text = decodeHtmlEntities(text);
 
   text = text.replace(/^[ \t]{0,3}(?:[-*_][ \t]*){3,}$/gmu, ' ');
@@ -204,7 +451,19 @@ export function markdownToSearchText(markdown: string): string {
   text = text.replace(/^[ \t]{0,3}(?:[-+*]|\d{1,9}[.)])[ \t]+/gmu, ' ');
   text = text.replace(/^[ \t]*\[[ xX]\][ \t]+/gmu, ' ');
   text = text.replace(/\\[ \t]*(?=\n|$)/gmu, ' ');
-  text = text.replace(/[*_~]+/gu, '');
+  text = text.replace(/[*~]+/gu, '');
+  text = text.replace(
+    /_+/gu,
+    (underscores, offset: number, source: string) => {
+      const previousCharacter = source[offset - 1] ?? '';
+      const nextCharacter = source[offset + underscores.length] ?? '';
+      const isInsideIdentifier =
+        /[\p{L}\p{N}]/u.test(previousCharacter) &&
+        /[\p{L}\p{N}]/u.test(nextCharacter);
+
+      return isInsideIdentifier ? underscores : '';
+    },
+  );
   text = text.replace(/[\[\]|]/gu, ' ');
 
   text = text.replace(/\uE000(\d+)\uE001/gu, (_match, segmentIndex: string) => {
