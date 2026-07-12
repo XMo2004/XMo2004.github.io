@@ -44,7 +44,7 @@ const latest = posts.filter((post) => !post.data.featured).slice(0, 3);
 
     {featured.length > 0 ? (
       <div class="post-grid post-grid--featured">
-        {featured.map((post) => <PostCard entry={post} />)}
+        {featured.map((post) => <PostCard entry={post} headingLevel="h3" />)}
       </div>
     ) : (
       <p class="empty-state">暂时还没有设为精选的文章。</p>
@@ -62,7 +62,7 @@ const latest = posts.filter((post) => !post.data.featured).slice(0, 3);
 
     {latest.length > 0 ? (
       <div class="post-grid">
-        {latest.map((post) => <PostCard entry={post} />)}
+        {latest.map((post) => <PostCard entry={post} headingLevel="h3" />)}
       </div>
     ) : (
       <p class="empty-state">新的文章还在整理中，可以先读上面的精选。</p>

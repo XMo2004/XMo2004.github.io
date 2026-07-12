@@ -7,7 +7,10 @@ async function readSource(relativePath) {
 }
 
 test('BaseLayout provides Chinese document metadata and an accessible page shell', async () => {
-  const source = await readSource('src/layouts/BaseLayout.astro');
+  const [source, footerSource] = await Promise.all([
+    readSource('src/layouts/BaseLayout.astro'),
+    readSource('src/components/SiteFooter.astro'),
+  ]);
 
   assert.match(source, /<html\s+lang=["']zh-CN["']/);
   assert.match(source, /跳到正文/);
@@ -15,6 +18,8 @@ test('BaseLayout provides Chinese document metadata and an accessible page shell
   assert.match(source, /<main\s+id=["']main-content["']/);
   assert.match(source, /SiteHeader/);
   assert.match(source, /SiteFooter/);
+  assert.match(footerSource, /new Date\(\)\.getFullYear\(\)/);
+  assert.doesNotMatch(footerSource, /©\s*2026/);
 });
 
 test('BaseLayout emits site metadata without inventing a social preview image', async () => {
@@ -53,6 +58,32 @@ test('global styles define the editorial tokens and accessibility safeguards', a
   assert.match(source, /@media\s*\(prefers-reduced-motion:\s*reduce\)/);
   assert.match(source, /@media\s*\(max-width:/);
   assert.match(source, /text-wrap:\s*pretty/);
+  assert.match(source, /--accent-text:\s*#9f422e/i);
+  assert.match(source, /--accent-hover:\s*#566444/i);
+  assert.match(
+    source,
+    /(?:^|\n)a\s*\{[^}]*color:\s*var\(--accent-text\);[^}]*\}/s,
+  );
+  assert.match(
+    source,
+    /a:hover\s*\{[^}]*color:\s*var\(--accent-hover\);[^}]*\}/s,
+  );
+  assert.match(
+    source,
+    /\.eyebrow\s*\{[^}]*color:\s*var\(--accent-text\);[^}]*\}/s,
+  );
+  assert.match(
+    source,
+    /\.button\s*\{(?=[^}]*background:\s*var\(--accent-text\);)(?=[^}]*color:\s*var\(--surface\);)[^}]*\}/s,
+  );
+  assert.match(
+    source,
+    /\.button:hover\s*\{(?=[^}]*background:\s*var\(--accent-hover\);)(?=[^}]*color:\s*var\(--surface\);)[^}]*\}/s,
+  );
+  assert.doesNotMatch(
+    source,
+    /(?:^|[\s;{])color:\s*var\(--(?:terracotta|sage|moss)\)/,
+  );
   assert.match(
     source,
     /\.tag-list a\s*\{[^}]*min-height:\s*2\.75rem;[^}]*\}/s,
@@ -103,7 +134,9 @@ test('ThemeToggle exposes state and persists the selected theme', async () => {
   const source = await readSource('src/components/ThemeToggle.astro');
 
   assert.match(source, /aria-pressed/);
-  assert.match(source, /aria-label/);
+  assert.match(source, /aria-label=["']深色模式["']/);
+  assert.doesNotMatch(source, /setAttribute\(["']aria-label["']/);
+  assert.doesNotMatch(source, /切换到(?:浅色|深色)模式/);
   assert.match(source, /localStorage\.setItem\(["']xmo-theme["']/);
   assert.match(source, /dataset\.theme/);
 });
@@ -116,6 +149,9 @@ test('post components use safe post and tag routes', async () => {
 
   assert.match(cardSource, /normalizeTag/);
   assert.match(cardSource, /data\.slug\s*\?\?/);
+  assert.match(cardSource, /headingLevel\?:\s*'h2'\s*\|\s*'h3'/);
+  assert.match(cardSource, /headingLevel\s*=\s*'h2'/);
+  assert.match(cardSource, /<Heading>/);
   assert.match(cardSource, /<article/);
   assert.match(cardSource, /<time/);
   assert.match(tagListSource, /normalizeTag/);
@@ -133,8 +169,10 @@ test('index and archive pages use the real collection in newest-first order', as
   assert.match(homeSource, /sortNewestFirst/);
   assert.match(homeSource, /关于技术、成长与日常的长期笔记。/);
   assert.match(homeSource, /featured/);
+  assert.match(homeSource, /<PostCard\s+entry=\{post\}\s+headingLevel=["']h3["']/);
   assert.match(postsSource, /getCollection\(["']posts["']\)/);
   assert.match(postsSource, /sortNewestFirst/);
+  assert.match(postsSource, /<PostCard\s+entry=\{post\}\s+headingLevel=["']h2["']/);
 });
 
 test('supporting pages keep their copy honest and offer recovery', async () => {

@@ -8,6 +8,8 @@
   --line: #d7d0c3;
   --terracotta: #b84f35;
   --sage: #6f7d57;
+  --accent-text: #9f422e;
+  --accent-hover: #566444;
   --focus-ring: #b84f35;
 
   --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
@@ -53,6 +55,8 @@
   --line: #3b413a;
   --terracotta: #e27a5f;
   --sage: #a8b98c;
+  --accent-text: #e27a5f;
+  --accent-hover: #a8b98c;
   --focus-ring: #e27a5f;
   --shadow-soft: 0 0.5rem 1.5rem rgb(0 0 0 / 16%);
 }
@@ -101,7 +105,7 @@ a {
 }
 
 a {
-  color: var(--terracotta);
+  color: var(--accent-text);
   text-decoration-color: currentColor;
   text-decoration-thickness: 0.08em;
   text-underline-offset: 0.18em;
@@ -113,7 +117,7 @@ a {
 }
 
 a:hover {
-  color: var(--moss);
+  color: var(--accent-hover);
 }
 
 :focus-visible {
@@ -122,7 +126,7 @@ a:hover {
 }
 
 ::selection {
-  background: var(--terracotta);
+  background: var(--accent-text);
   color: var(--surface);
 }
 
@@ -306,7 +310,7 @@ th {
 }
 
 .wordmark:hover {
-  color: var(--terracotta);
+  color: var(--accent-hover);
 }
 
 .primary-nav ul {
@@ -336,7 +340,7 @@ th {
 }
 
 .primary-nav a[aria-current='page'] {
-  color: var(--terracotta);
+  color: var(--accent-text);
   text-decoration: underline;
   text-decoration-thickness: 0.1em;
   text-underline-offset: 0.35em;
@@ -364,7 +368,7 @@ th {
 
 .theme-toggle:hover {
   border-color: var(--terracotta);
-  color: var(--terracotta);
+  color: var(--accent-hover);
 }
 
 .theme-toggle:active {
@@ -440,7 +444,7 @@ button {
   justify-content: center;
   border: 1px solid var(--terracotta);
   border-radius: var(--radius-sm);
-  background: var(--terracotta);
+  background: var(--accent-text);
   color: var(--surface);
   font-weight: 650;
   text-decoration: none;
@@ -448,7 +452,7 @@ button {
 
 .button:hover {
   border-color: var(--moss);
-  background: var(--moss);
+  background: var(--accent-hover);
   color: var(--surface);
 }
 
@@ -523,7 +527,7 @@ button {
 
 .eyebrow {
   margin-block-end: var(--space-3);
-  color: var(--terracotta);
+  color: var(--accent-text);
   font-size: 0.75rem;
   font-weight: 750;
   letter-spacing: 0.16em;
@@ -686,7 +690,7 @@ button {
 }
 
 .post-card__mark {
-  color: var(--terracotta);
+  color: var(--accent-text);
 }
 
 .post-card__body {
@@ -702,7 +706,7 @@ button {
   font-weight: 600;
 }
 
-.post-card h3 {
+.post-card :is(h2, h3) {
   margin-block: var(--space-3) var(--space-4);
 }
 
@@ -718,7 +722,7 @@ button {
 }
 
 .post-card__title:hover {
-  color: var(--terracotta);
+  color: var(--accent-hover);
 }
 
 .post-card__body > p {
@@ -790,7 +794,7 @@ button {
 }
 
 .section-number {
-  color: var(--terracotta);
+  color: var(--accent-text);
   font-family: var(--font-mono);
   font-size: 0.8rem;
   font-weight: 700;
@@ -943,7 +947,7 @@ button {
 }
 
 .post-toc a:hover {
-  color: var(--terracotta);
+  color: var(--accent-hover);
 }
 
 .post-toc li[class*='post-toc__depth-3'],

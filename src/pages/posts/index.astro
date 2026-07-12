@@ -20,7 +20,7 @@ const posts = sortNewestFirst(await getCollection('posts'));
 
   {posts.length > 0 ? (
     <div class="post-grid post-grid--archive">
-      {posts.map((post) => <PostCard entry={post} />)}
+      {posts.map((post) => <PostCard entry={post} headingLevel="h2" />)}
     </div>
   ) : (
     <div class="empty-state">

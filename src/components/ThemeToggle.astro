@@ -1,12 +1,11 @@
 <button
   class="theme-toggle"
   type="button"
-  aria-label="切换到深色模式"
+  aria-label="深色模式"
   aria-pressed="false"
   data-theme-toggle
 >
   <span class="theme-toggle__glyph" aria-hidden="true"></span>
-  <span class="visually-hidden">切换明暗主题</span>
 </button>
 
 <script>
@@ -18,7 +17,6 @@
 
     const isDark = theme === 'dark';
     button.setAttribute('aria-pressed', String(isDark));
-    button.setAttribute('aria-label', isDark ? '切换到浅色模式' : '切换到深色模式');
   }
 
   function updateThemeColor(theme: 'light' | 'dark') {

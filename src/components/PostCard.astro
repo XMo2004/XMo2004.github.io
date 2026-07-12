@@ -6,10 +6,12 @@ import { getPostHref, getPostSlug, normalizeTag } from '../lib/posts';
 
 interface Props {
   entry: CollectionEntry<'posts'>;
+  headingLevel?: 'h2' | 'h3';
 }
 
-const { entry } = Astro.props;
+const { entry, headingLevel = 'h2' } = Astro.props;
 const { title, description, pubDate, tags, cover } = entry.data;
+const Heading = headingLevel;
 const routeEntry = {
   id: entry.id,
   data: { slug: entry.data.slug ?? getPostSlug(entry) },
@@ -40,9 +42,9 @@ const firstTag = tags[0];
 
   <div class="post-card__body">
     <time datetime={dateTime}>{displayDate}</time>
-    <h3>
+    <Heading>
       <a class="post-card__title" href={postHref}>{title}</a>
-    </h3>
+    </Heading>
     <p>{description}</p>
 
     {tags.length > 0 && (
