@@ -28,6 +28,7 @@ const SEARCH_WEIGHTS = {
 
 export interface SearchSourcePost {
   id: string;
+  filePath?: string;
   body?: string;
   data: {
     slug?: string;
@@ -474,7 +475,7 @@ export function markdownToSearchText(markdown: string): string {
 }
 
 export function buildSearchEntry(post: SearchSourcePost): SearchEntry {
-  if (/\.mdx$/iu.test(post.id)) {
+  if (/\.mdx$/iu.test(post.filePath ?? post.id)) {
     throw new Error(
       `Post "${post.id}" uses MDX, whose non-visible code cannot be included in the public search index.`,
     );

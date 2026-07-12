@@ -213,7 +213,8 @@ test('buildSearchEntry rejects MDX before hidden code can enter the public index
   assert.throws(
     () =>
       buildSearchEntry({
-        id: 'manual/private-runtime.mdx',
+        id: 'public-route',
+        filePath: '/Users/xmo/private/private-runtime.mdx',
         body: `import secret from '/Users/xmo/private/token.ts'
 export const apiKey = 'sk-private'
 
