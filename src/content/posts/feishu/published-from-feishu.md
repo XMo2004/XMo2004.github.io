@@ -6,6 +6,7 @@ tags:
   - 飞书发布
   - 自动化
 featured: true
+cover: /media/feishu/118f522a0876e4faa18683a021e85237d173203d69a4053358909a18d5c18570.png
 slug: published-from-feishu
 ---
 
