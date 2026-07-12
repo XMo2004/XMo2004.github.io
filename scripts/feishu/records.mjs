@@ -22,16 +22,41 @@ const PUBLIC_RECORD_RULES = new Set([
   'positive-safe-integer',
   'paired',
 ]);
+const PUBLIC_VALUE_SHAPES = new Set([
+  'array',
+  'bigint',
+  'boolean',
+  'function',
+  'null',
+  'number',
+  'object',
+  'string',
+  'symbol',
+  'undefined',
+]);
 const publicFieldByError = new WeakMap();
 const publicRuleByError = new WeakMap();
+const publicShapeByError = new WeakMap();
 
-function fieldError(recordId, fieldName, detail, publicRule) {
+function publicValueShape(value) {
+  const shape = Array.isArray(value)
+    ? 'array'
+    : value === null
+      ? 'null'
+      : typeof value;
+  return PUBLIC_VALUE_SHAPES.has(shape) ? shape : undefined;
+}
+
+function fieldError(recordId, fieldName, detail, publicRule, publicShape) {
   const error = new Error(`record_id=${recordId} 的字段「${fieldName}」${detail}`);
   if (PUBLIC_RECORD_FIELDS.has(fieldName)) {
     publicFieldByError.set(error, fieldName);
   }
   if (PUBLIC_RECORD_RULES.has(publicRule)) {
     publicRuleByError.set(error, publicRule);
+  }
+  if (PUBLIC_VALUE_SHAPES.has(publicShape)) {
+    publicShapeByError.set(error, publicShape);
   }
   return error;
 }
@@ -42,6 +67,10 @@ export function getPublicRecordFieldName(error) {
 
 export function getPublicRecordRule(error) {
   return error instanceof Error ? publicRuleByError.get(error) : undefined;
+}
+
+export function getPublicRecordValueShape(error) {
+  return error instanceof Error ? publicShapeByError.get(error) : undefined;
 }
 
 function requireRecordId(value) {
@@ -180,6 +209,7 @@ function normalizeColumnOrder(value, recordId) {
       '专栏序号',
       '必须是正安全整数',
       'positive-safe-integer',
+      publicValueShape(value),
     );
   }
   return value;

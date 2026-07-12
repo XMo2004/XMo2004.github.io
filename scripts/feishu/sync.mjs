@@ -30,6 +30,7 @@ import {
 import {
   getPublicRecordFieldName,
   getPublicRecordRule,
+  getPublicRecordValueShape,
   normalizeRecord,
 } from './records.mjs';
 
@@ -66,6 +67,7 @@ export const PUBLIC_SYNC_FAILURE_PHASES = Object.freeze({
 const syncFailurePhase = new WeakMap();
 const recordValidationFields = new WeakMap();
 const recordValidationRules = new WeakMap();
+const recordValidationShapes = new WeakMap();
 
 async function inSyncPhase(phase, operation) {
   try {
@@ -158,7 +160,16 @@ export function publicSyncFailureMessage(error) {
         ? rules.get(fields[0])
         : undefined;
     const ruleDetail = typeof rule === 'string' ? `; rule: ${rule}` : '';
-    return `飞书同步失败 [${phase}: ${PUBLIC_SYNC_FAILURE_PHASES[phase]}${fieldDetail}${ruleDetail}]：错误详情已脱敏，请重试。`;
+    const shapes =
+      phase === 'records-validate' && error instanceof Error
+        ? recordValidationShapes.get(error)
+        : undefined;
+    const shape =
+      Array.isArray(fields) && fields.length === 1 && shapes instanceof Map
+        ? shapes.get(fields[0])
+        : undefined;
+    const shapeDetail = typeof shape === 'string' ? `; shape: ${shape}` : '';
+    return `飞书同步失败 [${phase}: ${PUBLIC_SYNC_FAILURE_PHASES[phase]}${fieldDetail}${ruleDetail}${shapeDetail}]：错误详情已脱敏，请重试。`;
   }
   return '飞书同步失败：错误详情已脱敏。请检查飞书应用权限、博客文章字段和文档内容后重试。';
 }
@@ -172,6 +183,7 @@ function normalizePublishedRecords(items) {
   const issues = [];
   const publicFields = new Set();
   const publicRules = new Map();
+  const publicShapes = new Map();
   for (const [index, item] of items.entries()) {
     try {
       const record = normalizeRecord(item);
@@ -188,6 +200,10 @@ function normalizePublishedRecords(items) {
         const publicRule = getPublicRecordRule(error);
         if (publicRule !== undefined) {
           publicRules.set(publicField, publicRule);
+        }
+        const publicShape = getPublicRecordValueShape(error);
+        if (publicShape !== undefined) {
+          publicShapes.set(publicField, publicShape);
         }
       }
       const recordId =
@@ -226,6 +242,9 @@ function normalizePublishedRecords(items) {
     }
     if (publicRules.size > 0) {
       recordValidationRules.set(error, publicRules);
+    }
+    if (publicShapes.size > 0) {
+      recordValidationShapes.set(error, publicShapes);
     }
     throw error;
   }

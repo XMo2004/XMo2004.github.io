@@ -300,7 +300,7 @@ test('public sync diagnostics map each synchronization boundary to a stable allo
     recordsValidate:
       '飞书同步失败 [records-validate: 发布字段校验; field: 分类]：错误详情已脱敏，请重试。',
     recordsRule:
-      '飞书同步失败 [records-validate: 发布字段校验; field: 专栏序号; rule: positive-safe-integer]：错误详情已脱敏，请重试。',
+      '飞书同步失败 [records-validate: 发布字段校验; field: 专栏序号; rule: positive-safe-integer; shape: string]：错误详情已脱敏，请重试。',
     preflight:
       '飞书同步失败 [preflight: 手动文章与分类预检]：错误详情已脱敏，请重试。',
     build:
