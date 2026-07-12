@@ -56,7 +56,11 @@ const displayColumnOrder = columnOrder === undefined
   ? undefined
   : String(columnOrder).padStart(2, '0');
 const tableOfContents = headings.filter(
-  (heading) => heading.depth >= 2 && heading.depth <= 4,
+  (heading) =>
+    heading.depth >= 2 &&
+    heading.depth <= 4 &&
+    heading.text.trim().length > 0 &&
+    heading.slug.trim().length > 0,
 );
 const hasTableOfContents = tableOfContents.length >= 2;
 const hasAdjacentPosts = previous !== undefined || next !== undefined;

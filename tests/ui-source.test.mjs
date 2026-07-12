@@ -320,7 +320,7 @@ test('PostLayout derives both adaptive contents views from filtered h2 through h
 
   assert.match(
     source,
-    /const tableOfContents\s*=\s*headings\.filter\(\s*\(heading\)\s*=>\s*heading\.depth\s*>=\s*2\s*&&\s*heading\.depth\s*<=\s*4\s*,?\s*\);/,
+    /const tableOfContents\s*=\s*headings\.filter\([\s\S]*?heading\.depth\s*>=\s*2\s*&&\s*heading\.depth\s*<=\s*4/,
   );
   assert.match(
     source,
@@ -346,6 +346,15 @@ test('PostLayout derives both adaptive contents views from filtered h2 through h
     source.indexOf('<details class="post-toc-compact"') <
       source.indexOf('<div class="prose">'),
     'compact contents should appear before the article body',
+  );
+});
+
+test('PostLayout excludes blank heading labels and slugs from contents', async () => {
+  const source = await readSource('src/layouts/PostLayout.astro');
+
+  assert.match(
+    source,
+    /const tableOfContents\s*=\s*headings\.filter\(\s*\(heading\)\s*=>\s*heading\.depth\s*>=\s*2\s*&&\s*heading\.depth\s*<=\s*4\s*&&\s*heading\.text\.trim\(\)\.length\s*>\s*0\s*&&\s*heading\.slug\.trim\(\)\.length\s*>\s*0\s*,?\s*\);/,
   );
 });
 
