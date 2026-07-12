@@ -158,6 +158,26 @@ test('published records accept Feishu null items only for an explicit empty resu
   assert.deepEqual(await client.listPublishedRecords('app', 'table'), []);
 });
 
+test('published records accept omitted items for an explicit empty result', async () => {
+  const client = createFeishuClient({
+    appId: 'id',
+    appSecret: 'secret',
+    minIntervalMs: 0,
+    fetchImpl: async (url) =>
+      new URL(url).pathname.includes('/auth/')
+        ? token()
+        : json({
+            code: 0,
+            data: {
+              has_more: false,
+              total: 0,
+            },
+          }),
+  });
+
+  assert.deepEqual(await client.listPublishedRecords('app', 'table'), []);
+});
+
 test('pagination rejects null items when the response does not prove it is empty', async () => {
   const client = createFeishuClient({
     appId: 'id',

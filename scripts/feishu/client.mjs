@@ -309,7 +309,7 @@ export function createFeishuClient({
       const pageItems =
         data !== null &&
         typeof data === 'object' &&
-        data.items === null &&
+        (data.items === null || data.items === undefined) &&
         data.has_more === false &&
         data.total === 0
           ? []
