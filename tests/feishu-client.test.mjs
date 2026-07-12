@@ -134,6 +134,51 @@ test('published records follow pagination and send the published filter', async 
   );
 });
 
+test('published records accept Feishu null items only for an explicit empty result', async () => {
+  const client = createFeishuClient({
+    appId: 'id',
+    appSecret: 'secret',
+    minIntervalMs: 0,
+    fetchImpl: async (url) =>
+      new URL(url).pathname.includes('/auth/')
+        ? token()
+        : json({
+            code: 0,
+            data: {
+              has_more: false,
+              items: null,
+              total: 0,
+            },
+          }),
+  });
+
+  assert.deepEqual(await client.listPublishedRecords('app', 'table'), []);
+});
+
+test('pagination rejects null items when the response does not prove it is empty', async () => {
+  const client = createFeishuClient({
+    appId: 'id',
+    appSecret: 'secret',
+    minIntervalMs: 0,
+    fetchImpl: async (url) =>
+      new URL(url).pathname.includes('/auth/')
+        ? token()
+        : json({
+            code: 0,
+            data: {
+              has_more: false,
+              items: null,
+              total: 1,
+            },
+          }),
+  });
+
+  await assert.rejects(
+    () => client.listPublishedRecords('app', 'table'),
+    /no items array|pagination/i,
+  );
+});
+
 test('document metadata and blocks use the requested revision and block pagination', async () => {
   const dataUrls = [];
   const fetchImpl = async (url) => {

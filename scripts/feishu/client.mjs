@@ -261,10 +261,18 @@ export function createFeishuClient({
           ...(pageToken === undefined ? {} : { page_token: pageToken }),
         },
       });
-      if (data === null || typeof data !== 'object' || !Array.isArray(data.items)) {
+      const pageItems =
+        data !== null &&
+        typeof data === 'object' &&
+        data.items === null &&
+        data.has_more === false &&
+        data.total === 0
+          ? []
+          : data?.items;
+      if (!Array.isArray(pageItems)) {
         throw new Error(`Feishu ${label} pagination response has no items array.`);
       }
-      items.push(...data.items);
+      items.push(...pageItems);
 
       if (data.has_more !== true) {
         return items;
