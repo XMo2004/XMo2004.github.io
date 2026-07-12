@@ -1,4 +1,9 @@
 {
   "version": 2,
-  "records": []
+  "records": [
+    {
+      "slug": "published-from-feishu",
+      "assets": []
+    }
+  ]
 }
