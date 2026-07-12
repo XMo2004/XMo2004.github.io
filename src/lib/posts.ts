@@ -12,14 +12,25 @@ export function estimateReadingMinutes(content: string): number {
 }
 
 export function normalizeTag(tag: string): string {
-  return tag.trim().toLowerCase().replace(/\s+/g, '-');
+  const normalizedTag = tag
+    .trim()
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[^\p{Letter}\p{Number}]+/gu, '-')
+    .replace(/^-+|-+$/g, '');
+
+  if (!normalizedTag) {
+    throw new Error('Tag must contain at least one letter or number.');
+  }
+
+  return normalizedTag;
 }
 
-export function sortNewestFirst<T extends { pubDate: Date }>(
+export function sortNewestFirst<T extends { data: { pubDate: Date } }>(
   posts: readonly T[],
 ): T[] {
   return [...posts].sort(
     (firstPost, secondPost) =>
-      secondPost.pubDate.getTime() - firstPost.pubDate.getTime(),
+      secondPost.data.pubDate.getTime() - firstPost.data.pubDate.getTime(),
   );
 }
