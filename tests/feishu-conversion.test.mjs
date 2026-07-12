@@ -156,6 +156,42 @@ test('requires exactly one page root', () => {
   );
 });
 
+test('escapes tilde and equals characters that can create Markdown syntax', () => {
+  const block = textBlock('markdown', 'page', '~~不是删除线~~\n===');
+  const { markdown } = blocksToMarkdown(pageWith(['markdown'], [block]));
+
+  assert.match(markdown, /\\~\\~不是删除线\\~\\~/);
+  assert.match(markdown, /\\=\\=\\=/);
+});
+
+test('rejects children on leaf blocks instead of silently dropping them', () => {
+  const parent = textBlock('parent', 'page', '父段落');
+  parent.children = ['child'];
+  const child = textBlock('child', 'parent', '不能丢失的子内容');
+
+  assert.throws(
+    () => blocksToMarkdown(pageWith(['parent'], [parent, child])),
+    /parent.*children.*not supported|leaf block/i,
+  );
+});
+
+test('detects cycles even when the cycle is orphaned from the page root', () => {
+  const first = textBlock('orphan-a', 'orphan-b', 'A');
+  const second = textBlock('orphan-b', 'orphan-a', 'B');
+  first.children = ['orphan-b'];
+  second.children = ['orphan-a'];
+
+  assert.throws(
+    () => blocksToMarkdown(pageWith([], [first, second])),
+    (error) => {
+      assert.match(error.message, /cycle.*orphan-[ab]/i);
+      assert.match(error.message, /orphan.*orphan-a/i);
+      assert.match(error.message, /orphan.*orphan-b/i);
+      return true;
+    },
+  );
+});
+
 test('rejects invalid table dimensions and cell counts', () => {
   const table = {
     block_id: 'table',

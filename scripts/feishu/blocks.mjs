@@ -2,6 +2,8 @@ const SUPPORTED_BLOCK_TYPES = new Set([
   1, 2, 3, 4, 5, 6, 7, 8, 12, 13, 14, 15, 17, 22, 27, 31, 32,
 ]);
 
+const CONTAINER_BLOCK_TYPES = new Set([1, 12, 13, 17, 31, 32]);
+
 const TEXT_PROPERTY_BY_TYPE = new Map([
   [2, 'text'],
   [3, 'heading1'],
@@ -227,6 +229,20 @@ function validateBlocks(items) {
       continue;
     }
 
+    if (
+      !CONTAINER_BLOCK_TYPES.has(block.block_type) &&
+      Array.isArray(block.children) &&
+      block.children.length > 0
+    ) {
+      issues.push(
+        issue(
+          'leaf_block_children',
+          `Leaf block "${block.block_id}" has children, which are not supported for block type ${block.block_type}.`,
+          block.block_id,
+        ),
+      );
+    }
+
     const textProperty = TEXT_PROPERTY_BY_TYPE.get(block.block_type);
     if (textProperty !== undefined) {
       const textData = block[textProperty];
@@ -435,6 +451,43 @@ function validateBlocks(items) {
     }
   }
 
+  const visited = new Set();
+  const active = new Set();
+
+  function detectCycles(blockId) {
+    if (active.has(blockId)) {
+      issues.push(
+        issue(
+          'cycle',
+          `Cycle detected at block "${blockId}".`,
+          blockId,
+        ),
+      );
+      return;
+    }
+    if (visited.has(blockId)) {
+      return;
+    }
+
+    const block = blocks.get(blockId);
+    if (block === undefined) {
+      return;
+    }
+
+    active.add(blockId);
+    for (const childId of Array.isArray(block.children) ? block.children : []) {
+      if (blocks.has(childId)) {
+        detectCycles(childId);
+      }
+    }
+    active.delete(blockId);
+    visited.add(blockId);
+  }
+
+  for (const blockId of blocks.keys()) {
+    detectCycles(blockId);
+  }
+
   const root = pageRoots[0];
   if (root !== undefined) {
     if (root.parent_id !== undefined && root.parent_id !== '') {
@@ -448,38 +501,26 @@ function validateBlocks(items) {
     }
 
     const reachable = new Set();
-    const active = new Set();
-
-    function visit(blockId) {
-      if (active.has(blockId)) {
-        issues.push(
-          issue(
-            'cycle',
-            `Cycle detected at block "${blockId}".`,
-            blockId,
-          ),
-        );
-        return;
-      }
+    const pending = [root.block_id];
+    while (pending.length > 0) {
+      const blockId = pending.pop();
       if (reachable.has(blockId)) {
-        return;
+        continue;
       }
 
       const block = blocks.get(blockId);
       if (block === undefined) {
-        return;
+        continue;
       }
+
       reachable.add(blockId);
-      active.add(blockId);
       for (const childId of Array.isArray(block.children) ? block.children : []) {
         if (blocks.has(childId)) {
-          visit(childId);
+          pending.push(childId);
         }
       }
-      active.delete(blockId);
     }
 
-    visit(root.block_id);
     for (const blockId of blocks.keys()) {
       if (!reachable.has(blockId)) {
         issues.push(
@@ -503,7 +544,7 @@ function validateBlocks(items) {
 function escapeMarkdown(value) {
   return value
     .replace(/\\/g, '\\\\')
-    .replace(/([`*_{}\[\]<>#+\-.!|()])/g, '\\$1');
+    .replace(/([`*_{}\[\]<>#+\-.!|()~=])/g, '\\$1');
 }
 
 function maxBacktickRun(value) {
