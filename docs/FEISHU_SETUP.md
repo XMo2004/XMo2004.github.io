@@ -10,14 +10,14 @@
 - 查看、评论和导出多维表格（`bitable:app:readonly`）
 - 下载云文档中的图片和附件（`docs:document.media:download`）
 
-配置完成后发布应用版本，并确认应用已安装到写作所在的企业。本文后面会用到应用的 App ID 和 App Secret。不要把 App Secret 写入多维表格、Git 仓库或 Actions 日志。
+同时在「应用能力」中添加机器人能力；它不需要消息权限，但能让应用出现在云文档的授权入口。配置完成后发布应用版本，并确认应用已在写作所在的企业启用。本文后面会用到应用的 App ID 和 App Secret。不要把 App Secret 写入多维表格、Git 仓库或 Actions 日志。
 
 ### 给应用共享资源
 
-开通 API 权限不等于应用自动获得某篇文档的访问权，还需要逐项共享资源：
+开通 API 权限不等于应用自动获得某篇文档的访问权，还需要共享资源：
 
 1. 在多维表格的共享设置中加入应用，授予读取记录所需的权限。多维表格启用了高级权限时，还要把应用加入有权读取相关字段的角色；如果接口返回成功但记录为空，优先检查这里。
-2. 对每篇准备发布的新版文档，通过「添加文档应用」或共享设置把阅读权限授予应用。
+2. 推荐把发布清单和文章都放在应用拥有或已获授权的「博客发布中心」文件夹中，让后续文档继承权限。放在其他位置的文档，需要通过「添加文档应用」单独授权。
 3. `文档链接` 必须是直接的 `/docx/` 链接。知识库页面的 `/wiki/` token 不是文档 ID，不能直接填入。
 
 ## 2. 建立发布清单
@@ -26,10 +26,10 @@
 
 | 字段 | 推荐类型 | 必填 | 说明 |
 | --- | --- | --- | --- |
-| 标题 | 单行文本 | 否 | 留空时使用飞书文档标题。 |
+| 标题 | 文本 | 否 | 留空时使用飞书文档标题。 |
 | 文档链接 | 超链接 | 是 | 新版文档的 HTTPS `/docx/` 链接。 |
-| Slug | 单行文本 | 是 | 公开 URL 片段；只用小写英文字母、数字和单个连字符，例如 `build-a-blog`。 |
-| 摘要 | 多行文本 | 是 | 用于文章列表和页面描述。不可为空。 |
+| Slug | 文本 | 是 | 公开 URL 片段；只用小写英文字母、数字和单个连字符，例如 `build-a-blog`。 |
+| 摘要 | 文本 | 是 | 用于文章列表和页面描述。不可为空。 |
 | 标签 | 多选 | 否 | 可留空；选项文字会成为站点标签。 |
 | 发布日期 | 日期 | 是 | 文章公开日期。 |
 | 状态 | 单选 | 是 | 只使用「草稿」「已发布」「已下线」。同步仅发布「已发布」。 |
@@ -68,26 +68,26 @@
 飞书自动化需要调用 GitHub REST API。创建 fine-grained（细粒度）Personal Access Token 时：
 
 1. Repository access 只选择这个博客仓库。
-2. Repository permissions 只把 **Contents** 设为 **Read and write（读写）**；其余保持 No access。
+2. Repository permissions 只把 **Actions** 设为 **Read and write（读写）**；`Metadata: Read` 会自动附带，其余保持 No access。
 3. 设置合理的过期时间，并在到期前轮换。
 
-这个 PAT 只保存在飞书自动化的安全凭据中，不要写进表格字段、文档正文、仓库文件或 GitHub Actions secrets。
+这个权限只能触发或管理这个仓库的 Actions，不能直接改博客内容，比 `Contents: write` 更适合飞书推送。PAT 只放在自动化请求的 Authorization 头中，不要写进表格字段、文档正文、仓库文件或 GitHub Actions secrets；飞书没有承诺请求头会在所有运行日志中脱敏，因此要限制自动化的查看和编辑权限。
 
 ### 配置自动化 HTTP 请求
 
 在多维表格里创建自动化：当 `状态` 字段发生变化时，发送下面的请求。这样切换为「已发布」会立即上线，改回「草稿」或「已下线」也会立即撤下；30 分钟定时任务只作为漏触发时的兜底。
 
 ```http
-POST https://api.github.com/repos/XMo2004/XMo2004.github.io/dispatches
+POST https://api.github.com/repos/XMo2004/XMo2004.github.io/actions/workflows/sync-feishu.yml/dispatches
 Accept: application/vnd.github+json
 Authorization: Bearer <fine-grained-pat>
 X-GitHub-Api-Version: 2026-03-10
 Content-Type: application/json
 
-{"event_type":"feishu_publish"}
+{"ref":"main"}
 ```
 
-把 Authorization 值放在飞书的安全配置中。GitHub 正常接收时返回 HTTP 204。`repository_dispatch` 只会使用默认分支上已经存在的 workflow 文件。
+把 Authorization 值放在飞书自动化的请求头配置中，并把响应解析设为 `none`。GitHub 正常接收时返回 HTTP 200，并在响应中给出新 workflow run；请求体固定为 `main`，不要改为表格变量。
 
 同步结束后，workflow 只会暂存并提交以下路径：
 
@@ -154,9 +154,9 @@ git diff -- src/content/posts/feishu public/media/feishu .feishu-manifest.json
 
 这些错误通常表示限流或短暂服务异常。同步客户端会指数退避后重试；仍失败时，等待一段时间再手动运行 workflow。不要通过缩短 cron 间隔来规避失败。
 
-### 飞书自动化收到 401 或 404
+### 飞书自动化收到 401、403 或 404
 
-401 多半是 PAT 无效或过期。404 常见原因是仓库坐标错误、PAT 没有该仓库的访问权，或 `repository_dispatch` workflow 尚未进入默认分支。事件类型必须写成 `feishu_publish`。
+401 多半是 PAT 无效或过期；403 通常是 PAT 没有该仓库的 Actions 读写权限；404 常见原因是仓库坐标或 workflow 文件名错误，或 `sync-feishu.yml` 尚未进入默认分支。请求体必须是 `{"ref":"main"}`。
 
 ### Actions 能同步但不能推送
 
@@ -181,6 +181,6 @@ git push origin main
 
 - 不在 issue、截图或构建日志中粘贴 App Secret、PAT 或 tenant access token。
 - 轮换 App Secret：先在飞书开放平台生成或重置 App Secret，立即更新 GitHub 的 `FEISHU_APP_SECRET`，手动运行同步验证成功后，再确认旧值已经失效。
-- 轮换 PAT：先创建同仓库、同到期策略且仅有 Contents 读写权限的新 fine-grained PAT，更新飞书自动化的 Authorization，确认测试请求返回 204 后，再撤销旧 PAT。
+- 轮换 PAT：先创建同仓库、同到期策略且仅有 Actions 读写权限的新 fine-grained PAT，更新飞书自动化的 Authorization，确认测试请求返回 200 后，再撤销旧 PAT。
 - 怀疑泄露时，不等待常规轮换，立即撤销相应旧凭据并更新保存位置。
 - 定期清理不再使用的应用版本和 PAT。权限够用即可，不要为了排障长期保留更大的授权范围。

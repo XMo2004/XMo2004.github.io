@@ -158,11 +158,14 @@ test('setup documentation covers the complete Feishu and GitHub handoff without 
   assert.match(setup, /repository_dispatch/);
   assert.match(setup, /feishu_publish/);
   assert.match(setup, /XMo2004\/XMo2004\.github\.io/);
+  assert.match(setup, /actions\/workflows\/sync-feishu\.yml\/dispatches/);
+  assert.match(setup, /\{"ref":"main"\}/);
   assert.match(setup, /X-GitHub-Api-Version:\s*2026-03-10/);
   assert.match(setup, /状态.*发生变化/);
   assert.match(setup, /已下线.*立即撤下/);
   assert.match(setup, /fine-grained|细粒度/i);
-  assert.match(setup, /Contents.*读写|Contents.*Read and write/is);
+  assert.match(setup, /Actions.*读写|Actions.*Read and write/is);
+  assert.match(setup, /HTTP 200/);
   assert.match(setup, /npm run sync:feishu/);
   assert.match(setup, /排障|故障/);
   assert.match(setup, /Settings.*Pages.*GitHub Actions/is);
