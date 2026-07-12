@@ -1,0 +1,48 @@
+---
+import type { RelatedPostLink } from '../lib/posts';
+
+interface Props {
+  posts: readonly RelatedPostLink[];
+}
+
+const { posts } = Astro.props;
+const dateFormatter = new Intl.DateTimeFormat('zh-CN', {
+  year: 'numeric',
+  month: 'short',
+  day: 'numeric',
+});
+---
+
+{posts.length > 0 && (
+  <section class="related-post-list" aria-labelledby="related-post-list-title">
+    <header class="related-post-list__header">
+      <h2 id="related-post-list-title">继续阅读</h2>
+    </header>
+
+    <ol class="related-post-list__items">
+      {posts.map((post) => (
+        <li class="related-post">
+          <article>
+            <div class="related-post__meta">
+              <time datetime={post.pubDate.toISOString()}>
+                {dateFormatter.format(post.pubDate)}
+              </time>
+            </div>
+
+            <h3 class="related-post__title">
+              <a class="related-post__link" href={post.href}>{post.title}</a>
+            </h3>
+
+            <p class="related-post__description">{post.description}</p>
+
+            <ul class="related-post__taxonomies" aria-label="相关文章分类信息">
+              <li>{post.category}</li>
+              {post.column && <li>{post.column}</li>}
+              {post.tags.map((tag) => <li>#{tag}</li>)}
+            </ul>
+          </article>
+        </li>
+      ))}
+    </ol>
+  </section>
+)}

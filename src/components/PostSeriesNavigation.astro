@@ -1,0 +1,59 @@
+---
+import type { SeriesNavigation } from '../lib/posts';
+
+interface Props {
+  series: SeriesNavigation;
+}
+
+const { series } = Astro.props;
+const displayPosition = String(series.position).padStart(2, '0');
+const displayTotal = String(series.total).padStart(2, '0');
+const hasAdjacentSections =
+  series.previous !== undefined || series.next !== undefined;
+---
+
+<section class="post-series-navigation" aria-labelledby="post-series-title">
+  <div class="post-series-navigation__header">
+    <div class="post-series-navigation__identity">
+      <p class="post-series-navigation__eyebrow">专栏阅读</p>
+      <h2 id="post-series-title" class="post-series-navigation__title">
+        <a class="post-series-navigation__column" href={series.href}>
+          {series.label}
+        </a>
+      </h2>
+    </div>
+
+    <p class="post-series-navigation__progress">
+      <span class="visually-hidden">
+        专栏进度：第 {series.position} 节，共 {series.total} 节
+      </span>
+      <span aria-hidden="true">{displayPosition} / {displayTotal}</span>
+    </p>
+  </div>
+
+  {hasAdjacentSections && (
+    <nav class="post-series-navigation__links" aria-label="专栏相邻章节">
+      {series.previous && (
+        <a
+          class="post-series-navigation__link post-series-navigation__link--previous"
+          href={series.previous.href}
+          rel="prev"
+        >
+          <span>上一节</span>
+          <strong>{series.previous.title}</strong>
+        </a>
+      )}
+
+      {series.next && (
+        <a
+          class="post-series-navigation__link post-series-navigation__link--next"
+          href={series.next.href}
+          rel="next"
+        >
+          <span>下一节</span>
+          <strong>{series.next.title}</strong>
+        </a>
+      )}
+    </nav>
+  )}
+</section>

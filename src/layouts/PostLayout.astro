@@ -1,18 +1,21 @@
 ---
+import PostSeriesNavigation from '../components/PostSeriesNavigation.astro';
+import RelatedPostList from '../components/RelatedPostList.astro';
 import TagList from '../components/TagList.astro';
 import { SITE } from '../config/site';
-import { getCategoryHref, getColumnHref } from '../lib/posts';
+import {
+  getCategoryHref,
+  getColumnHref,
+  type AdjacentPostLink,
+  type RelatedPostLink,
+  type SeriesNavigation,
+} from '../lib/posts';
 import BaseLayout from './BaseLayout.astro';
 
 interface ArticleHeading {
   depth: number;
   slug: string;
   text: string;
-}
-
-interface AdjacentPost {
-  href: string;
-  title: string;
 }
 
 interface Props {
@@ -27,8 +30,10 @@ interface Props {
   tags?: readonly string[];
   readingMinutes?: number;
   headings?: readonly ArticleHeading[];
-  previous?: AdjacentPost;
-  next?: AdjacentPost;
+  previous?: AdjacentPostLink;
+  next?: AdjacentPostLink;
+  series?: SeriesNavigation;
+  related?: readonly RelatedPostLink[];
 }
 
 const {
@@ -45,6 +50,8 @@ const {
   headings = [],
   previous,
   next,
+  series,
+  related = [],
 } = Astro.props;
 
 const dateFormatter = new Intl.DateTimeFormat('zh-CN', {
@@ -190,21 +197,29 @@ const jsonLd = {
 
         <div class="prose"><slot /></div>
 
-        {hasAdjacentPosts && (
-          <nav class="post-pagination" aria-label="相邻文章">
-            {previous && (
-              <a class="post-pagination__previous" href={previous.href} rel="prev">
-                <span>上一篇</span>
-                <strong>{previous.title}</strong>
-              </a>
-            )}
-            {next && (
-              <a class="post-pagination__next" href={next.href} rel="next">
-                <span>下一篇</span>
-                <strong>{next.title}</strong>
-              </a>
-            )}
-          </nav>
+        {series ? (
+          <PostSeriesNavigation series={series} />
+        ) : (
+          hasAdjacentPosts && (
+            <nav class="post-pagination" aria-label="相邻文章">
+              {previous && (
+                <a class="post-pagination__previous" href={previous.href} rel="prev">
+                  <span>上一篇</span>
+                  <strong>{previous.title}</strong>
+                </a>
+              )}
+              {next && (
+                <a class="post-pagination__next" href={next.href} rel="next">
+                  <span>下一篇</span>
+                  <strong>{next.title}</strong>
+                </a>
+              )}
+            </nav>
+          )
+        )}
+
+        {related.length > 0 && (
+          <RelatedPostList posts={related} />
         )}
       </div>
     </div>

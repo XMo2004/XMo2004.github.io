@@ -5,25 +5,49 @@ import { getCollection, render } from 'astro:content';
 import PostLayout from '../../layouts/PostLayout.astro';
 import {
   buildPostRouteRecords,
+  buildRelatedPosts,
+  buildSeriesNavigation,
   estimateReadingMinutes,
   getPostHref,
   sortNewestFirst,
   type AdjacentPostLink,
+  type RelatedPostLink,
+  type SeriesNavigation,
 } from '../../lib/posts';
 
 interface Props {
   post: CollectionEntry<'posts'>;
   previous?: AdjacentPostLink;
   next?: AdjacentPostLink;
+  series?: SeriesNavigation;
+  related: RelatedPostLink[];
 }
 
 export async function getStaticPaths() {
   const posts = sortNewestFirst(await getCollection('posts'));
+  const routeRecords = buildPostRouteRecords(posts);
 
-  return buildPostRouteRecords(posts);
+  return routeRecords.map((route) => {
+    const series = buildSeriesNavigation(posts, route.props.post.id);
+    const excluded = new Set([
+      route.props.previous?.href,
+      route.props.next?.href,
+      series?.previous?.href,
+      series?.next?.href,
+    ].filter((href): href is string => href !== undefined));
+    const related = buildRelatedPosts(posts, route.props.post.id, {
+      excludeHrefs: excluded,
+      limit: 3,
+    });
+
+    return {
+      ...route,
+      props: { ...route.props, series, related },
+    };
+  });
 }
 
-const { post, previous, next } = Astro.props;
+const { post, previous, next, series, related } = Astro.props;
 const { Content, headings } = await render(post);
 
 if (post.body === undefined) {
@@ -48,6 +72,8 @@ const canonicalPath = getPostHref(post);
   headings={headings}
   previous={previous}
   next={next}
+  series={series}
+  related={related}
 >
   <Content />
 </PostLayout>

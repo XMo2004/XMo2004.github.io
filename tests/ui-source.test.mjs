@@ -6,6 +6,22 @@ async function readSource(relativePath) {
   return readFile(new URL(`../${relativePath}`, import.meta.url), 'utf8');
 }
 
+function assertNoNestedAnchors(source, label) {
+  let anchorDepth = 0;
+
+  for (const match of source.matchAll(/<\/?a\b[^>]*>/g)) {
+    if (match[0].startsWith('</')) {
+      anchorDepth -= 1;
+      assert.ok(anchorDepth >= 0, `${label} should close only open links`);
+    } else {
+      assert.equal(anchorDepth, 0, `${label} should not nest interactive links`);
+      anchorDepth += 1;
+    }
+  }
+
+  assert.equal(anchorDepth, 0, `${label} should close every link`);
+}
+
 function splitCssTopLevel(source, separator) {
   const parts = [];
   let start = 0;
@@ -1089,6 +1105,162 @@ test('article routes pass taxonomy data through to PostLayout', async () => {
   assert.match(source, /category=\{post\.data\.category\}/);
   assert.match(source, /column=\{post\.data\.column\}/);
   assert.match(source, /columnOrder=\{post\.data\.columnOrder\}/);
+});
+
+test('article routes pass complete discovery data to PostLayout', async () => {
+  const source = await readSource('src/pages/posts/[...id].astro');
+
+  assert.match(source, /buildSeriesNavigation/);
+  assert.match(source, /buildRelatedPosts/);
+  assert.match(source, /type SeriesNavigation/);
+  assert.match(source, /type RelatedPostLink/);
+  assert.match(
+    source,
+    /interface Props\s*\{[\s\S]*series\?:\s*SeriesNavigation;[\s\S]*related:\s*(?:readonly\s+)?RelatedPostLink\[\];/,
+  );
+  assert.match(
+    source,
+    /const\s+routeRecords\s*=\s*buildPostRouteRecords\(posts\);/,
+  );
+  assert.match(source, /routeRecords\.map\(\(route\)\s*=>/);
+  assert.match(
+    source,
+    /buildSeriesNavigation\(posts,\s*route\.props\.post\.id\)/,
+  );
+  assert.match(
+    source,
+    /new Set\(\[\s*route\.props\.previous\?\.href,\s*route\.props\.next\?\.href,\s*series\?\.previous\?\.href,\s*series\?\.next\?\.href,?\s*\]\.filter\(/,
+  );
+  assert.match(
+    source,
+    /buildRelatedPosts\(posts,\s*route\.props\.post\.id,\s*\{[\s\S]*excludeHrefs:\s*excluded,[\s\S]*limit:\s*3,[\s\S]*\}\)/,
+  );
+  assert.match(source, /props:\s*\{\s*\.\.\.route\.props,\s*series,\s*related\s*\}/);
+  assert.match(source, /series=\{series\}/);
+  assert.match(source, /related=\{related\}/);
+});
+
+test('PostLayout selects series navigation and non-empty related reading', async () => {
+  const source = await readSource('src/layouts/PostLayout.astro');
+
+  assert.match(source, /import PostSeriesNavigation/);
+  assert.match(source, /import RelatedPostList/);
+  assert.match(source, /type SeriesNavigation/);
+  assert.match(source, /type RelatedPostLink/);
+  assert.match(
+    source,
+    /interface Props\s*\{[\s\S]*series\?:\s*SeriesNavigation;[\s\S]*related\?:\s*(?:readonly\s+)?RelatedPostLink\[\];/,
+  );
+  assert.match(source, /related\s*=\s*\[\]/);
+  assert.match(
+    source,
+    /series\s*\?\s*\(\s*<PostSeriesNavigation\s+series=\{series\}\s*\/>\s*\)\s*:\s*\(\s*hasAdjacentPosts\s*&&\s*\(\s*<nav\s+class=["']post-pagination["']/,
+  );
+  assert.match(
+    source,
+    /related\.length\s*>\s*0\s*&&\s*\(\s*<RelatedPostList\s+posts=\{related\}\s*\/>\s*\)/,
+  );
+});
+
+test('PostLayout discovery components use typed semantic links without nesting', async () => {
+  const [seriesSource, relatedSource] = await Promise.all([
+    readSource('src/components/PostSeriesNavigation.astro').catch(() => ''),
+    readSource('src/components/RelatedPostList.astro').catch(() => ''),
+  ]);
+
+  assert.match(seriesSource, /import type \{ SeriesNavigation \}/);
+  assert.match(seriesSource, /series:\s*SeriesNavigation;/);
+  assert.match(seriesSource, />专栏阅读</);
+  assert.match(seriesSource, /href=\{series\.href\}/);
+  assert.match(seriesSource, /padStart\(2,\s*['"]0['"]\)/);
+  assert.match(
+    seriesSource,
+    /<span\s+class=["']visually-hidden["']>\s*专栏进度：第\s*\{series\.position\}\s*节，共\s*\{series\.total\}\s*节\s*<\/span>/,
+  );
+  assert.match(
+    seriesSource,
+    /<span\s+aria-hidden=["']true["']>\{displayPosition\}\s*\/\s*\{displayTotal\}<\/span>/,
+  );
+  assert.doesNotMatch(seriesSource, /<p[^>]*aria-label=/);
+  assert.match(seriesSource, /series\.previous\s*&&/);
+  assert.match(seriesSource, /rel=["']prev["']/);
+  assert.match(seriesSource, />上一节</);
+  assert.match(seriesSource, /series\.next\s*&&/);
+  assert.match(seriesSource, /rel=["']next["']/);
+  assert.match(seriesSource, />下一节</);
+  assertNoNestedAnchors(seriesSource, 'PostSeriesNavigation');
+
+  assert.match(relatedSource, /import type \{ RelatedPostLink \}/);
+  assert.match(relatedSource, /posts:\s*(?:readonly\s+)?RelatedPostLink\[\];/);
+  assert.match(relatedSource, /posts\.length\s*>\s*0\s*&&/);
+  assert.match(relatedSource, /<section[^>]*aria-labelledby=/);
+  assert.match(relatedSource, />继续阅读</);
+  assert.match(relatedSource, /posts\.map\(\(post\)\s*=>/);
+  assert.match(relatedSource, /href=\{post\.href\}/);
+  assert.equal(
+    relatedSource.match(/\bhref=/g)?.length,
+    1,
+    'each related row should expose one public article link in source',
+  );
+  assert.match(relatedSource, /<time\s+datetime=\{post\.pubDate\.toISOString\(\)\}/);
+  assert.match(relatedSource, /post\.description/);
+  assert.match(relatedSource, /post\.category/);
+  assert.match(relatedSource, /post\.column/);
+  assert.match(relatedSource, /post\.tags\.map/);
+  assertNoNestedAnchors(relatedSource, 'RelatedPostList');
+});
+
+test('PostLayout discovery styles stay dense, accessible, and responsive', async () => {
+  const styles = await readSource('src/styles/global.css');
+  const discoveryBlocks = [...styles.matchAll(
+    /(?:\.post-series-navigation|\.related-post)[^{]*\{([^}]*)\}/g,
+  )].map(([, declarations]) => declarations).join('\n');
+
+  assert.match(
+    styles,
+    /\.post-series-navigation\s*\{(?=[^}]*border-top:\s*1px\s+solid\s+var\(--line\);)(?=[^}]*color:\s*var\(--ink\);)[^}]*\}/s,
+  );
+  assert.match(
+    styles,
+    /\.post-series-navigation__progress\s*\{[^}]*font-variant-numeric:\s*tabular-nums;[^}]*\}/s,
+  );
+  assert.match(
+    styles,
+    /\.post-series-navigation__links\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);[^}]*\}/s,
+  );
+  assert.match(
+    styles,
+    /\.post-series-navigation__link\s*\{(?=[^}]*min-width:\s*0;)(?=[^}]*min-height:\s*2\.75rem;)(?=[^}]*background:\s*var\(--surface\);)[^}]*\}/s,
+  );
+  assert.match(
+    styles,
+    /\.related-post-list\s*\{[^}]*border-top:\s*1px\s+solid\s+var\(--line\);[^}]*\}/s,
+  );
+  assert.match(
+    styles,
+    /\.related-post__link\s*\{(?=[^}]*min-width:\s*0;)(?=[^}]*min-height:\s*2\.75rem;)(?=[^}]*color:\s*var\(--ink\);)[^}]*\}/s,
+  );
+  assert.match(
+    styles,
+    /\.related-post__description\s*\{[^}]*overflow-wrap:\s*anywhere;[^}]*\}/s,
+  );
+  assert.match(
+    styles,
+    /:is\(\.post-series-navigation__column,\s*\.post-series-navigation__link,\s*\.related-post__link\):focus-visible\s*\{[^}]*outline:/s,
+  );
+  assert.match(
+    styles,
+    /@media\s*\(max-width:\s*48rem\)\s*\{[\s\S]*?\.post-series-navigation__links\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);[^}]*\}/,
+  );
+  assert.match(
+    styles,
+    /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{[\s\S]*?:is\(\.post-series-navigation__link,\s*\.related-post\)\s*\{(?=[^}]*transition:\s*none;)(?=[^}]*opacity:\s*1;)(?=[^}]*transform:\s*none;)[^}]*\}/,
+  );
+  assert.doesNotMatch(discoveryBlocks, /(?:^|[;\s])height\s*:/);
+  assert.doesNotMatch(
+    discoveryBlocks,
+    /white-space:\s*nowrap|-webkit-line-clamp|(?<!-webkit-)line-clamp/,
+  );
 });
 
 test('PostLayout renders linked article taxonomy without nesting links', async () => {

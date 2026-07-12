@@ -270,6 +270,23 @@ test('article output omits both contents variants for a lone body h1', async () 
   assert.doesNotMatch(articleHtml, /<summary>本页目录<\/summary>/);
 });
 
+test('column articles render ordered series navigation without duplicate generic pagination', async () => {
+  const welcome = await readOutput('posts/welcome/index.html');
+  const feishu = await readOutput('posts/published-from-feishu/index.html');
+  const columnHref = `/columns/${normalizeTag('博客搭建手记')}/`;
+
+  assert.match(welcome, /01\s*\/\s*02/);
+  assert.match(welcome, /下一节/);
+  assert.match(welcome, /href="\/posts\/published-from-feishu\/"/);
+  assert.match(welcome, new RegExp(`href="${columnHref}"`));
+  assert.match(feishu, /02\s*\/\s*02/);
+  assert.match(feishu, /上一节/);
+  assert.match(feishu, /href="\/posts\/welcome\/"/);
+  assert.match(feishu, new RegExp(`href="${columnHref}"`));
+  assert.doesNotMatch(welcome, /上一篇|下一篇/);
+  assert.doesNotMatch(feishu, /上一篇|下一篇/);
+});
+
 test('search index contains only deterministic public article data', async () => {
   const source = await readOutput('search-index.json');
   const index = assertPublicSearchIndexContract(source);
