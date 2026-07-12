@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "astro dev",
     "check": "astro check",
-    "test": "node --test tests/*.test.mjs",
+    "test": "node --experimental-strip-types --test tests/*.test.mjs",
     "build": "astro build",
     "verify": "npm run test && npm run check && npm run build",
     "sync:feishu": "node scripts/feishu/sync.mjs"
