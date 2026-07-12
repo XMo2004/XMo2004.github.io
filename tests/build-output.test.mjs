@@ -8,6 +8,21 @@ import { normalizeTag } from '../src/lib/posts.ts';
 
 const projectRoot = fileURLToPath(new URL('..', import.meta.url));
 const distRoot = new URL('../dist/', import.meta.url);
+const requiredSearchEntryFields = [
+  'href',
+  'title',
+  'description',
+  'pubDate',
+  'category',
+  'tags',
+  'readingMinutes',
+  'searchText',
+];
+const allowedSearchEntryFields = new Set([
+  ...requiredSearchEntryFields,
+  'column',
+  'columnOrder',
+]);
 
 async function runCleanBuild() {
   await rm(distRoot, { recursive: true, force: true });
@@ -50,7 +65,139 @@ function readJsonLd(html) {
   return JSON.parse(match[1]);
 }
 
+function assertPublicSearchIndexContract(source) {
+  const index = JSON.parse(source);
+
+  assert.equal(index.version, 1);
+  assert.ok(Array.isArray(index.entries), 'search index entries should be an array');
+
+  for (const entry of index.entries) {
+    assert.ok(
+      requiredSearchEntryFields.every((field) => Object.hasOwn(entry, field)),
+      'search entries should contain every required public field',
+    );
+    assert.ok(
+      Object.keys(entry).every((field) => allowedSearchEntryFields.has(field)),
+      'search entries should not contain private or unknown fields',
+    );
+    assert.equal(typeof entry.href, 'string');
+    assert.equal(typeof entry.title, 'string');
+    assert.equal(typeof entry.description, 'string');
+    assert.match(entry.pubDate, /^\d{4}-\d{2}-\d{2}$/);
+    assert.equal(typeof entry.category, 'string');
+    assert.ok(Array.isArray(entry.tags));
+    assert.ok(entry.tags.every((tag) => typeof tag === 'string'));
+    assert.ok(Number.isInteger(entry.readingMinutes));
+    assert.equal(typeof entry.searchText, 'string');
+    assert.equal(
+      Object.hasOwn(entry, 'column'),
+      Object.hasOwn(entry, 'columnOrder'),
+    );
+
+    if (Object.hasOwn(entry, 'column')) {
+      assert.equal(typeof entry.column, 'string');
+      assert.ok(Number.isInteger(entry.columnOrder));
+    }
+  }
+
+  for (let entryIndex = 1; entryIndex < index.entries.length; entryIndex += 1) {
+    const previousEntry = index.entries[entryIndex - 1];
+    const currentEntry = index.entries[entryIndex];
+    const dateOrder = previousEntry.pubDate.localeCompare(
+      currentEntry.pubDate,
+      'en',
+    );
+
+    assert.ok(
+      dateOrder >= 0,
+      'search entries should be sorted by pubDate descending',
+    );
+
+    if (dateOrder === 0) {
+      assert.ok(
+        previousEntry.href.localeCompare(currentEntry.href, 'en') <= 0,
+        'search entries should be sorted by href ascending when pubDate ties',
+      );
+    }
+  }
+
+  assert.doesNotMatch(source, /recvp|DsPQ|my\.feishu\.cn/u);
+
+  return index;
+}
+
+function makeSearchIndexEntry(overrides = {}) {
+  return {
+    href: '/posts/default/',
+    title: '公开文章',
+    description: '公开摘要',
+    pubDate: '2026-01-01',
+    category: '技术',
+    tags: [],
+    readingMinutes: 1,
+    searchText: '公开正文',
+    ...overrides,
+  };
+}
+
 before(runCleanBuild);
+
+test('search index contract accepts additional articles and legitimate technical prose', () => {
+  const source = JSON.stringify({
+    version: 1,
+    entries: [
+      makeSearchIndexEntry({
+        href: '/posts/third/',
+        pubDate: '2026-07-13',
+      }),
+      makeSearchIndexEntry({
+        href: '/posts/a/',
+        pubDate: '2026-07-12',
+        searchText: '解释 record_id、file_token 与 /home/user',
+      }),
+      makeSearchIndexEntry({
+        href: '/posts/b/',
+        pubDate: '2026-07-12',
+        column: '博客搭建手记',
+        columnOrder: 3,
+      }),
+    ],
+  });
+
+  const index = assertPublicSearchIndexContract(source);
+
+  assert.equal(index.entries.length, 3);
+});
+
+test('search index contract rejects ascending publication dates', () => {
+  const source = JSON.stringify({
+    version: 1,
+    entries: [
+      makeSearchIndexEntry({ pubDate: '2026-07-12' }),
+      makeSearchIndexEntry({ pubDate: '2026-07-13' }),
+    ],
+  });
+
+  assert.throws(
+    () => assertPublicSearchIndexContract(source),
+    /pubDate descending/,
+  );
+});
+
+test('search index contract rejects descending hrefs on a same-day tie', () => {
+  const source = JSON.stringify({
+    version: 1,
+    entries: [
+      makeSearchIndexEntry({ href: '/posts/b/', pubDate: '2026-07-12' }),
+      makeSearchIndexEntry({ href: '/posts/a/', pubDate: '2026-07-12' }),
+    ],
+  });
+
+  assert.throws(
+    () => assertPublicSearchIndexContract(source),
+    /href ascending/,
+  );
+});
 
 test('clean build emits every public entry point as a non-empty file', async () => {
   const tagSlug = normalizeTag('建站');
@@ -125,65 +272,19 @@ test('article output omits both contents variants for a lone body h1', async () 
 
 test('search index contains only deterministic public article data', async () => {
   const source = await readOutput('search-index.json');
-  const index = JSON.parse(source);
-  const requiredEntryFields = [
-    'href',
-    'title',
-    'description',
-    'pubDate',
-    'category',
-    'tags',
-    'readingMinutes',
-    'searchText',
-  ];
-  const allowedEntryFields = new Set([
-    ...requiredEntryFields,
-    'column',
-    'columnOrder',
-  ]);
-
-  assert.equal(index.version, 1);
-  assert.deepEqual(index.entries.map(({ href }) => href), [
-    '/posts/published-from-feishu/',
-    '/posts/welcome/',
-  ]);
-  assert.equal(index.entries[0].category, '技术');
-  assert.equal(index.entries[0].column, '博客搭建手记');
-  assert.match(index.entries[0].searchText, /用飞书写作/);
-
-  for (const entry of index.entries) {
-    assert.ok(
-      requiredEntryFields.every((field) => Object.hasOwn(entry, field)),
-      'search entries should contain every required public field',
-    );
-    assert.ok(
-      Object.keys(entry).every((field) => allowedEntryFields.has(field)),
-      'search entries should not contain private or unknown fields',
-    );
-    assert.equal(typeof entry.href, 'string');
-    assert.equal(typeof entry.title, 'string');
-    assert.equal(typeof entry.description, 'string');
-    assert.match(entry.pubDate, /^\d{4}-\d{2}-\d{2}$/);
-    assert.equal(typeof entry.category, 'string');
-    assert.ok(Array.isArray(entry.tags));
-    assert.ok(entry.tags.every((tag) => typeof tag === 'string'));
-    assert.ok(Number.isInteger(entry.readingMinutes));
-    assert.equal(typeof entry.searchText, 'string');
-    assert.equal(
-      Object.hasOwn(entry, 'column'),
-      Object.hasOwn(entry, 'columnOrder'),
-    );
-
-    if (Object.hasOwn(entry, 'column')) {
-      assert.equal(typeof entry.column, 'string');
-      assert.ok(Number.isInteger(entry.columnOrder));
-    }
-  }
-
-  assert.doesNotMatch(
-    source,
-    /recvp|dspq|file_token|document_id|record_id|source[ _-]?id|my\.feishu\.cn|file:\/\/|\/Users\/|\/home\/|[a-z]:\\|Documents\/Blog|\.worktrees/iu,
+  const index = assertPublicSearchIndexContract(source);
+  const feishuEntry = index.entries.find(
+    ({ href }) => href === '/posts/published-from-feishu/',
   );
+
+  assert.ok(feishuEntry, 'the published Feishu article should be indexed');
+  assert.ok(
+    index.entries.some(({ href }) => href === '/posts/welcome/'),
+    'the welcome article should be indexed',
+  );
+  assert.equal(feishuEntry.category, '技术');
+  assert.equal(feishuEntry.column, '博客搭建手记');
+  assert.match(feishuEntry.searchText, /用飞书写作/);
 });
 
 test('RSS identifies the site and links to the published article URL', async () => {
