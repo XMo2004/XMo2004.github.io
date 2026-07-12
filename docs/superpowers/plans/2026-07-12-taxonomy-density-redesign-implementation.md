@@ -226,4 +226,3 @@ Verify desktop and mobile widths, light/dark themes, reduced motion, keyboard fo
 - [ ] **Step 5: Commit, push and verify Pages**
 
 Push the reviewed implementation to `main`, watch the deploy workflow to success, then verify HTTP 200 for home, category directory/detail, column directory/detail, article and RSS. Confirm the deployed HTML contains the migrated taxonomy values and no Feishu internal metadata.
-
