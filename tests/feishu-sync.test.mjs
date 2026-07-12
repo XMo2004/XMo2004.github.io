@@ -87,6 +87,33 @@ test('public sync failures expose only the allowlisted records phase and never t
   assert.doesNotMatch(publicMessage, /replace/);
 });
 
+test('sync diagnostics preserve non-Error throw values and use the generic public fallback', async (t) => {
+  const root = await makeRoot(t);
+  const { client } = stableClient();
+  const sentinel = Object.freeze({ private: 'rec_secret_url_token' });
+  client.listPublishedRecords = async () => {
+    throw sentinel;
+  };
+
+  let failure;
+  try {
+    await syncFeishu({
+      root,
+      client,
+      appToken: APP_TOKEN,
+      tableId: TABLE_ID,
+    });
+  } catch (error) {
+    failure = error;
+  }
+
+  assert.strictEqual(failure, sentinel);
+  assert.equal(
+    publicSyncFailureMessage(failure),
+    '飞书同步失败：错误详情已脱敏。请检查飞书应用权限、博客文章字段和文档内容后重试。',
+  );
+});
+
 function publishedRecord({ id = 'rec-one', slug = 'first-post', fields = {} } = {}) {
   return {
     record_id: id,

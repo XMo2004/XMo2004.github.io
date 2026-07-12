@@ -64,14 +64,10 @@ async function inSyncPhase(phase, operation) {
   try {
     return await operation();
   } catch (error) {
-    const failure =
-      error instanceof Error
-        ? error
-        : new Error('Feishu synchronization failed with a non-Error cause.', {
-            cause: error,
-          });
-    syncFailurePhase.set(failure, phase);
-    throw failure;
+    if (error instanceof Error) {
+      syncFailurePhase.set(error, phase);
+    }
+    throw error;
   }
 }
 
