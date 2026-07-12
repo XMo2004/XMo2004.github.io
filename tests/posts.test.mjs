@@ -4,10 +4,13 @@ import test from 'node:test';
 import * as postHelpers from '../src/lib/posts.ts';
 
 const {
+  buildPostRouteRecords,
+  buildTagIndex,
   estimateReadingMinutes,
   getPostHref,
   getPostSlug,
   normalizeTag,
+  serializeJsonLd,
   sortNewestFirst,
 } = postHelpers;
 
@@ -111,6 +114,116 @@ test('validateTagSet only reports slug collisions between different canonical ta
     postHelpers.validateTagSet([' Frontend ', 'ＦＲＯＮＴＥＮＤ']),
     [],
   );
+});
+
+test('buildTagIndex merges case and NFKC-equivalent labels without double-counting a post', () => {
+  const newestPost = {
+    id: 'manual/newest.md',
+    data: {
+      title: 'Newest',
+      pubDate: new Date('2026-06-01'),
+      tags: [' Frontend ', 'ＦＲＯＮＴＥＮＤ', 'Astro'],
+    },
+  };
+  const olderPost = {
+    id: 'feishu/older.md',
+    data: {
+      title: 'Older',
+      pubDate: new Date('2026-01-01'),
+      tags: ['frontend'],
+    },
+  };
+
+  const tagIndex = buildTagIndex([newestPost, olderPost]);
+  const frontend = tagIndex.find((entry) => entry.slug === 'frontend');
+
+  assert.equal(frontend.label, 'Frontend');
+  assert.deepEqual(frontend.posts, [newestPost, olderPost]);
+  assert.equal(frontend.posts.length, 2);
+});
+
+test('buildTagIndex throws when different canonical labels map to one route slug', () => {
+  const posts = [
+    {
+      id: 'manual/first.md',
+      data: {
+        title: 'First',
+        pubDate: new Date('2026-06-01'),
+        tags: ['A B'],
+      },
+    },
+    {
+      id: 'manual/second.md',
+      data: {
+        title: 'Second',
+        pubDate: new Date('2026-01-01'),
+        tags: ['a-b'],
+      },
+    },
+  ];
+
+  assert.throws(
+    () => buildTagIndex(posts),
+    /Tag route collision.*a-b.*a b.*a-b/i,
+  );
+});
+
+test('buildPostRouteRecords sorts routes and builds adjacent URLs from public slugs', () => {
+  const newestPost = {
+    id: 'manual/newest.md',
+    data: {
+      title: 'Newest',
+      pubDate: new Date('2026-06-01'),
+      tags: [],
+    },
+  };
+  const middlePost = {
+    id: 'feishu/record-id.md',
+    data: {
+      title: 'Middle',
+      slug: 'middle-route',
+      pubDate: new Date('2026-03-01'),
+      tags: [],
+    },
+  };
+  const oldestPost = {
+    id: 'manual/oldest.md',
+    data: {
+      title: 'Oldest',
+      pubDate: new Date('2026-01-01'),
+      tags: [],
+    },
+  };
+
+  const routes = buildPostRouteRecords([oldestPost, newestPost, middlePost]);
+
+  assert.deepEqual(
+    routes.map((route) => route.params.id),
+    ['newest', 'middle-route', 'oldest'],
+  );
+  assert.deepEqual(routes[1].props.previous, {
+    href: '/posts/oldest/',
+    title: 'Oldest',
+  });
+  assert.deepEqual(routes[1].props.next, {
+    href: '/posts/newest/',
+    title: 'Newest',
+  });
+  assert.doesNotMatch(routes[1].props.previous.href, /manual|feishu/);
+  assert.doesNotMatch(routes[1].props.next.href, /manual|feishu/);
+});
+
+test('serializeJsonLd escapes script-closing markup while preserving JSON values', () => {
+  const value = {
+    '@context': 'https://schema.org',
+    headline: '</script><script>alert("unsafe")</script> & \u2028',
+  };
+
+  const serialized = serializeJsonLd(value);
+
+  assert.doesNotMatch(serialized, /<|<\/script/i);
+  assert.match(serialized, /\\u003c\/script\\u003e/);
+  assert.deepEqual(JSON.parse(serialized), value);
 });
 
 test('sortNewestFirst orders posts by pubDate descending without mutating input', () => {

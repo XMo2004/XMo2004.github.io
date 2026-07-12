@@ -1,0 +1,45 @@
+---
+import type { CollectionEntry } from 'astro:content';
+import { getCollection } from 'astro:content';
+
+import PostCard from '../../components/PostCard.astro';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { buildTagIndex, sortNewestFirst } from '../../lib/posts';
+
+interface Props {
+  label: string;
+  posts: CollectionEntry<'posts'>[];
+}
+
+export async function getStaticPaths() {
+  const posts = sortNewestFirst(await getCollection('posts'));
+
+  return buildTagIndex(posts).map((tag) => ({
+    params: { tag: tag.slug },
+    props: {
+      label: tag.label,
+      posts: tag.posts,
+    },
+  }));
+}
+
+const { label, posts } = Astro.props;
+---
+
+<BaseLayout
+  title={`标签：${label}`}
+  description={`浏览标签“${label}”下的 ${posts.length} 篇文章。`}
+>
+  <section class="tag-page" aria-labelledby="tag-page-title">
+    <header class="page-header tag-page__header">
+      <a class="tag-page__back" href="/tags/">全部标签</a>
+      <p class="eyebrow">TOPIC ARCHIVE</p>
+      <h1 id="tag-page-title">{label}</h1>
+      <p>这个标签下共有 {posts.length} 篇文章，按发布时间倒序排列。</p>
+    </header>
+
+    <div class="post-grid post-grid--archive">
+      {posts.map((post) => <PostCard entry={post} headingLevel="h2" />)}
+    </div>
+  </section>
+</BaseLayout>

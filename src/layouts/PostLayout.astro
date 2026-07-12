@@ -1,5 +1,6 @@
 ---
 import TagList from '../components/TagList.astro';
+import { SITE } from '../config/site';
 import BaseLayout from './BaseLayout.astro';
 
 interface ArticleHeading {
@@ -16,6 +17,7 @@ interface AdjacentPost {
 interface Props {
   title: string;
   description: string;
+  canonicalPath: string;
   pubDate: Date;
   updatedDate?: Date;
   tags?: readonly string[];
@@ -29,6 +31,7 @@ interface Props {
 const {
   title,
   description,
+  canonicalPath,
   pubDate,
   updatedDate,
   tags = [],
@@ -46,9 +49,32 @@ const dateFormatter = new Intl.DateTimeFormat('zh-CN', {
 });
 const hasTableOfContents = headings.length > 0;
 const hasAdjacentPosts = previous !== undefined || next !== undefined;
+const canonicalUrl = new URL(canonicalPath, SITE.canonicalOrigin).href;
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'BlogPosting',
+  headline: title,
+  description,
+  datePublished: pubDate.toISOString(),
+  dateModified: (updatedDate ?? pubDate).toISOString(),
+  author: {
+    '@type': 'Person',
+    name: SITE.author,
+  },
+  mainEntityOfPage: {
+    '@type': 'WebPage',
+    '@id': canonicalUrl,
+  },
+};
 ---
 
-<BaseLayout title={title} description={description} ogType="article">
+<BaseLayout
+  title={title}
+  description={description}
+  canonicalPath={canonicalPath}
+  ogType="article"
+  jsonLd={jsonLd}
+>
   <article class="post-article">
     <header class="post-header">
       <a class="post-header__back" href="/posts/">文章归档</a>

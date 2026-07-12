@@ -2,6 +2,7 @@
 import SiteFooter from '../components/SiteFooter.astro';
 import SiteHeader from '../components/SiteHeader.astro';
 import { SITE } from '../config/site';
+import { serializeJsonLd } from '../lib/posts';
 import '../styles/global.css';
 
 interface Props {
@@ -9,6 +10,7 @@ interface Props {
   description?: string;
   canonicalPath?: string;
   ogType?: 'website' | 'article';
+  jsonLd?: unknown;
 }
 
 const {
@@ -16,10 +18,12 @@ const {
   description = SITE.description,
   canonicalPath = Astro.url.pathname,
   ogType = 'website',
+  jsonLd,
 } = Astro.props;
 
 const documentTitle = title === SITE.name ? title : `${title} | ${SITE.name}`;
 const canonicalUrl = new URL(canonicalPath, SITE.canonicalOrigin).href;
+const serializedJsonLd = jsonLd === undefined ? undefined : serializeJsonLd(jsonLd);
 ---
 
 <!doctype html>
@@ -44,6 +48,10 @@ const canonicalUrl = new URL(canonicalPath, SITE.canonicalOrigin).href;
     <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content={documentTitle} />
     <meta name="twitter:description" content={description} />
+
+    {jsonLd !== undefined && (
+      <script is:inline type="application/ld+json" set:html={serializedJsonLd}></script>
+    )}
 
     <script is:inline>
       (() => {

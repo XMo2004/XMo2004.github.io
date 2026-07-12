@@ -1,0 +1,51 @@
+---
+import type { CollectionEntry } from 'astro:content';
+import { getCollection, render } from 'astro:content';
+
+import PostLayout from '../../layouts/PostLayout.astro';
+import {
+  buildPostRouteRecords,
+  estimateReadingMinutes,
+  getPostHref,
+  sortNewestFirst,
+  type AdjacentPostLink,
+} from '../../lib/posts';
+
+interface Props {
+  post: CollectionEntry<'posts'>;
+  previous?: AdjacentPostLink;
+  next?: AdjacentPostLink;
+}
+
+export async function getStaticPaths() {
+  const posts = sortNewestFirst(await getCollection('posts'));
+
+  return buildPostRouteRecords(posts);
+}
+
+const { post, previous, next } = Astro.props;
+const { Content, headings } = await render(post);
+
+if (post.body === undefined) {
+  throw new Error(`Post "${post.id}" does not expose its Markdown body.`);
+}
+
+const readingMinutes = estimateReadingMinutes(post.body);
+const canonicalPath = getPostHref(post);
+---
+
+<PostLayout
+  title={post.data.title}
+  description={post.data.description}
+  canonicalPath={canonicalPath}
+  pubDate={post.data.pubDate}
+  updatedDate={post.data.updatedDate}
+  tags={post.data.tags}
+  readingMinutes={readingMinutes}
+  sourceUrl={post.data.sourceUrl}
+  headings={headings}
+  previous={previous}
+  next={next}
+>
+  <Content />
+</PostLayout>

@@ -207,3 +207,50 @@ test('PostLayout renders only the article extras supplied by a caller', async ()
   assert.match(source, /class=["']prose["']/);
   assert.match(source, /<slot\s*\/>/);
 });
+
+test('article layouts opt into safe BlogPosting metadata only when supplied', async () => {
+  const [baseSource, postSource] = await Promise.all([
+    readSource('src/layouts/BaseLayout.astro'),
+    readSource('src/layouts/PostLayout.astro'),
+  ]);
+
+  assert.match(baseSource, /serializeJsonLd/);
+  assert.match(baseSource, /application\/ld\+json/);
+  assert.match(baseSource, /jsonLd\s*!==\s*undefined/);
+  assert.match(postSource, /canonicalPath/);
+  assert.match(postSource, /BlogPosting/);
+  assert.match(postSource, /datePublished/);
+  assert.match(postSource, /dateModified/);
+  assert.match(postSource, /mainEntityOfPage/);
+});
+
+test('article and tag routes are driven by the real content collection', async () => {
+  const [articleSource, tagsSource, tagSource] = await Promise.all([
+    readSource('src/pages/posts/[...id].astro'),
+    readSource('src/pages/tags/index.astro'),
+    readSource('src/pages/tags/[tag].astro'),
+  ]);
+
+  assert.match(articleSource, /getCollection\(['"]posts['"]\)/);
+  assert.match(articleSource, /render\(post\)/);
+  assert.match(articleSource, /post\.body/);
+  assert.match(articleSource, /getPostHref/);
+  assert.match(tagsSource, /getCollection\(['"]posts['"]\)/);
+  assert.match(tagsSource, /buildTagIndex/);
+  assert.match(tagSource, /buildTagIndex/);
+  assert.match(tagSource, /headingLevel=["']h2["']/);
+});
+
+test('tag pages keep touch targets accessible and collapse safely on mobile', async () => {
+  const source = await readSource('src/styles/global.css');
+
+  assert.match(
+    source,
+    /\.tag-directory__link\s*\{[^}]*min-height:\s*2\.75rem;[^}]*\}/s,
+  );
+  assert.match(source, /\.tag-page/);
+  assert.match(
+    source,
+    /@media\s*\(max-width:[^)]+\)[\s\S]*\.tag-directory__link/s,
+  );
+});

@@ -769,6 +769,73 @@ button {
   font-size: 1.08rem;
 }
 
+.tag-directory,
+.tag-page {
+  max-width: 64rem;
+  margin-inline: auto;
+}
+
+.tag-directory__list {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  list-style: none;
+}
+
+.tag-directory__link {
+  min-width: 0;
+  min-height: 2.75rem;
+  padding: var(--space-5) var(--space-6);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 1.15rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.tag-directory__link:hover {
+  border-color: var(--moss);
+  color: var(--accent-hover);
+}
+
+.tag-directory__link span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.tag-directory__link small {
+  flex: none;
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tag-page__header {
+  position: relative;
+}
+
+.tag-page__back {
+  width: fit-content;
+  min-height: 2.75rem;
+  margin-block-end: var(--space-5);
+  display: inline-flex;
+  align-items: center;
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 650;
+}
+
 .about-page {
   max-width: 64rem;
   margin-inline: auto;
@@ -1111,6 +1178,16 @@ button {
 
   .page-header {
     margin-block-end: var(--space-8);
+  }
+
+  .tag-directory__list {
+    grid-template-columns: 1fr;
+  }
+
+  .tag-directory__link {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--space-1);
   }
 
   .about-page__grid {

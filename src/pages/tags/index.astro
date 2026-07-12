@@ -1,0 +1,37 @@
+---
+import { getCollection } from 'astro:content';
+
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { buildTagIndex, sortNewestFirst } from '../../lib/posts';
+
+const posts = sortNewestFirst(await getCollection('posts'));
+const tagIndex = buildTagIndex(posts);
+---
+
+<BaseLayout title="标签" description="按主题浏览已经发布的真实文章归档。">
+  <section class="tag-directory" aria-labelledby="tag-directory-title">
+    <header class="page-header">
+      <p class="eyebrow">TOPIC INDEX</p>
+      <h1 id="tag-directory-title">文章标签</h1>
+      <p>从现有文章中汇总主题；每个数字都是这个归档里真实的文章数量。</p>
+    </header>
+
+    {tagIndex.length > 0 ? (
+      <ul class="tag-directory__list">
+        {tagIndex.map((tag) => (
+          <li>
+            <a class="tag-directory__link" href={`/tags/${tag.slug}/`}>
+              <span>{tag.label}</span>
+              <small>{tag.posts.length} 篇文章</small>
+            </a>
+          </li>
+        ))}
+      </ul>
+    ) : (
+      <div class="empty-state">
+        <p>已有文章还没有设置标签。</p>
+        <a class="standalone-action" href="/posts/">浏览文章归档</a>
+      </div>
+    )}
+  </section>
+</BaseLayout>
