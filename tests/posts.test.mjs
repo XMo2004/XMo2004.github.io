@@ -7,6 +7,8 @@ const {
   buildCategoryIndex,
   buildColumnIndex,
   buildPostRouteRecords,
+  buildRelatedPosts,
+  buildSeriesNavigation,
   buildTagIndex,
   estimateReadingMinutes,
   getCategoryHref,
@@ -18,6 +20,328 @@ const {
   serializeJsonLd,
   sortNewestFirst,
 } = postHelpers;
+
+function freezeDiscoveryPost({
+  id,
+  title,
+  pubDate,
+  category,
+  tags = [],
+  slug,
+  column,
+  columnOrder,
+}) {
+  return Object.freeze({
+    id,
+    data: Object.freeze({
+      title,
+      description: `${title} description`,
+      pubDate: Object.freeze(new Date(pubDate)),
+      category,
+      tags: Object.freeze([...tags]),
+      ...(slug === undefined ? {} : { slug }),
+      ...(column === undefined ? {} : { column }),
+      ...(columnOrder === undefined ? {} : { columnOrder }),
+    }),
+  });
+}
+
+const discoveryPosts = Object.freeze([
+  freezeDiscoveryPost({
+    id: 'manual/column-three.md',
+    title: 'Column three',
+    pubDate: '2026-01-20T00:00:00.000Z',
+    category: '随笔',
+    column: '博客搭建手记',
+    columnOrder: 3,
+  }),
+  freezeDiscoveryPost({
+    id: 'manual/standalone.md',
+    title: 'Standalone',
+    pubDate: '2026-01-12T00:00:00.000Z',
+    category: '随笔',
+    tags: ['unrelated'],
+  }),
+  freezeDiscoveryPost({
+    id: 'manual/column-one.md',
+    title: 'Column one',
+    pubDate: '2026-01-01T00:00:00.000Z',
+    category: '随笔',
+    column: '博客搭建手记',
+    columnOrder: 1,
+  }),
+  freezeDiscoveryPost({
+    id: 'manual/same-category.md',
+    title: 'Same category',
+    pubDate: '2026-01-09T00:00:00.000Z',
+    category: '技术',
+    tags: ['other'],
+  }),
+  freezeDiscoveryPost({
+    id: 'manual/column-two.md',
+    title: 'Column two',
+    pubDate: '2026-01-10T00:00:00.000Z',
+    category: '技术',
+    tags: ['Astro', 'ＡＳＴＲＯ', '共享'],
+    column: '博客搭建手记',
+    columnOrder: 2,
+  }),
+]);
+
+test('buildSeriesNavigation returns ordered public links for a middle article', () => {
+  const series = buildSeriesNavigation(
+    discoveryPosts,
+    'manual/column-two.md',
+  );
+
+  assert.deepEqual(series, {
+    label: '博客搭建手记',
+    href: getColumnHref('博客搭建手记'),
+    position: 2,
+    total: 3,
+    previous: { href: '/posts/column-one/', title: 'Column one' },
+    next: { href: '/posts/column-three/', title: 'Column three' },
+  });
+});
+
+test('series navigation handles both ends, standalone posts, and missing ids', () => {
+  assert.deepEqual(
+    buildSeriesNavigation(discoveryPosts, 'manual/column-one.md'),
+    {
+      label: '博客搭建手记',
+      href: getColumnHref('博客搭建手记'),
+      position: 1,
+      total: 3,
+      next: { href: '/posts/column-two/', title: 'Column two' },
+    },
+  );
+  assert.deepEqual(
+    buildSeriesNavigation(discoveryPosts, 'manual/column-three.md'),
+    {
+      label: '博客搭建手记',
+      href: getColumnHref('博客搭建手记'),
+      position: 3,
+      total: 3,
+      previous: { href: '/posts/column-two/', title: 'Column two' },
+    },
+  );
+  assert.equal(
+    buildSeriesNavigation(discoveryPosts, 'manual/standalone.md'),
+    undefined,
+  );
+  assert.equal(buildSeriesNavigation(discoveryPosts, 'missing.md'), undefined);
+});
+
+test('series navigation returns one-of-one progress without adjacent links', () => {
+  const onlyPost = freezeDiscoveryPost({
+    id: 'manual/only.md',
+    title: 'Only article',
+    pubDate: '2026-01-01T00:00:00.000Z',
+    category: '技术',
+    column: 'Solo Series',
+    columnOrder: 1,
+  });
+
+  assert.deepEqual(buildSeriesNavigation(Object.freeze([onlyPost]), onlyPost.id), {
+    label: 'Solo Series',
+    href: getColumnHref('Solo Series'),
+    position: 1,
+    total: 1,
+  });
+});
+
+test('buildSeriesNavigation uses validated column data', () => {
+  const duplicateOrderPosts = Object.freeze([
+    freezeDiscoveryPost({
+      id: 'manual/first.md',
+      title: 'First',
+      pubDate: '2026-01-01T00:00:00.000Z',
+      category: '技术',
+      column: 'Series',
+      columnOrder: 1,
+    }),
+    freezeDiscoveryPost({
+      id: 'manual/duplicate.md',
+      title: 'Duplicate',
+      pubDate: '2026-01-02T00:00:00.000Z',
+      category: '技术',
+      column: 'Series',
+      columnOrder: 1,
+    }),
+  ]);
+
+  assert.throws(
+    () => buildSeriesNavigation(duplicateOrderPosts, 'manual/first.md'),
+    /duplicate.*order/i,
+  );
+});
+
+test('buildRelatedPosts excludes public hrefs and returns public metadata only', () => {
+  const originalIds = discoveryPosts.map(({ id }) => id);
+  const related = buildRelatedPosts(discoveryPosts, 'manual/column-two.md', {
+    excludeHrefs: new Set([
+      '/posts/column-one/',
+      '/posts/column-three/',
+    ]),
+    limit: 3,
+  });
+
+  assert.deepEqual(related, [
+    {
+      href: '/posts/same-category/',
+      title: 'Same category',
+      description: 'Same category description',
+      pubDate: new Date('2026-01-09T00:00:00.000Z'),
+      category: '技术',
+      tags: ['other'],
+    },
+  ]);
+  assert.deepEqual(discoveryPosts.map(({ id }) => id), originalIds);
+});
+
+test('related ranking combines canonical column, category, and unique shared tags', () => {
+  const posts = Object.freeze([
+    freezeDiscoveryPost({
+      id: 'manual/current.md',
+      title: 'Current',
+      pubDate: '2026-01-10T00:00:00.000Z',
+      category: 'Tech',
+      tags: ['Astro', 'ＡＳＴＲＯ', 'Shared'],
+      column: 'Series',
+      columnOrder: 1,
+    }),
+    freezeDiscoveryPost({
+      id: 'manual/column-match.md',
+      title: 'Column match',
+      pubDate: '2025-01-01T00:00:00.000Z',
+      category: 'Other',
+      column: 'ＳＥＲＩＥＳ',
+      columnOrder: 2,
+    }),
+    freezeDiscoveryPost({
+      id: 'manual/category-tag.md',
+      title: 'Category and tag',
+      pubDate: '2026-01-09T00:00:00.000Z',
+      category: 'ＴＥＣＨ',
+      tags: ['astro', 'ASTRO'],
+    }),
+    freezeDiscoveryPost({
+      id: 'manual/two-tags.md',
+      title: 'Two tags',
+      pubDate: '2026-01-10T00:00:00.000Z',
+      category: 'Other',
+      tags: ['astro', 'shared'],
+    }),
+  ]);
+
+  assert.deepEqual(
+    buildRelatedPosts(posts, 'manual/current.md', { limit: 10 }).map(
+      ({ href }) => href,
+    ),
+    [
+      '/posts/column-match/',
+      '/posts/category-tag/',
+      '/posts/two-tags/',
+    ],
+  );
+});
+
+test('related ranking sorts by score, distance, newest date, then href and omits zero scores', () => {
+  const posts = Object.freeze([
+    freezeDiscoveryPost({
+      id: 'manual/current.md',
+      title: 'Current',
+      pubDate: '2026-01-10T00:00:00.000Z',
+      category: 'Current category',
+      tags: ['shared'],
+    }),
+    freezeDiscoveryPost({
+      id: 'manual/high-score.md',
+      title: 'High score',
+      pubDate: '2026-02-01T00:00:00.000Z',
+      category: 'Current category',
+      tags: ['shared'],
+    }),
+    freezeDiscoveryPost({
+      id: 'manual/closest.md',
+      title: 'Closest',
+      pubDate: '2026-01-10T00:00:00.000Z',
+      category: 'Other',
+      tags: ['shared'],
+    }),
+    freezeDiscoveryPost({
+      id: 'manual/beta.md',
+      title: 'Beta',
+      pubDate: '2026-01-11T00:00:00.000Z',
+      category: 'Other',
+      tags: ['shared'],
+    }),
+    freezeDiscoveryPost({
+      id: 'manual/alpha.md',
+      title: 'Alpha',
+      pubDate: '2026-01-11T00:00:00.000Z',
+      category: 'Other',
+      tags: ['shared'],
+    }),
+    freezeDiscoveryPost({
+      id: 'manual/older.md',
+      title: 'Older',
+      pubDate: '2026-01-09T00:00:00.000Z',
+      category: 'Other',
+      tags: ['shared'],
+    }),
+    freezeDiscoveryPost({
+      id: 'manual/zero.md',
+      title: 'Zero',
+      pubDate: '2026-01-10T00:00:00.000Z',
+      category: 'Other',
+      tags: ['unrelated'],
+    }),
+  ]);
+
+  assert.deepEqual(
+    buildRelatedPosts(posts, 'manual/current.md', { limit: 99 }).map(
+      ({ href }) => href,
+    ),
+    [
+      '/posts/high-score/',
+      '/posts/closest/',
+      '/posts/alpha/',
+      '/posts/beta/',
+      '/posts/older/',
+    ],
+  );
+});
+
+test('related limits default to three and normalize to a nonnegative integer', () => {
+  const currentId = 'manual/current.md';
+  const posts = Object.freeze([
+    freezeDiscoveryPost({
+      id: currentId,
+      title: 'Current',
+      pubDate: '2026-01-10T00:00:00.000Z',
+      category: 'Shared',
+    }),
+    ...Array.from({ length: 5 }, (_, index) =>
+      freezeDiscoveryPost({
+        id: `manual/candidate-${index}.md`,
+        title: `Candidate ${index}`,
+        pubDate: `2026-01-${String(index + 1).padStart(2, '0')}T00:00:00.000Z`,
+        category: 'Shared',
+      }),
+    ),
+  ]);
+
+  assert.equal(buildRelatedPosts(posts, currentId).length, 3);
+  assert.equal(buildRelatedPosts(posts, currentId, { limit: 1.9 }).length, 1);
+  assert.deepEqual(buildRelatedPosts(posts, currentId, { limit: 0 }), []);
+  assert.deepEqual(buildRelatedPosts(posts, currentId, { limit: -1 }), []);
+  assert.deepEqual(buildRelatedPosts(posts, currentId, { limit: Number.NaN }), []);
+});
+
+test('buildRelatedPosts returns an empty list for a missing current id', () => {
+  assert.deepEqual(buildRelatedPosts(discoveryPosts, 'missing.md'), []);
+});
 
 test('getPostSlug prefers an explicit content slug', () => {
   const post = {

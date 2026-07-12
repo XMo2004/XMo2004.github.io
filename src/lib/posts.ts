@@ -31,6 +31,24 @@ interface TaggedPostEntry {
   };
 }
 
+interface SeriesPostEntry extends ColumnPostEntry {
+  data: ColumnPostEntry['data'] & {
+    slug?: string;
+    title: string;
+  };
+}
+
+interface RelatedPostEntry extends PostRouteEntry {
+  data: PostRouteEntry['data'] & {
+    title: string;
+    description: string;
+    pubDate: Date;
+    category: string;
+    column?: string;
+    tags: readonly string[];
+  };
+}
+
 export interface CategorizedPostEntry {
   id: string;
   data: {
@@ -57,6 +75,23 @@ export type OrderedColumnPostEntry<T extends ColumnPostEntry> = T & {
 export interface AdjacentPostLink {
   href: string;
   title: string;
+}
+
+export interface SeriesNavigation {
+  label: string;
+  href: string;
+  position: number;
+  total: number;
+  previous?: AdjacentPostLink;
+  next?: AdjacentPostLink;
+}
+
+export interface RelatedPostLink extends AdjacentPostLink {
+  description: string;
+  pubDate: Date;
+  category: string;
+  column?: string;
+  tags: readonly string[];
 }
 
 export interface PostRouteRecord<T extends NavigablePostEntry> {
@@ -304,6 +339,152 @@ export function buildColumnIndex<T extends ColumnPostEntry>(
     .sort((firstColumn, secondColumn) =>
       firstColumn.label.localeCompare(secondColumn.label, 'zh-CN'),
     );
+}
+
+export function buildSeriesNavigation<T extends SeriesPostEntry>(
+  posts: readonly T[],
+  currentId: string,
+): SeriesNavigation | undefined {
+  const columns = buildColumnIndex(posts);
+
+  for (const column of columns) {
+    const currentIndex = column.posts.findIndex((post) => post.id === currentId);
+
+    if (currentIndex === -1) {
+      continue;
+    }
+
+    const previousPost = column.posts[currentIndex - 1];
+    const nextPost = column.posts[currentIndex + 1];
+
+    return {
+      label: column.label,
+      href: getColumnHref(column.label),
+      position: currentIndex + 1,
+      total: column.posts.length,
+      ...(previousPost === undefined
+        ? {}
+        : {
+            previous: {
+              href: getPostHref(previousPost),
+              title: previousPost.data.title,
+            },
+          }),
+      ...(nextPost === undefined
+        ? {}
+        : {
+            next: {
+              href: getPostHref(nextPost),
+              title: nextPost.data.title,
+            },
+          }),
+    };
+  }
+
+  return undefined;
+}
+
+export function buildRelatedPosts<T extends RelatedPostEntry>(
+  posts: readonly T[],
+  currentId: string,
+  options: {
+    excludeHrefs?: ReadonlySet<string>;
+    limit?: number;
+  } = {},
+): RelatedPostLink[] {
+  const currentPost = posts.find((post) => post.id === currentId);
+
+  if (currentPost === undefined) {
+    return [];
+  }
+
+  const { excludeHrefs = new Set<string>(), limit = 3 } = options;
+  const normalizedLimit = Number.isFinite(limit)
+    ? Math.max(0, Math.floor(limit))
+    : 0;
+
+  if (normalizedLimit === 0) {
+    return [];
+  }
+
+  const currentColumn =
+    currentPost.data.column === undefined
+      ? undefined
+      : canonicalizeTag(currentPost.data.column);
+  const currentCategory = canonicalizeTag(currentPost.data.category);
+  const currentTags = new Set(currentPost.data.tags.map(canonicalizeTag));
+  const currentDate = currentPost.data.pubDate.getTime();
+
+  return posts
+    .flatMap((post) => {
+      if (post.id === currentId) {
+        return [];
+      }
+
+      const href = getPostHref(post);
+
+      if (excludeHrefs.has(href)) {
+        return [];
+      }
+
+      let score = 0;
+
+      if (
+        currentColumn !== undefined &&
+        post.data.column !== undefined &&
+        canonicalizeTag(post.data.column) === currentColumn
+      ) {
+        score += 60;
+      }
+
+      if (canonicalizeTag(post.data.category) === currentCategory) {
+        score += 24;
+      }
+
+      const candidateTags = new Set(post.data.tags.map(canonicalizeTag));
+      for (const tag of candidateTags) {
+        if (currentTags.has(tag)) {
+          score += 8;
+        }
+      }
+
+      if (score === 0) {
+        return [];
+      }
+
+      const link: RelatedPostLink = {
+        href,
+        title: post.data.title,
+        description: post.data.description,
+        pubDate: post.data.pubDate,
+        category: post.data.category,
+        ...(post.data.column === undefined
+          ? {}
+          : { column: post.data.column }),
+        tags: [...post.data.tags],
+      };
+
+      return [
+        {
+          link,
+          score,
+          dateDistance: Math.abs(post.data.pubDate.getTime() - currentDate),
+        },
+      ];
+    })
+    .sort(
+      (firstPost, secondPost) =>
+        secondPost.score - firstPost.score ||
+        firstPost.dateDistance - secondPost.dateDistance ||
+        secondPost.link.pubDate.getTime() - firstPost.link.pubDate.getTime() ||
+        (firstPost.link.href < secondPost.link.href
+          ? -1
+          : firstPost.link.href > secondPost.link.href
+            ? 1
+            : 0),
+    )
+    .slice(0, normalizedLimit)
+    .map(({ link }) => link);
 }
 
 export function buildPostRouteRecords<T extends NavigablePostEntry>(
