@@ -1,0 +1,45 @@
+---
+import { SITE } from '../config/site';
+import ThemeToggle from './ThemeToggle.astro';
+
+const normalizedPath = Astro.url.pathname.length > 1
+  ? Astro.url.pathname.replace(/\/+$/, '')
+  : Astro.url.pathname;
+
+const navigation = [
+  { href: '/', label: '首页', current: normalizedPath === '/' },
+  {
+    href: '/posts/',
+    label: '文章',
+    current: normalizedPath === '/posts' || normalizedPath.startsWith('/posts/'),
+  },
+  {
+    href: '/tags/',
+    label: '标签',
+    current: normalizedPath === '/tags' || normalizedPath.startsWith('/tags/'),
+  },
+  { href: '/about/', label: '关于', current: normalizedPath === '/about' },
+] as const;
+---
+
+<header class="site-header">
+  <div class="site-header__inner container">
+    <a class="wordmark" href="/" aria-label={`${SITE.name}首页`}>
+      {SITE.mark}
+    </a>
+
+    <nav class="primary-nav" aria-label="主导航">
+      <ul>
+        {navigation.map((item) => (
+          <li>
+            <a href={item.href} aria-current={item.current ? 'page' : undefined}>
+              {item.label}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+
+    <ThemeToggle />
+  </div>
+</header>

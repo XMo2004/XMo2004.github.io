@@ -1,0 +1,45 @@
+<button
+  class="theme-toggle"
+  type="button"
+  aria-label="切换到深色模式"
+  aria-pressed="false"
+  data-theme-toggle
+>
+  <span class="theme-toggle__glyph" aria-hidden="true"></span>
+  <span class="visually-hidden">切换明暗主题</span>
+</button>
+
+<script>
+  const root = document.documentElement;
+  const button = document.querySelector<HTMLButtonElement>('[data-theme-toggle]');
+
+  function updateButton(theme: 'light' | 'dark') {
+    if (!button) return;
+
+    const isDark = theme === 'dark';
+    button.setAttribute('aria-pressed', String(isDark));
+    button.setAttribute('aria-label', isDark ? '切换到浅色模式' : '切换到深色模式');
+  }
+
+  function updateThemeColor(theme: 'light' | 'dark') {
+    const themeColor = document.querySelector('meta[name="theme-color"]');
+    themeColor?.setAttribute('content', theme === 'dark' ? '#171a17' : '#f4f0e7');
+  }
+
+  const initialTheme = root.dataset.theme === 'dark' ? 'dark' : 'light';
+  updateButton(initialTheme);
+
+  button?.addEventListener('click', () => {
+    const nextTheme = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    root.dataset.theme = nextTheme;
+
+    try {
+      localStorage.setItem('xmo-theme', nextTheme);
+    } catch {
+      // Theme switching remains available when persistence is blocked.
+    }
+
+    updateButton(nextTheme);
+    updateThemeColor(nextTheme);
+  });
+</script>
