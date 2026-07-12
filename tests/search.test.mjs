@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
@@ -47,6 +48,31 @@ const answer = 42;
     'Feishu 飞书同步 架构图 const value = 1; HTML 文本 加粗 斜体 删除线 const answer = 42;',
   );
   assert.doesNotMatch(text, /https?:|example\.com|private|secret|图片标题/);
+});
+
+test('markdownToSearchText removes bare and code URLs while retaining other code text', () => {
+  const markdown = `
+访问 https://internal.example/hidden-bare?token=bare-secret 查看说明。
+
+\`const endpoint = "https://internal.example/hidden-inline?token=inline-secret";\`
+
+\`\`\`js
+fetch("https://internal.example/hidden-block?token=block-secret");
+const retry = 3;
+\`\`\`
+`;
+
+  const text = markdownToSearchText(markdown);
+
+  assert.match(text, /访问/);
+  assert.match(text, /查看说明/);
+  assert.match(text, /const endpoint/);
+  assert.match(text, /fetch/);
+  assert.match(text, /const retry = 3;/);
+  assert.doesNotMatch(
+    text,
+    /https?:|internal\.example|hidden-(?:bare|inline|block)|token|(?:bare|inline|block)-secret/,
+  );
 });
 
 test('markdownToSearchText caps normalized output at 12,000 characters', () => {
@@ -234,6 +260,23 @@ test('searchEntries ranks exact, prefix, and contained title matches by weight',
   );
 });
 
+test('searchEntries adds taxonomy weight to a contained title match', () => {
+  const prefixOnly = makeEntry({
+    href: '/posts/prefix-only/',
+    title: '飞书入门',
+  });
+  const titleAndTaxonomy = makeEntry({
+    href: '/posts/title-and-taxonomy/',
+    title: '如何使用飞书',
+    category: '飞书工具',
+  });
+
+  assert.deepEqual(
+    searchEntries([prefixOnly, titleAndTaxonomy], '飞书'),
+    [titleAndTaxonomy, prefixOnly],
+  );
+});
+
 test('searchEntries applies the default and explicit limits', () => {
   const entries = Array.from({ length: 10 }, (_, index) =>
     makeEntry({
@@ -288,4 +331,29 @@ test('serializeSearchIndex escapes script-sensitive characters and round-trips',
   assert.match(serialized, /\\u2028/);
   assert.match(serialized, /\\u2029/);
   assert.deepEqual(JSON.parse(serialized), entries);
+});
+
+test('serializeSearchIndex accepts and safely serializes a versioned index object', () => {
+  const index = {
+    version: 1,
+    entries: [
+      makeEntry({
+        title: '<公开>&',
+        description: `line${'\u2028'}separator${'\u2029'}paragraph`,
+      }),
+    ],
+  };
+
+  const serialized = serializeSearchIndex(index);
+  const searchSource = readFileSync(
+    new URL('../src/lib/search.ts', import.meta.url),
+    'utf8',
+  );
+
+  assert.doesNotMatch(serialized, /[<>&\u2028\u2029]/u);
+  assert.deepEqual(JSON.parse(serialized), index);
+  assert.match(
+    searchSource,
+    /export function serializeSearchIndex\(\s*\w+: unknown\s*\): string/,
+  );
 });

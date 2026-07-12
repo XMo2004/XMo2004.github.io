@@ -1,6 +1,7 @@
 import { estimateReadingMinutes, getPostHref } from './posts.ts';
 
 const MAX_SEARCH_TEXT_LENGTH = 12_000;
+const BARE_URL_PATTERN = /\b(?:https?:\/\/|mailto:)[^\s<>()[\]{}"'，。！？；：、]+/giu;
 
 const SEARCH_WEIGHTS = {
   titleExact: 120,
@@ -163,7 +164,10 @@ export function markdownToSearchText(markdown: string): string {
     return ` ${token} `;
   };
 
-  let text = markdown.normalize('NFKC').replace(/\r\n?/gu, '\n');
+  let text = markdown
+    .normalize('NFKC')
+    .replace(BARE_URL_PATTERN, ' ')
+    .replace(/\r\n?/gu, '\n');
 
   text = text.replace(
     /^[ \t]{0,3}(`{3,}|~{3,})[^\n]*\n([\s\S]*?)^[ \t]{0,3}\1[ \t]*(?=\n|$)/gmu,
@@ -264,15 +268,15 @@ function scoreEntryForTerm(entry: SearchEntry, term: string): number {
   }
 
   if (taxonomyFields.some((field) => field.includes(term))) {
-    score = Math.max(score, SEARCH_WEIGHTS.taxonomy);
+    score += SEARCH_WEIGHTS.taxonomy;
   }
 
   if (description.includes(term)) {
-    score = Math.max(score, SEARCH_WEIGHTS.description);
+    score += SEARCH_WEIGHTS.description;
   }
 
   if (searchText.includes(term)) {
-    score = Math.max(score, SEARCH_WEIGHTS.body);
+    score += SEARCH_WEIGHTS.body;
   }
 
   return score;
@@ -337,7 +341,7 @@ export function searchEntries(
     .map(({ entry }) => entry);
 }
 
-export function serializeSearchIndex(entries: readonly SearchEntry[]): string {
+export function serializeSearchIndex(value: unknown): string {
   const replacements: Readonly<Record<string, string>> = {
     '<': '\\u003c',
     '>': '\\u003e',
@@ -345,8 +349,13 @@ export function serializeSearchIndex(entries: readonly SearchEntry[]): string {
     '\u2028': '\\u2028',
     '\u2029': '\\u2029',
   };
+  const serialized = JSON.stringify(value);
 
-  return JSON.stringify(entries).replace(
+  if (serialized === undefined) {
+    throw new TypeError('Search index value must be JSON-compatible.');
+  }
+
+  return serialized.replace(
     /[<>&\u2028\u2029]/gu,
     (character) => replacements[character],
   );
