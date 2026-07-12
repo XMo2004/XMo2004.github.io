@@ -21,22 +21,42 @@ const posts = defineCollection({
     base: './src/content/posts',
     pattern: '**/*.{md,mdx}',
   }),
-  schema: z.object({
-    title: z.string(),
-    description: z.string(),
-    pubDate: z.coerce.date(),
-    updatedDate: z.coerce.date().optional(),
-    tags: tagsSchema,
-    featured: z.boolean().default(false),
-    cover: z.string().optional(),
-    slug: z
-      .string()
-      .regex(
-        /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
-        'Slug must contain lowercase ASCII letters, numbers, and single hyphens only.',
-      )
-      .optional(),
-  }),
+  schema: z
+    .object({
+      title: z.string(),
+      description: z.string(),
+      pubDate: z.coerce.date(),
+      updatedDate: z.coerce.date().optional(),
+      category: z.string().trim().min(1, 'Category must not be empty.'),
+      column: z
+        .string()
+        .trim()
+        .min(1, 'Column must not be empty.')
+        .optional(),
+      columnOrder: z.number().int().positive().optional(),
+      tags: tagsSchema,
+      featured: z.boolean().default(false),
+      cover: z.string().optional(),
+      slug: z
+        .string()
+        .regex(
+          /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+          'Slug must contain lowercase ASCII letters, numbers, and single hyphens only.',
+        )
+        .optional(),
+    })
+    .superRefine((post, context) => {
+      const hasColumn = post.column !== undefined;
+      const hasColumnOrder = post.columnOrder !== undefined;
+
+      if (hasColumn !== hasColumnOrder) {
+        context.addIssue({
+          code: 'custom',
+          message: 'Column and columnOrder must be provided together.',
+          path: hasColumn ? ['columnOrder'] : ['column'],
+        });
+      }
+    }),
 });
 
 export const collections = { posts };

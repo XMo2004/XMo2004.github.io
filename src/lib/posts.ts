@@ -24,6 +24,28 @@ interface TaggedPostEntry {
   };
 }
 
+export interface CategorizedPostEntry {
+  data: {
+    category: string;
+    pubDate: Date;
+  };
+}
+
+export interface ColumnPostEntry {
+  id: string;
+  data: {
+    column?: string;
+    columnOrder?: number;
+  };
+}
+
+export type OrderedColumnPostEntry<T extends ColumnPostEntry> = T & {
+  data: T['data'] & {
+    column: string;
+    columnOrder: number;
+  };
+};
+
 export interface AdjacentPostLink {
   href: string;
   title: string;
@@ -47,6 +69,20 @@ export interface TagIndexEntry<T extends TaggedPostEntry> {
   posts: T[];
 }
 
+export interface CategoryIndexEntry<T extends CategorizedPostEntry> {
+  canonicalCategory: string;
+  label: string;
+  slug: string;
+  posts: T[];
+}
+
+export interface ColumnIndexEntry<T extends ColumnPostEntry> {
+  canonicalColumn: string;
+  label: string;
+  slug: string;
+  posts: OrderedColumnPostEntry<T>[];
+}
+
 export function getPostSlug(entry: PostRouteEntry): string {
   if (entry.data.slug !== undefined) {
     return entry.data.slug;
@@ -58,6 +94,14 @@ export function getPostSlug(entry: PostRouteEntry): string {
 
 export function getPostHref(entry: PostRouteEntry): string {
   return `/posts/${encodeURIComponent(getPostSlug(entry))}/`;
+}
+
+export function getCategoryHref(category: string): string {
+  return `/categories/${normalizeTag(category)}/`;
+}
+
+export function getColumnHref(column: string): string {
+  return `/columns/${normalizeTag(column)}/`;
 }
 
 export function isTrustedFeishuUrl(value: string): boolean {
@@ -197,6 +241,143 @@ export function buildTagIndex<T extends TaggedPostEntry>(
   return [...tagByCanonicalLabel.values()].sort((firstTag, secondTag) =>
     firstTag.label.localeCompare(secondTag.label, 'zh-CN'),
   );
+}
+
+export function buildCategoryIndex<T extends CategorizedPostEntry>(
+  posts: readonly T[],
+): CategoryIndexEntry<T>[] {
+  const categoryByCanonicalLabel = new Map<string, CategoryIndexEntry<T>>();
+  const canonicalLabelBySlug = new Map<string, string>();
+
+  for (const post of sortNewestFirst(posts)) {
+    const category = post.data.category;
+    const canonicalCategory = canonicalizeTag(category);
+    const slug = normalizeTag(category);
+    const canonicalLabelForSlug = canonicalLabelBySlug.get(slug);
+
+    if (
+      canonicalLabelForSlug !== undefined &&
+      canonicalLabelForSlug !== canonicalCategory
+    ) {
+      throw new Error(
+        `Category route collision for slug "${slug}": canonical labels "${canonicalLabelForSlug}" and "${canonicalCategory}".`,
+      );
+    }
+
+    canonicalLabelBySlug.set(slug, canonicalCategory);
+
+    let categoryEntry = categoryByCanonicalLabel.get(canonicalCategory);
+    if (categoryEntry === undefined) {
+      categoryEntry = {
+        canonicalCategory,
+        label: getTagLabel(category),
+        slug,
+        posts: [],
+      };
+      categoryByCanonicalLabel.set(canonicalCategory, categoryEntry);
+    }
+
+    categoryEntry.posts.push(post);
+  }
+
+  return [...categoryByCanonicalLabel.values()].sort(
+    (firstCategory, secondCategory) =>
+      firstCategory.label.localeCompare(secondCategory.label, 'zh-CN'),
+  );
+}
+
+function getPositiveColumnOrder(post: ColumnPostEntry): number {
+  const { columnOrder } = post.data;
+
+  if (!Number.isInteger(columnOrder) || (columnOrder ?? 0) <= 0) {
+    throw new Error(
+      `Column order must be a positive integer for entry "${post.id}".`,
+    );
+  }
+
+  return columnOrder as number;
+}
+
+export function buildColumnIndex<T extends ColumnPostEntry>(
+  posts: readonly T[],
+): ColumnIndexEntry<T>[] {
+  const columnByCanonicalLabel = new Map<string, ColumnIndexEntry<T>>();
+  const canonicalLabelBySlug = new Map<string, string>();
+  const postIdByOrderByCanonicalColumn = new Map<
+    string,
+    Map<number, string>
+  >();
+
+  for (const post of posts) {
+    const { column, columnOrder } = post.data;
+
+    if (column === undefined) {
+      if (columnOrder !== undefined) {
+        throw new Error(
+          `Column order ${columnOrder} exists without a column for entry "${post.id}".`,
+        );
+      }
+
+      continue;
+    }
+
+    const positiveColumnOrder = getPositiveColumnOrder(post);
+    const canonicalColumn = canonicalizeTag(column);
+    const slug = normalizeTag(column);
+    const canonicalLabelForSlug = canonicalLabelBySlug.get(slug);
+
+    if (
+      canonicalLabelForSlug !== undefined &&
+      canonicalLabelForSlug !== canonicalColumn
+    ) {
+      throw new Error(
+        `Column route collision for slug "${slug}": canonical labels "${canonicalLabelForSlug}" and "${canonicalColumn}".`,
+      );
+    }
+
+    canonicalLabelBySlug.set(slug, canonicalColumn);
+
+    let postIdByOrder =
+      postIdByOrderByCanonicalColumn.get(canonicalColumn);
+    if (postIdByOrder === undefined) {
+      postIdByOrder = new Map<number, string>();
+      postIdByOrderByCanonicalColumn.set(canonicalColumn, postIdByOrder);
+    }
+
+    const firstPostId = postIdByOrder.get(positiveColumnOrder);
+    if (firstPostId !== undefined) {
+      throw new Error(
+        `Column "${getTagLabel(column)}" has duplicate order ${positiveColumnOrder} for entries "${firstPostId}" and "${post.id}".`,
+      );
+    }
+
+    postIdByOrder.set(positiveColumnOrder, post.id);
+
+    let columnEntry = columnByCanonicalLabel.get(canonicalColumn);
+    if (columnEntry === undefined) {
+      columnEntry = {
+        canonicalColumn,
+        label: getTagLabel(column),
+        slug,
+        posts: [],
+      };
+      columnByCanonicalLabel.set(canonicalColumn, columnEntry);
+    }
+
+    columnEntry.posts.push(post as OrderedColumnPostEntry<T>);
+  }
+
+  return [...columnByCanonicalLabel.values()]
+    .map((columnEntry) => ({
+      ...columnEntry,
+      posts: [...columnEntry.posts].sort(
+        (firstPost, secondPost) =>
+          firstPost.data.columnOrder - secondPost.data.columnOrder,
+      ),
+    }))
+    .sort((firstColumn, secondColumn) =>
+      firstColumn.label.localeCompare(secondColumn.label, 'zh-CN'),
+    );
 }
 
 export function buildPostRouteRecords<T extends NavigablePostEntry>(

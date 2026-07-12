@@ -2,6 +2,9 @@
 title: 从飞书发布的第一篇文章
 description: 验证飞书写作、多维表格发布与静态博客部署的完整链路。
 pubDate: 2026-07-12
+category: 技术
+column: 博客搭建手记
+columnOrder: 2
 tags:
   - 飞书发布
   - 自动化

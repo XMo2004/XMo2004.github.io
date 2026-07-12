@@ -4,9 +4,13 @@ import test from 'node:test';
 import * as postHelpers from '../src/lib/posts.ts';
 
 const {
+  buildCategoryIndex,
+  buildColumnIndex,
   buildPostRouteRecords,
   buildTagIndex,
   estimateReadingMinutes,
+  getCategoryHref,
+  getColumnHref,
   getPostHref,
   getPostSlug,
   isTrustedFeishuUrl,
@@ -167,6 +171,251 @@ test('buildTagIndex throws when different canonical labels map to one route slug
     () => buildTagIndex(posts),
     /Tag route collision.*a-b.*a b.*a-b/i,
   );
+});
+
+test('buildCategoryIndex sorts directory labels and category posts newest-first without mutating input', () => {
+  const olderTechnologyPost = {
+    id: 'manual/older-technology.md',
+    data: {
+      title: 'Older technology',
+      pubDate: new Date('2026-01-01'),
+      category: '技术',
+    },
+  };
+  const growthPost = {
+    id: 'manual/growth.md',
+    data: {
+      title: 'Growth',
+      pubDate: new Date('2026-03-01'),
+      category: '成长',
+    },
+  };
+  const newestTechnologyPost = {
+    id: 'feishu/newest-technology.md',
+    data: {
+      title: 'Newest technology',
+      pubDate: new Date('2026-06-01'),
+      category: '技术',
+    },
+  };
+  const posts = Object.freeze([
+    olderTechnologyPost,
+    growthPost,
+    newestTechnologyPost,
+  ]);
+
+  const categoryIndex = buildCategoryIndex(posts);
+  const technology = categoryIndex.find((entry) => entry.label === '技术');
+
+  assert.deepEqual(
+    categoryIndex.map((entry) => entry.label),
+    ['成长', '技术'],
+  );
+  assert.deepEqual(technology.posts, [
+    newestTechnologyPost,
+    olderTechnologyPost,
+  ]);
+  assert.deepEqual(posts, [
+    olderTechnologyPost,
+    growthPost,
+    newestTechnologyPost,
+  ]);
+});
+
+test('buildColumnIndex sorts directory labels and column posts by positive columnOrder without mutating input', () => {
+  const secondPost = {
+    id: 'feishu/second.md',
+    data: {
+      title: 'Second',
+      pubDate: new Date('2026-06-01'),
+      column: '博客搭建手记',
+      columnOrder: 2,
+    },
+  };
+  const otherColumnPost = {
+    id: 'manual/other-column.md',
+    data: {
+      title: 'Other column',
+      pubDate: new Date('2026-04-01'),
+      column: '成长手记',
+      columnOrder: 1,
+    },
+  };
+  const standalonePost = {
+    id: 'manual/standalone.md',
+    data: {
+      title: 'Standalone',
+      pubDate: new Date('2026-03-01'),
+    },
+  };
+  const firstPost = {
+    id: 'manual/first.md',
+    data: {
+      title: 'First',
+      pubDate: new Date('2026-01-01'),
+      column: '博客搭建手记',
+      columnOrder: 1,
+    },
+  };
+  const posts = Object.freeze([
+    secondPost,
+    otherColumnPost,
+    standalonePost,
+    firstPost,
+  ]);
+
+  const columnIndex = buildColumnIndex(posts);
+  const blogColumn = columnIndex.find(
+    (entry) => entry.label === '博客搭建手记',
+  );
+
+  assert.deepEqual(
+    columnIndex.map((entry) => entry.label),
+    ['博客搭建手记', '成长手记'],
+  );
+  assert.deepEqual(
+    blogColumn.posts.map((post) => post.id),
+    ['manual/first.md', 'feishu/second.md'],
+  );
+  assert.deepEqual(posts, [
+    secondPost,
+    otherColumnPost,
+    standalonePost,
+    firstPost,
+  ]);
+});
+
+test('taxonomy href helpers create stable safe routes for Unicode labels', () => {
+  const category = '技术 / 前端';
+  const column = '博客搭建手记 #1';
+  const categoryHref = getCategoryHref(category);
+  const columnHref = getColumnHref(column);
+
+  assert.equal(categoryHref, `/categories/${normalizeTag(category)}/`);
+  assert.equal(columnHref, `/columns/${normalizeTag(column)}/`);
+  assert.equal(categoryHref, getCategoryHref(category));
+  assert.equal(columnHref, getColumnHref(column));
+  assert.doesNotMatch(categoryHref.slice('/categories/'.length, -1), /[/#?%\s]/);
+  assert.doesNotMatch(columnHref.slice('/columns/'.length, -1), /[/#?%\s]/);
+});
+
+test('buildCategoryIndex throws when different canonical labels map to one route slug', () => {
+  const posts = [
+    {
+      id: 'manual/first.md',
+      data: {
+        title: 'First',
+        pubDate: new Date('2026-06-01'),
+        category: 'A B',
+      },
+    },
+    {
+      id: 'manual/second.md',
+      data: {
+        title: 'Second',
+        pubDate: new Date('2026-01-01'),
+        category: 'a-b',
+      },
+    },
+  ];
+
+  assert.throws(
+    () => buildCategoryIndex(posts),
+    /Category route collision.*a-b.*a b.*a-b/i,
+  );
+});
+
+test('buildColumnIndex throws when different canonical labels map to one route slug', () => {
+  const posts = [
+    {
+      id: 'manual/first.md',
+      data: {
+        title: 'First',
+        pubDate: new Date('2026-06-01'),
+        column: 'A B',
+        columnOrder: 1,
+      },
+    },
+    {
+      id: 'manual/second.md',
+      data: {
+        title: 'Second',
+        pubDate: new Date('2026-01-01'),
+        column: 'a-b',
+        columnOrder: 1,
+      },
+    },
+  ];
+
+  assert.throws(
+    () => buildColumnIndex(posts),
+    /Column route collision.*a-b.*a b.*a-b/i,
+  );
+});
+
+test('buildColumnIndex rejects missing and non-positive-integer column orders', () => {
+  const invalidOrders = [undefined, 0, -1, 1.5, '1'];
+
+  for (const [index, columnOrder] of invalidOrders.entries()) {
+    const post = {
+      id: `manual/invalid-${index}.md`,
+      data: {
+        title: 'Invalid column order',
+        pubDate: new Date('2026-01-01'),
+        column: '博客搭建手记',
+        ...(columnOrder === undefined ? {} : { columnOrder }),
+      },
+    };
+
+    assert.throws(
+      () => buildColumnIndex([post]),
+      /Column order.*positive integer.*manual\/invalid/i,
+    );
+  }
+});
+
+test('buildColumnIndex rejects a column order without a column', () => {
+  const post = {
+    id: 'manual/order-without-column.md',
+    data: {
+      title: 'Order without column',
+      pubDate: new Date('2026-01-01'),
+      columnOrder: 1,
+    },
+  };
+
+  assert.throws(
+    () => buildColumnIndex([post]),
+    /Column order.*without a column.*manual\/order-without-column/i,
+  );
+});
+
+test('buildColumnIndex rejects duplicate orders in one column with both post ids', () => {
+  const firstPost = {
+    id: 'manual/first.md',
+    data: {
+      title: 'First',
+      pubDate: new Date('2026-06-01'),
+      column: '博客搭建手记',
+      columnOrder: 1,
+    },
+  };
+  const duplicatePost = {
+    id: 'feishu/duplicate.md',
+    data: {
+      title: 'Duplicate',
+      pubDate: new Date('2026-01-01'),
+      column: '博客搭建手记',
+      columnOrder: 1,
+    },
+  };
+
+  assert.throws(() => buildColumnIndex([firstPost, duplicatePost]), (error) => {
+    assert.match(error.message, /duplicate.*order.*1/i);
+    assert.match(error.message, /manual\/first\.md/);
+    assert.match(error.message, /feishu\/duplicate\.md/);
+    return true;
+  });
 });
 
 test('buildPostRouteRecords sorts routes and builds adjacent URLs from public slugs', () => {

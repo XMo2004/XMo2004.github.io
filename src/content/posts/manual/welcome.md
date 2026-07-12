@@ -2,6 +2,9 @@
 title: '欢迎来到小陌的博客'
 description: '一份关于这个博客为何存在、如何写作与如何归档的简短说明。'
 pubDate: 2026-07-12
+category: 随笔
+column: 博客搭建手记
+columnOrder: 1
 tags:
   - 建站
   - 飞书
