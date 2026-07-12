@@ -4,10 +4,69 @@ import { SITE } from '../config/site';
 const currentYear = new Date().getFullYear();
 ---
 
-<footer class="site-footer">
+<footer class="site-footer" data-footer-reveal>
   <div class="site-footer__inner container">
-    <small>© {currentYear} {SITE.name}</small>
-    <p>缓慢记录，长期整理。</p>
-    <a href="/rss.xml">RSS</a>
+    <a class="site-footer__brand" href="/" aria-label={`${SITE.name}首页`}>
+      <svg
+        class="site-footer__mark"
+        viewBox="0 0 84 36"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <g
+          fill="none"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path pathLength="1" d="M3 5 23 31M23 5 3 31" />
+          <path pathLength="1" d="M32 31V5l10 15L52 5v26" />
+          <ellipse pathLength="1" cx="69" cy="18" rx="12" ry="13" />
+        </g>
+      </svg>
+
+      <span class="site-footer__brand-type" aria-hidden="true">
+        <span class="site-footer__brand-name">
+          <span>X</span><span>M</span><span>O</span>
+        </span>
+        <span class="site-footer__brand-notes">
+          <span>N</span><span>O</span><span>T</span><span>E</span><span>S</span>
+        </span>
+      </span>
+    </a>
+
+    <p class="site-footer__tagline" aria-label="缓慢记录 / 长期整理">
+      <span>缓慢记录</span>
+      <span aria-hidden="true">/</span>
+      <span>长期整理</span>
+    </p>
+
+    <nav class="site-footer__nav" aria-label="页脚导航">
+      <a href="/categories/">分类</a>
+      <a href="/columns/">专栏</a>
+      <a href="/rss.xml">RSS</a>
+    </nav>
+
+    <small class="site-footer__copyright">© {currentYear} {SITE.name}</small>
   </div>
 </footer>
+
+<script>
+  const footer = document.querySelector<HTMLElement>('[data-footer-reveal]');
+
+  if (footer && 'IntersectionObserver' in window) {
+    footer.dataset.revealReady = 'true';
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0]?.isIntersecting) return;
+
+        footer.dataset.revealVisible = 'true';
+        observer.disconnect();
+      },
+      { rootMargin: '0px 0px -5%', threshold: 0.2 },
+    );
+
+    observer.observe(footer);
+  }
+</script>

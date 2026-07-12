@@ -149,6 +149,86 @@ test('ThemeToggle exposes state and persists the selected theme', async () => {
   assert.match(source, /dataset\.theme/);
 });
 
+test('ThemeToggle uses a hollow borderless sun and moon phase control', async () => {
+  const [toggleSource, styles] = await Promise.all([
+    readSource('src/components/ThemeToggle.astro'),
+    readSource('src/styles/global.css'),
+  ]);
+
+  assert.match(
+    toggleSource,
+    /<span\s+class=["']theme-toggle__glyph["'][^>]*>[\s\S]*?<span\s+class=["']theme-toggle__phase["'][^>]*><\/span>[\s\S]*?<\/span>/,
+  );
+  assert.match(
+    styles,
+    /\.theme-toggle\s*\{(?=[^}]*width:\s*2\.75rem;)(?=[^}]*height:\s*2\.75rem;)(?=[^}]*border:\s*0;)(?=[^}]*border-radius:\s*50%;)(?=[^}]*background:\s*transparent;)[^}]*\}/s,
+  );
+  assert.match(
+    styles,
+    /\.theme-toggle__glyph\s*\{(?=[^}]*border:[^;}]*solid\s+currentColor;)(?=[^}]*border-radius:\s*50%;)(?=[^}]*background:\s*transparent;)[^}]*\}/s,
+  );
+  assert.match(
+    styles,
+    /\.theme-toggle__phase\s*\{(?=[^}]*border-radius:\s*50%;)(?=[^}]*transition:[^;}]*transform)[^}]*\}/s,
+  );
+  assert.match(
+    styles,
+    /\[data-theme=['"]dark['"]\]\s+\.theme-toggle__phase\s*\{[^}]*transform:\s*translate3d\([^)]+\)[^}]*\}/s,
+  );
+  assert.match(
+    styles,
+    /\.theme-toggle:hover\s+\.theme-toggle__glyph\s*\{[^}]*transform:\s*rotate\([^)]+\)[^}]*\}/s,
+  );
+});
+
+test('footer is a compact branded taxonomy band with progressive reveal', async () => {
+  const [footerSource, styles] = await Promise.all([
+    readSource('src/components/SiteFooter.astro'),
+    readSource('src/styles/global.css'),
+  ]);
+
+  assert.match(footerSource, /<footer[^>]*data-footer-reveal/);
+  assert.match(
+    footerSource,
+    /<svg[^>]*class=["']site-footer__mark["'][^>]*>[\s\S]*?fill=["']none["'][\s\S]*?<\/svg>/,
+  );
+  assert.match(
+    footerSource,
+    /site-footer__brand-name[\s\S]*?<span>X<\/span>\s*<span>M<\/span>\s*<span>O<\/span>/,
+  );
+  assert.match(
+    footerSource,
+    /site-footer__brand-notes[\s\S]*?<span>N<\/span>\s*<span>O<\/span>\s*<span>T<\/span>\s*<span>E<\/span>\s*<span>S<\/span>/,
+  );
+  assert.match(
+    footerSource,
+    /site-footer__tagline[\s\S]*?>缓慢记录<\/span>[\s\S]*?>长期整理<\/span>/,
+  );
+  for (const [href, label] of [
+    ['/categories/', '分类'],
+    ['/columns/', '专栏'],
+    ['/rss.xml', 'RSS'],
+  ]) {
+    assert.match(
+      footerSource,
+      new RegExp(`href=["']${href.replaceAll('/', '\\/')}["'][^>]*>${label}<\\/a>`),
+    );
+  }
+  assert.match(footerSource, /['"]IntersectionObserver['"]\s+in\s+window/);
+  assert.match(footerSource, /footer\.dataset\.revealReady\s*=\s*['"]true['"]/);
+  assert.match(footerSource, /footer\.dataset\.revealVisible\s*=\s*['"]true['"]/);
+  assert.match(footerSource, /observer\.observe\(footer\)/);
+  assert.match(footerSource, /observer\.disconnect\(\)/);
+  assert.match(
+    styles,
+    /\.site-footer__brand-name\s*>\s*span,[\s\S]*?\{(?=[^}]*opacity:\s*1;)(?=[^}]*transform:\s*none;)[^}]*\}/,
+  );
+  assert.match(
+    styles,
+    /\[data-footer-reveal\]\[data-reveal-ready=['"]true['"]\]:not\(\[data-reveal-visible=['"]true['"]\]\)[\s\S]*?\{(?=[^}]*opacity:\s*0;)(?=[^}]*transform:\s*translate3d\()[^}]*\}/,
+  );
+});
+
 test('post components use safe post and taxonomy routes', async () => {
   const [cardSource, rowSource, tagListSource] = await Promise.all([
     readSource('src/components/PostCard.astro'),
@@ -219,6 +299,130 @@ test('homepage and archive pages use dense real-content indexes and rows', async
   assert.match(postsSource, /<PostRow\s+entry=\{post\}\s+headingLevel=["']h2["']/);
   assert.match(tagSource, /<PostRow\s+entry=\{post\}\s+headingLevel=["']h2["']/);
   assert.doesNotMatch(`${postsSource}\n${tagSource}`, /<PostCard/);
+});
+
+test('homepage brand enters like type and a drawn hollow mark', async () => {
+  const [homeSource, styles] = await Promise.all([
+    readSource('src/pages/index.astro'),
+    readSource('src/styles/global.css'),
+  ]);
+
+  assert.match(
+    homeSource,
+    /home-title__xmo[\s\S]*?<span>x<\/span><span>m<\/span><span>o<\/span>/,
+  );
+  assert.match(homeSource, /class=["']home-title__suffix["']/);
+  assert.match(homeSource, /<svg[^>]*class=["']home-brand-mark["']/);
+  assert.match(
+    styles,
+    /\.home-title__xmo\s*>\s*span\s*\{[^}]*animation:\s*home-letter-settle[^;}]*;[^}]*\}/s,
+  );
+  assert.match(styles, /@keyframes\s+home-letter-settle\s*\{[\s\S]*?opacity:\s*0;[\s\S]*?transform:\s*translate3d\([\s\S]*?\}/);
+  assert.match(
+    styles,
+    /\.home-title__suffix\s*\{[^}]*animation:\s*home-suffix-reveal[^;}]*;[^}]*\}/s,
+  );
+  assert.match(styles, /@keyframes\s+home-suffix-reveal\s*\{[\s\S]*?clip-path:\s*inset\([^)]+\)[\s\S]*?\}/);
+  assert.match(
+    styles,
+    /\.home-brand-mark\s+:is\(path,\s*ellipse\)\s*\{(?=[^}]*stroke-dasharray:)(?=[^}]*stroke-dashoffset:)(?=[^}]*animation:\s*home-mark-draw)[^}]*\}/s,
+  );
+  assert.match(styles, /@keyframes\s+home-mark-draw\s*\{[\s\S]*?stroke-dashoffset:\s*0;[\s\S]*?\}/);
+  assert.doesNotMatch(
+    styles,
+    /\.(?:editorial-note|home-hero__intro|home-hero__actions)(?:\b|\s|,)/,
+  );
+});
+
+test('global layout keeps dense editorial scanning without shrinking reading text', async () => {
+  const [styles, rowSource] = await Promise.all([
+    readSource('src/styles/global.css'),
+    readSource('src/components/PostRow.astro'),
+  ]);
+
+  assert.match(styles, /\.site-header__inner\s*\{[^}]*min-height:\s*3\.5rem;[^}]*\}/s);
+  assert.match(styles, /\.site-main\s*\{[^}]*padding-block:\s*2rem\s+3rem;[^}]*\}/s);
+  assert.match(styles, /\.home-hero\s*\{[^}]*min-height:\s*20rem;[^}]*\}/s);
+  assert.match(
+    styles,
+    /\.home-taxonomy\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);[^}]*\}/s,
+  );
+  assert.match(styles, /\.home-section\s*\{[^}]*padding-block-start:\s*3rem;[^}]*\}/s);
+  assert.match(styles, /\.section-heading\s*\{[^}]*margin-block-end:\s*1\.25rem;[^}]*\}/s);
+  assert.match(styles, /\.post-card__cover\s*\{[^}]*min-height:\s*13\.5rem;[^}]*\}/s);
+  assert.match(
+    styles,
+    /\.post-row\s*\{(?=[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);)(?=[^}]*border-bottom:\s*1px\s+solid\s+var\(--line\);)[^}]*\}/s,
+  );
+  assert.match(
+    styles,
+    /\.post-row--with-cover\s*\{[^}]*grid-template-columns:\s*7rem\s+minmax\(0,\s*1fr\);[^}]*\}/s,
+  );
+  assert.match(
+    styles,
+    /\.post-row__description\s*\{(?=[^}]*white-space:\s*nowrap;)(?=[^}]*text-overflow:\s*ellipsis;)[^}]*\}/s,
+  );
+  assert.match(styles, /\.post-row:hover\s*\{[^}]*transform:\s*translate3d\([^)]+\);[^}]*\}/s);
+  assert.match(styles, /\.post-header\s*\{[^}]*max-width:\s*68rem;[^}]*\}/s);
+  assert.match(styles, /\.post-header h1\s*\{[^}]*max-width:\s*none;[^}]*\}/s);
+  assert.match(
+    styles,
+    /\.post-header__category,\s*\.post-header__column\s*\{(?=[^}]*min-height:\s*2\.75rem;)(?=[^}]*display:\s*inline-flex;)(?=[^}]*border-radius:\s*999px;)[^}]*\}/s,
+  );
+  assert.match(styles, /\.tag-list a\s*\{[^}]*border-radius:\s*999px;[^}]*\}/s);
+  assert.match(
+    styles,
+    /\.post-layout--with-toc\s*\{(?=[^}]*grid-template-columns:\s*minmax\(0,\s*var\(--prose-width\)\)\s+minmax\(10rem,\s*13rem\);)(?=[^}]*grid-template-areas:\s*['"]content toc['"];)[^}]*\}/s,
+  );
+  assert.match(styles, /\.post-toc\s*\{[^}]*grid-area:\s*toc;[^}]*\}/s);
+  assert.match(styles, /\.post-layout__content\s*\{[^}]*grid-area:\s*content;[^}]*\}/s);
+  assert.match(
+    styles,
+    /\.post-toc-compact summary\s*\{(?=[^}]*min-height:\s*2\.75rem;)(?=[^}]*display:\s*flex;)[^}]*\}/s,
+  );
+  assert.match(
+    styles,
+    /\.prose\s*\{(?=[^}]*font-size:\s*1\.0625rem;)(?=[^}]*line-height:\s*1\.78;)[^}]*\}/s,
+  );
+  assert.match(
+    styles,
+    /@media\s*\(max-width:\s*48rem\)\s*\{[\s\S]*?\.primary-nav\s*\{[^}]*overflow-x:\s*auto;[^}]*\}[\s\S]*?\.home-taxonomy\s*\{[^}]*grid-template-columns:\s*1fr;[^}]*\}[\s\S]*?\.post-row__description\s*\{[^}]*-webkit-line-clamp:\s*2;[^}]*\}/,
+  );
+  assert.doesNotMatch(styles, /\.article-meta\s*\{[^}]*flex-direction:\s*column;/s);
+  assert.match(rowSource, /post-row__stretched-link/);
+  assert.match(rowSource, /post-row__taxonomy-link/);
+});
+
+test('reduced motion declares stable final brand, footer, and phase states', async () => {
+  const styles = await readSource('src/styles/global.css');
+  const reducedMotion = styles.slice(
+    styles.indexOf('@media (prefers-reduced-motion: reduce)'),
+  );
+
+  assert.match(
+    reducedMotion,
+    /\.home-title__xmo\s*>\s*span\s*\{(?=[^}]*animation:\s*none;)(?=[^}]*opacity:\s*1;)(?=[^}]*transform:\s*none;)[^}]*\}/s,
+  );
+  assert.match(
+    reducedMotion,
+    /\.home-title__suffix\s*\{(?=[^}]*animation:\s*none;)(?=[^}]*opacity:\s*1;)(?=[^}]*clip-path:\s*inset\(0\);)[^}]*\}/s,
+  );
+  assert.match(
+    reducedMotion,
+    /\.home-brand-mark\s+:is\(path,\s*ellipse\)\s*\{(?=[^}]*animation:\s*none;)(?=[^}]*stroke-dashoffset:\s*0;)[^}]*\}/s,
+  );
+  assert.match(
+    reducedMotion,
+    /\[data-footer-reveal\][\s\S]*?:is\([^)]+\)\s*\{(?=[^}]*opacity:\s*1;)(?=[^}]*transform:\s*none;)[^}]*\}/s,
+  );
+  assert.match(
+    reducedMotion,
+    /\.theme-toggle__glyph\s*\{[^}]*transform:\s*rotate\(0\);[^}]*\}/s,
+  );
+  assert.match(
+    reducedMotion,
+    /\[data-theme=['"]dark['"]\]\s+\.theme-toggle__phase\s*\{[^}]*transform:\s*translate3d\([^)]+\);[^}]*\}/s,
+  );
 });
 
 test('category and column routes are generated from the real post collection', async () => {
