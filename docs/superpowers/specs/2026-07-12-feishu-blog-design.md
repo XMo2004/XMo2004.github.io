@@ -115,8 +115,8 @@
 1. 作者在飞书文档中完成正文。
 2. 作者在“博客文章”表中填写元数据，将状态设为“已发布”或点击发布按钮。
 3. 飞书自动化使用 HTTPS `POST` 调用：
-   `https://api.github.com/repos/XMo2004/XMo2004.github.io/dispatches`
-4. 请求头包含 GitHub 推荐的 API 版本、JSON 类型，以及仅限该仓库且仅有 Contents 写权限的细粒度令牌；请求体为 `{"event_type":"feishu_publish"}`。
+   `https://api.github.com/repos/XMo2004/XMo2004.github.io/actions/workflows/sync-feishu.yml/dispatches`
+4. 请求头包含 GitHub 推荐的 API 版本、JSON 类型，以及仅限该仓库且仅有 Actions 写权限的细粒度令牌；请求体固定为 `{"ref":"main"}`。
 5. `sync-feishu.yml` 获取飞书 `tenant_access_token`，读取多维表格和文档，将已发布记录完整同步为 Markdown 与本地资源。
 6. 有内容变化时，Action 以机器人身份提交到 `main`；无变化则正常结束。
 7. `deploy.yml` 在 `main` 更新时运行测试、Astro 检查和静态构建，并通过 GitHub Pages Actions 发布构建产物。
@@ -124,7 +124,7 @@
 
 ## 6. 安全与权限
 
-- GitHub 触发令牌：细粒度 PAT，仅允许访问 `XMo2004.github.io`，仅授予 Contents 写权限，存放在飞书自动化的 Authorization 请求头中。
+- GitHub 触发令牌：细粒度 PAT，仅允许访问 `XMo2004.github.io`，仅授予 Actions 读写权限，存放在飞书自动化的 Authorization 请求头中。飞书运行日志的“流程设置”会显示完整请求头，因此只有博客所有者可以管理自动化，令牌使用短有效期并定期轮换。
 - 飞书 App ID、App Secret、Base App Token、Table ID：保存为 GitHub Actions repository secrets，不进入仓库或构建产物。
 - 飞书应用只申请读取新版文档、下载文档素材、只读多维表格所需权限；应用还必须被添加为目标文档和多维表格的协作者。
 - 同步日志不得输出 App Secret、访问令牌或完整 Authorization 头。

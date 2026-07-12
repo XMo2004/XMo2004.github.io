@@ -71,7 +71,7 @@
 2. Repository permissions 只把 **Actions** 设为 **Read and write（读写）**；`Metadata: Read` 会自动附带，其余保持 No access。
 3. 设置合理的过期时间，并在到期前轮换。
 
-这个权限只能触发或管理这个仓库的 Actions，不能直接改博客内容，比 `Contents: write` 更适合飞书推送。PAT 只放在自动化请求的 Authorization 头中，不要写进表格字段、文档正文、仓库文件或 GitHub Actions secrets；飞书没有承诺请求头会在所有运行日志中脱敏，因此要限制自动化的查看和编辑权限。
+这个权限只能触发或管理这个仓库的 Actions，不能直接改博客内容，比 `Contents: write` 更适合飞书推送。PAT 只放在自动化请求的 Authorization 头中，不要写进表格字段、文档正文、仓库文件或 GitHub Actions secrets。实测飞书运行日志的“流程设置”会明文显示自定义请求头，所以只允许博客所有者查看或编辑自动化；不要分享运行日志，并给 PAT 设置短有效期、按期轮换。
 
 ### 配置自动化 HTTP 请求
 

@@ -4,7 +4,7 @@
 
 **Goal:** Build, deploy, and verify `https://xmo2004.github.io/` as a polished Astro 7 blog whose published Feishu documents are synchronized through a Bitable publishing console and GitHub Actions.
 
-**Architecture:** Feishu documents contain article bodies and a Bitable row contains publication metadata. A Bitable automation sends a GitHub `repository_dispatch`; a sync workflow reads every published row, converts document blocks and media into versioned local Markdown assets, and commits the snapshot. A separate GitHub Pages workflow tests and builds the Astro site, so the public runtime remains fully static.
+**Architecture:** Feishu documents contain article bodies and a Bitable row contains publication metadata. A Bitable automation sends a GitHub `workflow_dispatch`; a sync workflow reads every published row, converts document blocks and media into versioned local Markdown assets, commits the snapshot, verifies it, and deploys the Pages artifact. The public runtime remains fully static.
 
 **Tech Stack:** Astro 7, TypeScript, native CSS, Node 24, Node test runner, GitHub Actions, GitHub Pages, Feishu OpenAPI (`docx`, `bitable`, and `drive` APIs).
 
@@ -579,13 +579,13 @@ The sync workflow checks out `main`, installs with `npm ci`, runs the sync comma
 `docs/FEISHU_SETUP.md` must contain the exact nine Bitable fields and types, the Open Platform permissions (`docx:document:readonly`, `docs:document.media:download`, `bitable:app:readonly`), resource-sharing requirement, four GitHub secret names, the fine-grained PAT restriction, and this automation request:
 
 ```http
-POST https://api.github.com/repos/XMo2004/XMo2004.github.io/dispatches
+POST https://api.github.com/repos/XMo2004/XMo2004.github.io/actions/workflows/sync-feishu.yml/dispatches
 Accept: application/vnd.github+json
 Authorization: Bearer <fine-grained token stored only in Feishu>
 X-GitHub-Api-Version: 2026-03-10
 Content-Type: application/json
 
-{"event_type":"feishu_publish"}
+{"ref":"main"}
 ```
 
 Also document how to inspect a failed Action, manually run the sync workflow, rotate both secrets, and restore a previous content commit.
