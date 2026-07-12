@@ -192,6 +192,115 @@ test('detects cycles even when the cycle is orphaned from the page root', () => 
   );
 });
 
+test('preserves consecutive blank lines inside fenced code blocks', () => {
+  const code = {
+    block_id: 'code-blank-lines',
+    block_type: 14,
+    parent_id: 'page',
+    code: {
+      elements: [
+        { text_run: { content: 'first\n\n\nsecond', text_element_style: {} } },
+      ],
+      style: { language: 1 },
+    },
+  };
+
+  const { markdown } = blocksToMarkdown(
+    pageWith(['code-blank-lines'], [code]),
+  );
+  assert.match(markdown, /```text\nfirst\n\n\nsecond\n```/);
+});
+
+test('indents a nested list by the full width of its parent marker', () => {
+  const parent = {
+    block_id: 'ordered-parent',
+    block_type: 13,
+    parent_id: 'page',
+    children: ['bullet-child'],
+    ordered: {
+      elements: [
+        { text_run: { content: '父级', text_element_style: {} } },
+      ],
+    },
+  };
+  const child = {
+    block_id: 'bullet-child',
+    block_type: 12,
+    parent_id: 'ordered-parent',
+    bullet: {
+      elements: [
+        { text_run: { content: '子级', text_element_style: {} } },
+      ],
+    },
+  };
+
+  const { markdown } = blocksToMarkdown(
+    pageWith(['ordered-parent'], [parent, child]),
+  );
+  assert.match(markdown, /^1\. 父级\n {3}- 子级$/m);
+});
+
+test('indents every line of a non-list block nested under a list item', () => {
+  const parent = {
+    block_id: 'ordered-with-code',
+    block_type: 13,
+    parent_id: 'page',
+    children: ['nested-code'],
+    ordered: {
+      elements: [
+        { text_run: { content: '示例', text_element_style: {} } },
+      ],
+    },
+  };
+  const code = {
+    block_id: 'nested-code',
+    block_type: 14,
+    parent_id: 'ordered-with-code',
+    code: {
+      elements: [
+        { text_run: { content: 'line 1\nline 2', text_element_style: {} } },
+      ],
+      style: { language: 1 },
+    },
+  };
+
+  const { markdown } = blocksToMarkdown(
+    pageWith(['ordered-with-code'], [parent, code]),
+  );
+  assert.match(
+    markdown,
+    /^1\. 示例\n {3}```text\n {3}line 1\n {3}line 2\n {3}```$/m,
+  );
+});
+
+test('maps official C++ code language and rejects unknown language enums', () => {
+  const code = {
+    block_id: 'cpp-code',
+    block_type: 14,
+    parent_id: 'page',
+    code: {
+      elements: [
+        { text_run: { content: 'int main() {}', text_element_style: {} } },
+      ],
+      style: { language: 9 },
+    },
+  };
+  assert.match(blocksToMarkdown(pageWith(['cpp-code'], [code])).markdown, /^```cpp$/m);
+
+  code.code.style.language = 999;
+  assert.throws(
+    () => blocksToMarkdown(pageWith(['cpp-code'], [code])),
+    /cpp-code.*language.*999/i,
+  );
+});
+
+test('escapes ampersands so entity-like text remains literal', () => {
+  const block = textBlock('entity', 'page', '&copy; is source text');
+  const { markdown } = blocksToMarkdown(pageWith(['entity'], [block]));
+
+  assert.match(markdown, /\\&copy\\;/);
+});
+
 test('rejects invalid table dimensions and cell counts', () => {
   const table = {
     block_id: 'table',

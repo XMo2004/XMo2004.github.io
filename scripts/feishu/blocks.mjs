@@ -21,24 +21,83 @@ const TEXT_PROPERTY_BY_TYPE = new Map([
 
 const CODE_LANGUAGES = new Map([
   [1, 'text'],
+  [2, 'abap'],
+  [3, 'ada'],
+  [4, 'apache'],
+  [5, 'apex'],
+  [6, 'asm'],
   [7, 'bash'],
+  [8, 'csharp'],
+  [9, 'cpp'],
+  [10, 'c'],
+  [11, 'cobol'],
   [12, 'css'],
+  [13, 'coffeescript'],
+  [14, 'd'],
+  [15, 'dart'],
+  [16, 'pascal'],
+  [17, 'jinja'],
   [18, 'dockerfile'],
+  [19, 'erlang'],
+  [20, 'fortran-free-form'],
+  [21, 'text'],
   [22, 'go'],
+  [23, 'groovy'],
   [24, 'html'],
+  [25, 'handlebars'],
+  [26, 'http'],
+  [27, 'haskell'],
   [28, 'json'],
   [29, 'java'],
   [30, 'javascript'],
+  [31, 'julia'],
+  [32, 'kotlin'],
+  [33, 'latex'],
+  [34, 'lisp'],
+  [35, 'logo'],
+  [36, 'lua'],
+  [37, 'matlab'],
+  [38, 'makefile'],
   [39, 'markdown'],
+  [40, 'nginx'],
+  [41, 'objective-c'],
+  [42, 'text'],
+  [43, 'php'],
+  [44, 'perl'],
+  [45, 'text'],
+  [46, 'powershell'],
+  [47, 'prolog'],
+  [48, 'protobuf'],
   [49, 'python'],
+  [50, 'r'],
+  [51, 'text'],
+  [52, 'ruby'],
   [53, 'rust'],
+  [54, 'sas'],
+  [55, 'scss'],
   [56, 'sql'],
+  [57, 'scala'],
+  [58, 'scheme'],
+  [59, 'text'],
   [60, 'shell'],
+  [61, 'swift'],
+  [62, 'text'],
   [63, 'typescript'],
+  [64, 'vb'],
+  [65, 'vb'],
   [66, 'xml'],
   [67, 'yaml'],
+  [68, 'cmake'],
+  [69, 'diff'],
+  [70, 'gherkin'],
+  [71, 'graphql'],
+  [72, 'glsl'],
+  [73, 'properties'],
+  [74, 'solidity'],
   [75, 'toml'],
 ]);
+
+const PLAIN_TEXT_CODE_FALLBACKS = new Set([21, 42, 45, 51, 59, 62]);
 
 const MEDIA_TOKEN = /^[A-Za-z0-9_-]+$/;
 
@@ -257,6 +316,20 @@ function validateBlocks(items) {
       } else {
         validateRichElements(block, textData.elements, issues);
       }
+    }
+
+    if (
+      block.block_type === 14 &&
+      block.code?.style?.language !== undefined &&
+      !CODE_LANGUAGES.has(block.code.style.language)
+    ) {
+      issues.push(
+        issue(
+          'unsupported_code_language',
+          `Code block "${block.block_id}" has unsupported language enum ${String(block.code.style.language)}.`,
+          block.block_id,
+        ),
+      );
     }
 
     if (block.block_type === 27) {
@@ -544,7 +617,7 @@ function validateBlocks(items) {
 function escapeMarkdown(value) {
   return value
     .replace(/\\/g, '\\\\')
-    .replace(/([`*_{}\[\]<>#+\-.!|()~=])/g, '\\$1');
+    .replace(/([!"#$%&'()*+,\-./:;<=>?@\[\]^_`{|}~])/g, '\\$1');
 }
 
 function maxBacktickRun(value) {
@@ -609,23 +682,35 @@ function codeFence(value) {
   return '`'.repeat(Math.max(3, maxBacktickRun(value) + 1));
 }
 
+function indentBlock(value, indentation) {
+  return indentation.length === 0
+    ? value
+    : value
+        .split('\n')
+        .map((line) => `${indentation}${line}`)
+        .join('\n');
+}
+
 export function blocksToMarkdown(items) {
   const { blocks, root } = validateBlocks(items);
   const warnings = [];
   const mediaTokens = [];
   const mediaTokenSet = new Set();
 
-  function renderBlock(blockId, listDepth = 0) {
+  function renderBlock(blockId, indentation = '') {
     const block = blocks.get(blockId);
 
     if (block.block_type >= 3 && block.block_type <= 8) {
       const level = block.block_type - 2;
-      return `${'#'.repeat(level)} ${renderElements(block, warnings)}`;
+      return indentBlock(
+        `${'#'.repeat(level)} ${renderElements(block, warnings)}`,
+        indentation,
+      );
     }
 
     switch (block.block_type) {
       case 2:
-        return renderElements(block, warnings);
+        return indentBlock(renderElements(block, warnings), indentation);
       case 12:
       case 13:
       case 17: {
@@ -637,32 +722,48 @@ export function blocksToMarkdown(items) {
               : block.todo.style?.done
                 ? '- [x]'
                 : '- [ ]';
-        const line = `${'  '.repeat(listDepth)}${marker} ${renderElements(block, warnings)}`;
+        const line = `${indentation}${marker} ${renderElements(block, warnings)}`;
+        const childIndentation = `${indentation}${' '.repeat(marker.length + 1)}`;
         const children = (block.children ?? []).map((childId) =>
-          renderBlock(childId, listDepth + 1),
+          renderBlock(childId, childIndentation),
         );
         return [line, ...children].filter(Boolean).join('\n');
       }
       case 14: {
         const content = renderElements(block, warnings, { raw: true });
         const fence = codeFence(content);
-        const language = CODE_LANGUAGES.get(block.code.style?.language) ?? 'text';
-        return `${fence}${language}\n${content}\n${fence}`;
+        const languageEnum = block.code.style?.language;
+        const language = CODE_LANGUAGES.get(languageEnum) ?? 'text';
+        if (PLAIN_TEXT_CODE_FALLBACKS.has(languageEnum)) {
+          warnings.push({
+            blockId: block.block_id,
+            type: 'code_language_fallback',
+            language: languageEnum,
+          });
+        }
+        const beforeClosingFence = content.endsWith('\n') ? '' : '\n';
+        return indentBlock(
+          `${fence}${language}\n${content}${beforeClosingFence}${fence}`,
+          indentation,
+        );
       }
       case 15:
-        return renderElements(block, warnings)
-          .split('\n')
-          .map((line) => `> ${line}`)
-          .join('\n');
+        return indentBlock(
+          renderElements(block, warnings)
+            .split('\n')
+            .map((line) => `> ${line}`)
+            .join('\n'),
+          indentation,
+        );
       case 22:
-        return '---';
+        return indentBlock('---', indentation);
       case 27: {
         const token = block.image.token;
         if (!mediaTokenSet.has(token)) {
           mediaTokenSet.add(token);
           mediaTokens.push(token);
         }
-        return `![图片](feishu-media://${token})`;
+        return indentBlock(`![图片](feishu-media://${token})`, indentation);
       }
       case 31: {
         const { row_size: rowSize, column_size: columnSize } =
@@ -682,11 +783,14 @@ export function blocksToMarkdown(items) {
           ),
         );
         const header = rows[0];
-        return [
-          `| ${header.join(' | ')} |`,
-          `| ${Array.from({ length: columnSize }, () => '---').join(' | ')} |`,
-          ...rows.slice(1).map((row) => `| ${row.join(' | ')} |`),
-        ].join('\n');
+        return indentBlock(
+          [
+            `| ${header.join(' | ')} |`,
+            `| ${Array.from({ length: columnSize }, () => '---').join(' | ')} |`,
+            ...rows.slice(1).map((row) => `| ${row.join(' | ')} |`),
+          ].join('\n'),
+          indentation,
+        );
       }
       default:
         return '';
@@ -696,9 +800,7 @@ export function blocksToMarkdown(items) {
   const markdown = (root.children ?? [])
     .map((blockId) => renderBlock(blockId))
     .filter(Boolean)
-    .join('\n\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
+    .join('\n\n');
 
   return {
     markdown: markdown ? `${markdown}\n` : '',
