@@ -27,7 +27,10 @@ import {
   buildFeishuManifest,
   serializeFeishuManifest,
 } from './manifest.mjs';
-import { normalizeRecord } from './records.mjs';
+import {
+  getPublicRecordFieldName,
+  normalizeRecord,
+} from './records.mjs';
 
 const POSTS_RELATIVE_PATH = 'src/content/posts/feishu';
 const MEDIA_RELATIVE_PATH = 'public/media/feishu';
@@ -60,6 +63,7 @@ export const PUBLIC_SYNC_FAILURE_PHASES = Object.freeze({
   replace: '发布文件替换',
 });
 const syncFailurePhase = new WeakMap();
+const recordValidationFields = new WeakMap();
 
 async function inSyncPhase(phase, operation) {
   try {
@@ -135,7 +139,15 @@ export function publicSyncFailureMessage(error) {
       ? candidate
       : undefined;
   if (phase !== undefined) {
-    return `飞书同步失败 [${phase}: ${PUBLIC_SYNC_FAILURE_PHASES[phase]}]：错误详情已脱敏，请重试。`;
+    const fields =
+      phase === 'records-validate' && error instanceof Error
+        ? recordValidationFields.get(error)
+        : undefined;
+    const fieldDetail =
+      Array.isArray(fields) && fields.length > 0
+        ? `; field: ${fields.join(',')}`
+        : '';
+    return `飞书同步失败 [${phase}: ${PUBLIC_SYNC_FAILURE_PHASES[phase]}${fieldDetail}]：错误详情已脱敏，请重试。`;
   }
   return '飞书同步失败：错误详情已脱敏。请检查飞书应用权限、博客文章字段和文档内容后重试。';
 }
@@ -147,6 +159,7 @@ function normalizePublishedRecords(items) {
 
   const records = [];
   const issues = [];
+  const publicFields = new Set();
   for (const [index, item] of items.entries()) {
     try {
       const record = normalizeRecord(item);
@@ -157,6 +170,10 @@ function normalizePublishedRecords(items) {
       }
       records.push(record);
     } catch (error) {
+      const publicField = getPublicRecordFieldName(error);
+      if (publicField !== undefined) {
+        publicFields.add(publicField);
+      }
       const recordId =
         typeof item?.record_id === 'string' && item.record_id.length > 0
           ? item.record_id
@@ -187,7 +204,11 @@ function normalizePublishedRecords(items) {
   }
 
   if (issues.length > 0) {
-    throw new Error(`Invalid Feishu publishing records:\n${issues.map((item) => `- ${item}`).join('\n')}`);
+    const error = new Error(`Invalid Feishu publishing records:\n${issues.map((item) => `- ${item}`).join('\n')}`);
+    if (publicFields.size > 0) {
+      recordValidationFields.set(error, [...publicFields]);
+    }
+    throw error;
   }
   return records.sort(
     (first, second) =>

@@ -4,9 +4,32 @@ const PUBLISHING_STATUSES = new Set(['草稿', '已发布', '已下线']);
 const FILE_TOKEN = /^[A-Za-z0-9_-]+$/;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+const PUBLIC_RECORD_FIELDS = new Set([
+  '标题',
+  '文档链接',
+  '精选',
+  '状态',
+  '标签',
+  '分类',
+  '专栏序号',
+  '专栏',
+  '摘要',
+  'Slug',
+  '封面',
+  '发布日期',
+]);
+const publicFieldByError = new WeakMap();
 
 function fieldError(recordId, fieldName, detail) {
-  return new Error(`record_id=${recordId} 的字段「${fieldName}」${detail}`);
+  const error = new Error(`record_id=${recordId} 的字段「${fieldName}」${detail}`);
+  if (PUBLIC_RECORD_FIELDS.has(fieldName)) {
+    publicFieldByError.set(error, fieldName);
+  }
+  return error;
+}
+
+export function getPublicRecordFieldName(error) {
+  return error instanceof Error ? publicFieldByError.get(error) : undefined;
 }
 
 function requireRecordId(value) {
