@@ -456,7 +456,7 @@ export function buildRelatedPosts<T extends RelatedPostEntry>(
         href,
         title: post.data.title,
         description: post.data.description,
-        pubDate: post.data.pubDate,
+        pubDate: new Date(post.data.pubDate.getTime()),
         category: post.data.category,
         ...(post.data.column === undefined
           ? {}

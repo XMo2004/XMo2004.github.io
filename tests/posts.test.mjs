@@ -178,6 +178,10 @@ test('buildSeriesNavigation uses validated column data', () => {
 
 test('buildRelatedPosts excludes public hrefs and returns public metadata only', () => {
   const originalIds = discoveryPosts.map(({ id }) => id);
+  const sourceCandidate = discoveryPosts.find(
+    ({ id }) => id === 'manual/same-category.md',
+  );
+  const originalPubDate = sourceCandidate.data.pubDate.getTime();
   const related = buildRelatedPosts(discoveryPosts, 'manual/column-two.md', {
     excludeHrefs: new Set([
       '/posts/column-one/',
@@ -197,6 +201,10 @@ test('buildRelatedPosts excludes public hrefs and returns public metadata only',
     },
   ]);
   assert.deepEqual(discoveryPosts.map(({ id }) => id), originalIds);
+  assert.notStrictEqual(related[0].pubDate, sourceCandidate.data.pubDate);
+
+  related[0].pubDate.setTime(originalPubDate + 1);
+  assert.equal(sourceCandidate.data.pubDate.getTime(), originalPubDate);
 });
 
 test('related ranking combines canonical column, category, and unique shared tags', () => {
