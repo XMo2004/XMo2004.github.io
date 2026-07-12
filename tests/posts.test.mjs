@@ -353,8 +353,15 @@ test('buildColumnIndex throws when different canonical labels map to one route s
   );
 });
 
-test('buildColumnIndex rejects missing and non-positive-integer column orders', () => {
-  const invalidOrders = [undefined, 0, -1, 1.5, '1'];
+test('buildColumnIndex rejects missing and non-positive-safe-integer column orders', () => {
+  const invalidOrders = [
+    undefined,
+    0,
+    -1,
+    1.5,
+    '1',
+    Number.MAX_SAFE_INTEGER + 1,
+  ];
 
   for (const [index, columnOrder] of invalidOrders.entries()) {
     const post = {

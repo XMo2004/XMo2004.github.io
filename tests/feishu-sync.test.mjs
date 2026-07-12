@@ -151,7 +151,7 @@ async function makeRoot(t) {
   await mkdir(join(root, 'public/media/feishu'), { recursive: true });
   await writeFile(
     join(root, 'src/content/posts/manual/welcome.md'),
-    `---\ntitle: Welcome\ndescription: Manual\npubDate: 2026-07-12\nslug: welcome\n---\n\nManual post.\n`,
+    `---\ntitle: Welcome\ndescription: Manual\npubDate: 2026-07-12\nslug: welcome\ncategory: 随笔\ncolumn: 博客搭建手记\ncolumnOrder: 1\n---\n\nManual post.\n`,
   );
   await writeFile(join(root, 'src/content/posts/feishu/.gitkeep'), '');
   await writeFile(join(root, 'public/media/feishu/.gitkeep'), '');
@@ -644,6 +644,141 @@ test('a generated slug may not collide with a manual post route', async (t) => {
     /welcome.*manual|manual.*welcome/i,
   );
   assert.deepEqual(calls.documents, []);
+});
+
+test('a duplicate column order across manual and generated posts fails before document reads or replacement', async (t) => {
+  const root = await makeRoot(t);
+  const first = stableClient();
+  await syncFeishu({
+    root,
+    client: first.client,
+    appToken: APP_TOKEN,
+    tableId: TABLE_ID,
+  });
+  const before = await generatedSnapshot(root);
+
+  const second = stableClient({
+    records: [publishedRecord({ fields: { 专栏序号: 1 } })],
+  });
+  await assert.rejects(
+    () =>
+      syncFeishu({
+        root,
+        client: second.client,
+        appToken: APP_TOKEN,
+        tableId: TABLE_ID,
+      }),
+    (error) => {
+      assert.match(error.message, /博客搭建手记/);
+      assert.match(error.message, /duplicate.*order.*1/i);
+      assert.match(error.message, /manual\/welcome\.md/);
+      assert.match(error.message, /feishu\/first-post\.md/);
+      return true;
+    },
+  );
+  assert.deepEqual(second.calls.documents, []);
+  assert.deepEqual(await generatedSnapshot(root), before);
+});
+
+test('a category route collision across manual and generated posts fails before document reads or replacement', async (t) => {
+  const root = await makeRoot(t);
+  const first = stableClient();
+  await syncFeishu({
+    root,
+    client: first.client,
+    appToken: APP_TOKEN,
+    tableId: TABLE_ID,
+  });
+  const before = await generatedSnapshot(root);
+  const manualPath = join(root, 'src/content/posts/manual/welcome.md');
+  const manualSource = await readFile(manualPath, 'utf8');
+  await writeFile(manualPath, manualSource.replace('category: 随笔', 'category: A B'));
+
+  const second = stableClient({
+    records: [publishedRecord({ fields: { 分类: 'a-b' } })],
+  });
+  await assert.rejects(
+    () =>
+      syncFeishu({
+        root,
+        client: second.client,
+        appToken: APP_TOKEN,
+        tableId: TABLE_ID,
+      }),
+    (error) => {
+      assert.match(error.message, /Category route collision/i);
+      assert.match(error.message, /A B/);
+      assert.match(error.message, /a-b/);
+      assert.match(error.message, /manual\/welcome\.md/);
+      assert.match(error.message, /feishu\/first-post\.md/);
+      return true;
+    },
+  );
+  assert.deepEqual(second.calls.documents, []);
+  assert.deepEqual(await generatedSnapshot(root), before);
+});
+
+test('missing manual taxonomy fails safely before document reads or replacement', async (t) => {
+  const root = await makeRoot(t);
+  const first = stableClient();
+  await syncFeishu({
+    root,
+    client: first.client,
+    appToken: APP_TOKEN,
+    tableId: TABLE_ID,
+  });
+  const before = await generatedSnapshot(root);
+  const manualPath = join(root, 'src/content/posts/manual/welcome.md');
+  const manualSource = await readFile(manualPath, 'utf8');
+  await writeFile(manualPath, manualSource.replace('category: 随笔\n', ''));
+
+  const second = stableClient();
+  await assert.rejects(
+    () =>
+      syncFeishu({
+        root,
+        client: second.client,
+        appToken: APP_TOKEN,
+        tableId: TABLE_ID,
+      }),
+    /Category.*manual\/welcome\.md/i,
+  );
+  assert.deepEqual(second.calls.documents, []);
+  assert.deepEqual(await generatedSnapshot(root), before);
+});
+
+test('explicit null manual column fields fail before document reads or replacement', async (t) => {
+  const root = await makeRoot(t);
+  const first = stableClient();
+  await syncFeishu({
+    root,
+    client: first.client,
+    appToken: APP_TOKEN,
+    tableId: TABLE_ID,
+  });
+  const before = await generatedSnapshot(root);
+  const manualPath = join(root, 'src/content/posts/manual/welcome.md');
+  const manualSource = await readFile(manualPath, 'utf8');
+  await writeFile(
+    manualPath,
+    manualSource
+      .replace('column: 博客搭建手记', 'column:')
+      .replace('columnOrder: 1', 'columnOrder:'),
+  );
+
+  const second = stableClient();
+  await assert.rejects(
+    () =>
+      syncFeishu({
+        root,
+        client: second.client,
+        appToken: APP_TOKEN,
+        tableId: TABLE_ID,
+      }),
+    /Column.*manual\/welcome\.md/i,
+  );
+  assert.deepEqual(second.calls.documents, []);
+  assert.deepEqual(await generatedSnapshot(root), before);
 });
 
 test('a changing document is retried once and only the stable revision is written', async (t) => {

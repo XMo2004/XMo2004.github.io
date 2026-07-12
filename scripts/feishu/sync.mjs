@@ -16,6 +16,10 @@ import { pathToFileURL } from 'node:url';
 
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 
+import {
+  validateCategoryEntries,
+  validateColumnEntries,
+} from '../../src/lib/taxonomy.mjs';
 import { contentAddressedMedia } from './assets.mjs';
 import { blocksToMarkdown } from './blocks.mjs';
 import { createFeishuClientFromEnv } from './client.mjs';
@@ -188,10 +192,10 @@ async function markdownFiles(directory) {
   return files.sort((first, second) => first.localeCompare(second, 'en'));
 }
 
-async function manualPostSlugs(root) {
+async function manualPostMetadata(root) {
   const postsRoot = join(root, 'src/content/posts');
   const generatedRoot = join(postsRoot, 'feishu');
-  const result = new Map();
+  const posts = [];
 
   for (const file of await markdownFiles(postsRoot)) {
     if (file === generatedRoot || file.startsWith(`${generatedRoot}${sep}`)) {
@@ -199,38 +203,86 @@ async function manualPostSlugs(root) {
     }
     const source = await readFile(file, 'utf8');
     const frontmatter = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(source);
-    let explicitSlug;
+    const id = relative(postsRoot, file).split(sep).join('/');
+    let metadata = {};
     if (frontmatter !== null) {
-      const metadata = parseYaml(frontmatter[1]);
-      if (
-        metadata !== null &&
-        typeof metadata === 'object' &&
-        typeof metadata.slug === 'string' &&
-        metadata.slug.length > 0
-      ) {
-        explicitSlug = metadata.slug;
+      let parsed;
+      try {
+        parsed = parseYaml(frontmatter[1]);
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `Manual post "${id}" has invalid YAML frontmatter: ${detail}`,
+        );
       }
+      if (
+        parsed === null ||
+        typeof parsed !== 'object' ||
+        Array.isArray(parsed)
+      ) {
+        throw new Error(
+          `Manual post "${id}" frontmatter must be a YAML mapping.`,
+        );
+      }
+      metadata = parsed;
+    }
+
+    let explicitSlug;
+    if (
+      typeof metadata.slug === 'string' &&
+      metadata.slug.length > 0
+    ) {
+      explicitSlug = metadata.slug;
     }
     const fallback = basename(file, extname(file));
-    result.set(explicitSlug ?? fallback, relative(root, file));
+    posts.push({
+      id,
+      file: relative(root, file),
+      slug: explicitSlug ?? fallback,
+      category: metadata.category,
+      column: metadata.column,
+      columnOrder: metadata.columnOrder,
+    });
   }
-  return result;
+  return posts;
 }
 
-async function rejectManualSlugCollisions(root, records) {
-  const manualSlugs = await manualPostSlugs(root);
+function rejectManualSlugCollisions(manualPosts, records) {
+  const manualPostBySlug = new Map(
+    manualPosts.map((post) => [post.slug, post]),
+  );
   const issues = [];
   for (const record of records) {
-    const manualFile = manualSlugs.get(record.slug);
-    if (manualFile !== undefined) {
+    const manualPost = manualPostBySlug.get(record.slug);
+    if (manualPost !== undefined) {
       issues.push(
-        `Generated slug "${record.slug}" for record "${record.recordId}" collides with manual post "${manualFile}".`,
+        `Generated slug "${record.slug}" for record "${record.recordId}" collides with manual post "${manualPost.file}".`,
       );
     }
   }
   if (issues.length > 0) {
     throw new Error(`Manual post route collisions:\n${issues.map((item) => `- ${item}`).join('\n')}`);
   }
+}
+
+function validateNextTaxonomy(manualPosts, records) {
+  const entries = [
+    ...manualPosts.map(({ id, category, column, columnOrder }) => ({
+      id,
+      category,
+      column,
+      columnOrder,
+    })),
+    ...records.map((record) => ({
+      id: `feishu/${record.slug}.md`,
+      category: record.category,
+      column: record.column ?? undefined,
+      columnOrder: record.columnOrder ?? undefined,
+    })),
+  ];
+
+  validateCategoryEntries(entries);
+  validateColumnEntries(entries);
 }
 
 function validateDocumentMetadata(document, record) {
@@ -753,7 +805,9 @@ export async function syncFeishu({
   const records = normalizePublishedRecords(
     await client.listPublishedRecords(appToken, tableId),
   );
-  await rejectManualSlugCollisions(workspaceRoot, records);
+  const manualPosts = await manualPostMetadata(workspaceRoot);
+  rejectManualSlugCollisions(manualPosts, records);
+  validateNextTaxonomy(manualPosts, records);
   const next = await buildNextState(client, records);
   const manifest = buildFeishuManifest(next.articles);
   const stage = await writeStage({ ...next, manifest });

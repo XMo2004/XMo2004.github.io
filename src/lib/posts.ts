@@ -1,7 +1,14 @@
+import {
+  canonicalizeTaxonomyLabel,
+  getTaxonomyLabel,
+  normalizeTaxonomySlug,
+  validateCategoryEntries,
+  validateColumnEntries,
+} from './taxonomy.mjs';
+
 const CHINESE_CHARACTERS_PER_MINUTE = 450;
 const ENGLISH_WORDS_PER_MINUTE = 220;
 const TRUSTED_FEISHU_DOMAINS = ['feishu.cn', 'larksuite.com'] as const;
-const UTF8_ENCODER = new TextEncoder();
 
 interface PostRouteEntry {
   id: string;
@@ -25,6 +32,7 @@ interface TaggedPostEntry {
 }
 
 export interface CategorizedPostEntry {
+  id: string;
   data: {
     category: string;
     pubDate: Date;
@@ -119,24 +127,8 @@ export function isTrustedFeishuUrl(value: string): boolean {
   }
 }
 
-function canonicalizeTag(tag: string): string {
-  return tag.trim().normalize('NFKC').toLowerCase();
-}
-
-function getTagLabel(tag: string): string {
-  return tag.trim().normalize('NFKC');
-}
-
-function fnv1aHash(value: string): string {
-  let hash = 0x811c9dc5;
-
-  for (const byte of UTF8_ENCODER.encode(value)) {
-    hash ^= byte;
-    hash = Math.imul(hash, 0x01000193) >>> 0;
-  }
-
-  return hash.toString(16).padStart(8, '0');
-}
+const canonicalizeTag = canonicalizeTaxonomyLabel;
+const getTagLabel = getTaxonomyLabel;
 
 export function estimateReadingMinutes(content: string): number {
   const chineseCharacterCount = content.match(/\p{Script=Han}/gu)?.length ?? 0;
@@ -149,21 +141,7 @@ export function estimateReadingMinutes(content: string): number {
 }
 
 export function normalizeTag(tag: string): string {
-  const canonicalTag = canonicalizeTag(tag);
-  const base = canonicalTag
-    .replace(/[^\p{Letter}\p{Number}]+/gu, '-')
-    .replace(/^-+|-+$/g, '');
-  const hash = fnv1aHash(canonicalTag);
-
-  if (!base) {
-    return `tag-${hash}`;
-  }
-
-  if (/[^\p{Letter}\p{Number}\s-]/u.test(canonicalTag)) {
-    return `${base}-${hash}`;
-  }
-
-  return base;
+  return normalizeTaxonomySlug(tag);
 }
 
 export interface TagSlugCollision {
@@ -246,25 +224,18 @@ export function buildTagIndex<T extends TaggedPostEntry>(
 export function buildCategoryIndex<T extends CategorizedPostEntry>(
   posts: readonly T[],
 ): CategoryIndexEntry<T>[] {
+  validateCategoryEntries(
+    posts.map((post) => ({
+      id: post.id,
+      category: post.data.category,
+    })),
+  );
   const categoryByCanonicalLabel = new Map<string, CategoryIndexEntry<T>>();
-  const canonicalLabelBySlug = new Map<string, string>();
 
   for (const post of sortNewestFirst(posts)) {
     const category = post.data.category;
     const canonicalCategory = canonicalizeTag(category);
     const slug = normalizeTag(category);
-    const canonicalLabelForSlug = canonicalLabelBySlug.get(slug);
-
-    if (
-      canonicalLabelForSlug !== undefined &&
-      canonicalLabelForSlug !== canonicalCategory
-    ) {
-      throw new Error(
-        `Category route collision for slug "${slug}": canonical labels "${canonicalLabelForSlug}" and "${canonicalCategory}".`,
-      );
-    }
-
-    canonicalLabelBySlug.set(slug, canonicalCategory);
 
     let categoryEntry = categoryByCanonicalLabel.get(canonicalCategory);
     if (categoryEntry === undefined) {
@@ -286,72 +257,27 @@ export function buildCategoryIndex<T extends CategorizedPostEntry>(
   );
 }
 
-function getPositiveColumnOrder(post: ColumnPostEntry): number {
-  const { columnOrder } = post.data;
-
-  if (!Number.isInteger(columnOrder) || (columnOrder ?? 0) <= 0) {
-    throw new Error(
-      `Column order must be a positive integer for entry "${post.id}".`,
-    );
-  }
-
-  return columnOrder as number;
-}
-
 export function buildColumnIndex<T extends ColumnPostEntry>(
   posts: readonly T[],
 ): ColumnIndexEntry<T>[] {
+  validateColumnEntries(
+    posts.map((post) => ({
+      id: post.id,
+      column: post.data.column,
+      columnOrder: post.data.columnOrder,
+    })),
+  );
   const columnByCanonicalLabel = new Map<string, ColumnIndexEntry<T>>();
-  const canonicalLabelBySlug = new Map<string, string>();
-  const postIdByOrderByCanonicalColumn = new Map<
-    string,
-    Map<number, string>
-  >();
 
   for (const post of posts) {
-    const { column, columnOrder } = post.data;
+    const { column } = post.data;
 
     if (column === undefined) {
-      if (columnOrder !== undefined) {
-        throw new Error(
-          `Column order ${columnOrder} exists without a column for entry "${post.id}".`,
-        );
-      }
-
       continue;
     }
 
-    const positiveColumnOrder = getPositiveColumnOrder(post);
     const canonicalColumn = canonicalizeTag(column);
     const slug = normalizeTag(column);
-    const canonicalLabelForSlug = canonicalLabelBySlug.get(slug);
-
-    if (
-      canonicalLabelForSlug !== undefined &&
-      canonicalLabelForSlug !== canonicalColumn
-    ) {
-      throw new Error(
-        `Column route collision for slug "${slug}": canonical labels "${canonicalLabelForSlug}" and "${canonicalColumn}".`,
-      );
-    }
-
-    canonicalLabelBySlug.set(slug, canonicalColumn);
-
-    let postIdByOrder =
-      postIdByOrderByCanonicalColumn.get(canonicalColumn);
-    if (postIdByOrder === undefined) {
-      postIdByOrder = new Map<number, string>();
-      postIdByOrderByCanonicalColumn.set(canonicalColumn, postIdByOrder);
-    }
-
-    const firstPostId = postIdByOrder.get(positiveColumnOrder);
-    if (firstPostId !== undefined) {
-      throw new Error(
-        `Column "${getTagLabel(column)}" has duplicate order ${positiveColumnOrder} for entries "${firstPostId}" and "${post.id}".`,
-      );
-    }
-
-    postIdByOrder.set(positiveColumnOrder, post.id);
 
     let columnEntry = columnByCanonicalLabel.get(canonicalColumn);
     if (columnEntry === undefined) {
