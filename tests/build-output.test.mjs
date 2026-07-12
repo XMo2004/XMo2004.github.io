@@ -41,6 +41,15 @@ async function readOutput(relativePath) {
   return readFile(new URL(relativePath, distRoot), 'utf8');
 }
 
+function readJsonLd(html) {
+  const match = html.match(
+    /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/,
+  );
+
+  assert.ok(match, 'page should include JSON-LD');
+  return JSON.parse(match[1]);
+}
+
 before(runCleanBuild);
 
 test('clean build emits every public entry point as a non-empty file', async () => {
@@ -72,16 +81,45 @@ test('clean build emits every public entry point as a non-empty file', async () 
   }
 });
 
-test('article output has canonical metadata, safe BlogPosting data, and article content', async () => {
+test('article output has canonical metadata, safe BlogPosting data, taxonomy links, and article content', async () => {
   const articleHtml = await readOutput('posts/welcome/index.html');
+  const jsonLd = readJsonLd(articleHtml);
 
   assert.match(
     articleHtml,
     /<link rel="canonical" href="https:\/\/xmo2004\.github\.io\/posts\/welcome\/">/,
   );
-  assert.match(articleHtml, /"@type":"BlogPosting"/);
+  assert.equal(jsonLd['@type'], 'BlogPosting');
+  assert.equal(jsonLd.articleSection, '随笔');
+  assert.deepEqual(jsonLd.isPartOf, {
+    '@type': 'CollectionPage',
+    name: '博客搭建手记',
+    url: new URL(
+      `/columns/${normalizeTag('博客搭建手记')}/`,
+      'https://xmo2004.github.io',
+    ).href,
+  });
+  assert.ok(
+    articleHtml.includes(`href="/categories/${normalizeTag('随笔')}/"`),
+  );
+  assert.ok(
+    articleHtml.includes(
+      `href="/columns/${normalizeTag('博客搭建手记')}/"`,
+    ),
+  );
   assert.match(articleHtml, /<article\b/);
   assert.match(articleHtml, /欢迎来到小陌的博客/);
+});
+
+test('article output omits both contents variants for a lone body h1', async () => {
+  const articleHtml = await readOutput(
+    'posts/published-from-feishu/index.html',
+  );
+
+  assert.doesNotMatch(articleHtml, /<aside class="post-toc post-toc--desktop"/);
+  assert.doesNotMatch(articleHtml, /<details class="post-toc-compact"/);
+  assert.doesNotMatch(articleHtml, /post-layout--with-toc/);
+  assert.doesNotMatch(articleHtml, /<summary>本页目录<\/summary>/);
 });
 
 test('RSS identifies the site and links to the published article URL', async () => {

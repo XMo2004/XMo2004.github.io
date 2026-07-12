@@ -291,6 +291,64 @@ test('PostLayout renders only the article extras supplied by a caller', async ()
   assert.doesNotMatch(source, /sourceUrl|在飞书查看源文/);
 });
 
+test('article routes pass taxonomy data through to PostLayout', async () => {
+  const source = await readSource('src/pages/posts/[...id].astro');
+
+  assert.match(source, /category=\{post\.data\.category\}/);
+  assert.match(source, /column=\{post\.data\.column\}/);
+  assert.match(source, /columnOrder=\{post\.data\.columnOrder\}/);
+});
+
+test('PostLayout renders linked article taxonomy without nesting links', async () => {
+  const source = await readSource('src/layouts/PostLayout.astro');
+
+  assert.match(
+    source,
+    /interface Props\s*\{[\s\S]*category:\s*string;[\s\S]*column\?:\s*string;[\s\S]*columnOrder\?:\s*number;/,
+  );
+  assert.match(source, /getCategoryHref/);
+  assert.match(source, /getColumnHref/);
+  assert.match(source, /href=\{getCategoryHref\(category\)\}/);
+  assert.match(source, /href=\{getColumnHref\(column\)\}/);
+  assert.match(source, /padStart\(2,\s*['"]0['"]\)/);
+  assert.match(source, /aria-label=["']文章分类与标签["']/);
+  assert.match(source, /<TagList\s+tags=\{tags\}\s+compact\s*\/>/);
+});
+
+test('PostLayout derives both adaptive contents views from filtered h2 through h4 headings', async () => {
+  const source = await readSource('src/layouts/PostLayout.astro');
+
+  assert.match(
+    source,
+    /const tableOfContents\s*=\s*headings\.filter\(\s*\(heading\)\s*=>\s*heading\.depth\s*>=\s*2\s*&&\s*heading\.depth\s*<=\s*4\s*,?\s*\);/,
+  );
+  assert.match(
+    source,
+    /const hasTableOfContents\s*=\s*tableOfContents\.length\s*>=\s*2;/,
+  );
+  assert.match(
+    source,
+    /<aside\s+class=["']post-toc post-toc--desktop["']/,
+  );
+  assert.match(source, /<details\s+class=["']post-toc-compact["']/);
+  assert.match(source, /<summary>本页目录<\/summary>/);
+  assert.equal(
+    source.match(/tableOfContents\.map/g)?.length,
+    2,
+    'desktop and compact contents should map the same filtered headings',
+  );
+  assert.doesNotMatch(source, /headings\.map/);
+  assert.match(
+    source,
+    /hasTableOfContents\s*&&\s*['"]post-layout--with-toc['"]/,
+  );
+  assert.ok(
+    source.indexOf('<details class="post-toc-compact"') <
+      source.indexOf('<div class="prose">'),
+    'compact contents should appear before the article body',
+  );
+});
+
 test('article layouts opt into safe BlogPosting metadata only when supplied', async () => {
   const [baseSource, postSource] = await Promise.all([
     readSource('src/layouts/BaseLayout.astro'),
@@ -305,6 +363,14 @@ test('article layouts opt into safe BlogPosting metadata only when supplied', as
   assert.match(postSource, /datePublished/);
   assert.match(postSource, /dateModified/);
   assert.match(postSource, /mainEntityOfPage/);
+  assert.match(postSource, /articleSection:\s*category/);
+  assert.match(postSource, /isPartOf/);
+  assert.match(postSource, /['"]@type['"]:\s*['"]CollectionPage['"]/);
+  assert.match(postSource, /name:\s*column/);
+  assert.match(
+    postSource,
+    /new URL\(getColumnHref\(column\),\s*SITE\.canonicalOrigin\)\.href/,
+  );
 });
 
 test('article and tag routes are driven by the real content collection', async () => {

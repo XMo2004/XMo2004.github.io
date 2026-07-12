@@ -1,6 +1,7 @@
 ---
 import TagList from '../components/TagList.astro';
 import { SITE } from '../config/site';
+import { getCategoryHref, getColumnHref } from '../lib/posts';
 import BaseLayout from './BaseLayout.astro';
 
 interface ArticleHeading {
@@ -20,6 +21,9 @@ interface Props {
   canonicalPath: string;
   pubDate: Date;
   updatedDate?: Date;
+  category: string;
+  column?: string;
+  columnOrder?: number;
   tags?: readonly string[];
   readingMinutes?: number;
   headings?: readonly ArticleHeading[];
@@ -33,6 +37,9 @@ const {
   canonicalPath,
   pubDate,
   updatedDate,
+  category,
+  column,
+  columnOrder,
   tags = [],
   readingMinutes,
   headings = [],
@@ -45,7 +52,13 @@ const dateFormatter = new Intl.DateTimeFormat('zh-CN', {
   month: 'long',
   day: 'numeric',
 });
-const hasTableOfContents = headings.length > 0;
+const displayColumnOrder = columnOrder === undefined
+  ? undefined
+  : String(columnOrder).padStart(2, '0');
+const tableOfContents = headings.filter(
+  (heading) => heading.depth >= 2 && heading.depth <= 4,
+);
+const hasTableOfContents = tableOfContents.length >= 2;
 const hasAdjacentPosts = previous !== undefined || next !== undefined;
 const canonicalUrl = new URL(canonicalPath, SITE.canonicalOrigin).href;
 const jsonLd = {
@@ -53,6 +66,7 @@ const jsonLd = {
   '@type': 'BlogPosting',
   headline: title,
   description,
+  articleSection: category,
   datePublished: pubDate.toISOString(),
   dateModified: (updatedDate ?? pubDate).toISOString(),
   author: {
@@ -63,6 +77,13 @@ const jsonLd = {
     '@type': 'WebPage',
     '@id': canonicalUrl,
   },
+  isPartOf: column === undefined
+    ? undefined
+    : {
+        '@type': 'CollectionPage',
+        name: column,
+        url: new URL(getColumnHref(column), SITE.canonicalOrigin).href,
+      },
 };
 ---
 
@@ -107,7 +128,20 @@ const jsonLd = {
 
       </dl>
 
-      {tags.length > 0 && <TagList tags={tags} compact />}
+      <nav class="post-header__taxonomies" aria-label="文章分类与标签">
+        <a class="post-header__category" href={getCategoryHref(category)}>
+          {category}
+        </a>
+
+        {column !== undefined && displayColumnOrder !== undefined && (
+          <a class="post-header__column" href={getColumnHref(column)}>
+            <span aria-label={`专栏第 ${columnOrder} 篇`}>{displayColumnOrder}</span>
+            <span>{column}</span>
+          </a>
+        )}
+
+        <TagList tags={tags} compact />
+      </nav>
     </header>
 
     <div
@@ -117,11 +151,14 @@ const jsonLd = {
       ]}
     >
       {hasTableOfContents && (
-        <aside class="post-toc" aria-labelledby="post-toc-title">
+        <aside
+          class="post-toc post-toc--desktop"
+          aria-labelledby="post-toc-title"
+        >
           <p id="post-toc-title">目录</p>
           <nav aria-label="文章目录">
             <ol>
-              {headings.map((heading) => (
+              {tableOfContents.map((heading) => (
                 <li class={`post-toc__depth-${heading.depth}`}>
                   <a href={`#${heading.slug}`}>{heading.text}</a>
                 </li>
@@ -132,6 +169,21 @@ const jsonLd = {
       )}
 
       <div class="post-layout__content">
+        {hasTableOfContents && (
+          <details class="post-toc-compact">
+            <summary>本页目录</summary>
+            <nav aria-label="折叠文章目录">
+              <ol>
+                {tableOfContents.map((heading) => (
+                  <li class={`post-toc__depth-${heading.depth}`}>
+                    <a href={`#${heading.slug}`}>{heading.text}</a>
+                  </li>
+                ))}
+              </ol>
+            </nav>
+          </details>
+        )}
+
         <div class="prose"><slot /></div>
 
         {hasAdjacentPosts && (
