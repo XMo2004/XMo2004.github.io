@@ -164,6 +164,7 @@ test('normalizeRecord handles string Bitable values and defaults optional fields
       标签: [' 技术 ', '', '技术', ' Astro '],
       分类: '  技术  ',
       专栏: '  博客搭建手记  ',
+      专栏序号: '2',
       发布日期: '2026-07-12T00:00:00.000Z',
       状态: '草稿',
       精选: undefined,
@@ -280,12 +281,16 @@ test('normalizeRecord requires column and column order to be provided together',
   assertRecordError(validFields({ 专栏: undefined }), '专栏');
 });
 
-test('normalizeRecord accepts only positive safe integer column orders without coercion', () => {
+test('normalizeRecord rejects non-canonical and unsafe column order values', () => {
   for (const value of [
     0,
     -1,
     1.5,
-    '2',
+    '02',
+    '2.0',
+    ' 2 ',
+    '2e0',
+    String(Number.MAX_SAFE_INTEGER + 1),
     Number.MAX_SAFE_INTEGER + 1,
   ]) {
     assertRecordError(validFields({ 专栏序号: value }), '专栏序号');

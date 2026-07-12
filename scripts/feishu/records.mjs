@@ -203,7 +203,12 @@ function normalizeColumnOrder(value, recordId) {
   if (value == null) {
     return null;
   }
-  if (!Number.isSafeInteger(value) || value <= 0) {
+  // Feishu can serialize a Number cell as canonical decimal text in record responses.
+  const normalized =
+    typeof value === 'string' && /^[1-9]\d*$/.test(value)
+      ? Number(value)
+      : value;
+  if (!Number.isSafeInteger(normalized) || normalized <= 0) {
     throw fieldError(
       recordId,
       '专栏序号',
@@ -212,7 +217,7 @@ function normalizeColumnOrder(value, recordId) {
       publicValueShape(value),
     );
   }
-  return value;
+  return normalized;
 }
 
 function normalizeDate(value, recordId) {

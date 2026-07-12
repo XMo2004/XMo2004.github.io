@@ -329,7 +329,7 @@ test('public sync diagnostics map each synchronization boundary to a stable allo
     await publicMessageForRejectedSync({
       root: recordsRuleRoot,
       client: stableClient({
-        records: [publishedRecord({ fields: { 专栏序号: '2' } })],
+        records: [publishedRecord({ fields: { 专栏序号: '2.0' } })],
       }).client,
       appToken: APP_TOKEN,
       tableId: TABLE_ID,
@@ -399,7 +399,9 @@ test('public sync diagnostics map each synchronization boundary to a stable allo
 
 test('sync creates valid Markdown, localized media, and a deterministic manifest', async (t) => {
   const root = await makeRoot(t);
-  const { client, calls } = stableClient();
+  const { client, calls } = stableClient({
+    records: [publishedRecord({ fields: { 专栏序号: '2' } })],
+  });
 
   const result = await syncFeishu({
     root,
