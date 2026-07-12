@@ -55,7 +55,13 @@ test('converts supported Feishu text blocks to deterministic Markdown', () => {
   assert.match(first.markdown, /const fence = "```";/);
   assert.match(first.markdown, /^````$/m);
   assert.match(first.markdown, /^---$/m);
-  assert.match(first.markdown, /!\[图片\]\(feishu-media:\/\/img_v2_example\)/);
+  assert.equal(first.mediaReferences.length, 1);
+  assert.equal(first.mediaReferences[0].token, 'img_v2_example');
+  assert.match(
+    first.markdown,
+    new RegExp(`!\\[图片\\]\\(${first.mediaReferences[0].placeholder}\\)`),
+  );
+  assert.doesNotMatch(first.markdown, /feishu-media:\/\//);
   assert.match(first.markdown, /^\| 列 A \| 列 B \|$/m);
   assert.match(first.markdown, /^\| --- \| --- \|$/m);
   assert.match(first.markdown, /^\| 值 \\\| A \| \*\*值 B\*\* \|$/m);
@@ -189,6 +195,14 @@ test('detects cycles even when the cycle is orphaned from the page root', () => 
       assert.match(error.message, /orphan.*orphan-b/i);
       return true;
     },
+  );
+});
+
+test('rejects reserved structured media placeholder characters in author text', () => {
+  const block = textBlock('reserved-marker', 'page', '\uE000feishu-media:a\uE001');
+  assert.throws(
+    () => blocksToMarkdown(pageWith(['reserved-marker'], [block])),
+    /reserved-marker.*reserved media placeholder/i,
   );
 });
 

@@ -100,6 +100,12 @@ const CODE_LANGUAGES = new Map([
 const PLAIN_TEXT_CODE_FALLBACKS = new Set([21, 42, 45, 51, 59, 62]);
 
 const MEDIA_TOKEN = /^[A-Za-z0-9_-]+$/;
+const MEDIA_PLACEHOLDER_PREFIX = '\uE000feishu-media:';
+const MEDIA_PLACEHOLDER_SUFFIX = '\uE001';
+
+function mediaPlaceholder(token) {
+  return `${MEDIA_PLACEHOLDER_PREFIX}${token}${MEDIA_PLACEHOLDER_SUFFIX}`;
+}
 
 export class FeishuConversionError extends Error {
   constructor(issues) {
@@ -223,6 +229,19 @@ function validateRichElements(block, elements, issues) {
         ),
       );
       continue;
+    }
+
+    if (
+      textRun.content.includes(MEDIA_PLACEHOLDER_PREFIX) ||
+      textRun.content.includes(MEDIA_PLACEHOLDER_SUFFIX)
+    ) {
+      issues.push(
+        issue(
+          'reserved_media_placeholder',
+          `Block "${block.block_id}" contains reserved media placeholder characters.`,
+          block.block_id,
+        ),
+      );
     }
 
     const style = textRun.text_element_style;
@@ -750,6 +769,7 @@ export function blocksToMarkdown(items) {
   const warnings = [];
   const mediaTokens = [];
   const mediaTokenSet = new Set();
+  const mediaReferences = [];
 
   function renderBlock(blockId, indentation = '') {
     const block = blocks.get(blockId);
@@ -817,8 +837,12 @@ export function blocksToMarkdown(items) {
         if (!mediaTokenSet.has(token)) {
           mediaTokenSet.add(token);
           mediaTokens.push(token);
+          mediaReferences.push({ token, placeholder: mediaPlaceholder(token) });
         }
-        return indentBlock(`![图片](feishu-media://${token})`, indentation);
+        return indentBlock(
+          `![图片](${mediaPlaceholder(token)})`,
+          indentation,
+        );
       }
       case 31: {
         const { row_size: rowSize, column_size: columnSize } =
@@ -864,6 +888,7 @@ export function blocksToMarkdown(items) {
   return {
     markdown: markdown ? `${markdown}\n` : '',
     mediaTokens,
+    mediaReferences,
     warnings,
   };
 }
