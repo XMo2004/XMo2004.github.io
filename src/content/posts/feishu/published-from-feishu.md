@@ -10,7 +10,19 @@ category: 技术
 column: 博客搭建手记
 columnOrder: 2
 featured: true
-cover: /media/feishu/118f522a0876e4faa18683a021e85237d173203d69a4053358909a18d5c18570.png
+cover:
+  src: /media/feishu/d6a88f2e58c2767b62b4798f24b2164beec324288297349d5cb55b8ef3e8b119.webp
+  width: 1440
+  height: 810
+  variants:
+    - src: /media/feishu/c6cb4ab81b2505f627b7ec18059e89e9f1405454ff52c740c725d52857f9daf9.webp
+      width: 320
+    - src: /media/feishu/5055d08e263f17ba8160ab7c73014a9ddd8ce4b54ae1c80e01df79586d6aef34.webp
+      width: 640
+    - src: /media/feishu/d1c90e7032d7776a6f5ac6977263b4f1237a6a7fc53c242cfafc5fe0e9cdfc42.webp
+      width: 960
+    - src: /media/feishu/d6a88f2e58c2767b62b4798f24b2164beec324288297349d5cb55b8ef3e8b119.webp
+      width: 1440
 slug: published-from-feishu
 ---
 

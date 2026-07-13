@@ -13,8 +13,20 @@
       "slug": "published-from-feishu",
       "assets": [
         {
-          "hash": "118f522a0876e4faa18683a021e85237d173203d69a4053358909a18d5c18570",
-          "filename": "118f522a0876e4faa18683a021e85237d173203d69a4053358909a18d5c18570.png"
+          "hash": "5055d08e263f17ba8160ab7c73014a9ddd8ce4b54ae1c80e01df79586d6aef34",
+          "filename": "5055d08e263f17ba8160ab7c73014a9ddd8ce4b54ae1c80e01df79586d6aef34.webp"
+        },
+        {
+          "hash": "c6cb4ab81b2505f627b7ec18059e89e9f1405454ff52c740c725d52857f9daf9",
+          "filename": "c6cb4ab81b2505f627b7ec18059e89e9f1405454ff52c740c725d52857f9daf9.webp"
+        },
+        {
+          "hash": "d1c90e7032d7776a6f5ac6977263b4f1237a6a7fc53c242cfafc5fe0e9cdfc42",
+          "filename": "d1c90e7032d7776a6f5ac6977263b4f1237a6a7fc53c242cfafc5fe0e9cdfc42.webp"
+        },
+        {
+          "hash": "d6a88f2e58c2767b62b4798f24b2164beec324288297349d5cb55b8ef3e8b119",
+          "filename": "d6a88f2e58c2767b62b4798f24b2164beec324288297349d5cb55b8ef3e8b119.webp"
         }
       ]
     }
