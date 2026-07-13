@@ -2,6 +2,14 @@
   "version": 2,
   "records": [
     {
+      "slug": "feishu-sync-safety",
+      "assets": []
+    },
+    {
+      "slug": "github-pages-maintenance",
+      "assets": []
+    },
+    {
       "slug": "published-from-feishu",
       "assets": [
         {
