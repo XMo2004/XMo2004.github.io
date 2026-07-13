@@ -883,6 +883,132 @@ test('post components use safe post and taxonomy routes', async () => {
   assert.match(tagListSource, /\/tags\//);
 });
 
+test('cover contract uses one responsive image without changing card or row layout', async () => {
+  const [coverSource, cardSource, rowSource, homeSource, styles] =
+    await Promise.all([
+      readSource('src/components/CoverImage.astro'),
+      readSource('src/components/PostCard.astro'),
+      readSource('src/components/PostRow.astro'),
+      readSource('src/pages/index.astro'),
+      readSource('src/styles/global.css'),
+    ]);
+  const frontmatterEnd = coverSource.indexOf('\n---', 3);
+  const coverTemplate = coverSource.slice(frontmatterEnd + 4).trim();
+
+  assert.match(
+    coverSource,
+    /import\s+type\s+\{\s*Cover\s*\}\s+from\s+['"]\.\.\/lib\/cover['"];?/,
+  );
+  assert.match(
+    coverSource,
+    /interface\s+Props\s*\{(?=[^}]*cover:\s*Cover;)(?=[^}]*sizes:\s*string;)(?=[^}]*priority\?:\s*boolean;)[^}]*\}/s,
+  );
+  assert.match(
+    coverSource,
+    /\{\s*cover,\s*sizes,\s*priority\s*=\s*false\s*\}\s*=\s*Astro\.props/,
+  );
+  assert.match(
+    coverSource,
+    /const\s+src\s*=\s*typeof\s+cover\s*===\s*['"]string['"]\s*\?\s*cover\s*:\s*cover\.src/,
+  );
+  assert.match(
+    coverSource,
+    /const\s+responsiveCover\s*=\s*typeof\s+cover\s*===\s*['"]string['"]\s*\?\s*undefined\s*:\s*cover/,
+  );
+  assert.match(
+    coverSource,
+    /const\s+srcset\s*=\s*responsiveCover\?\.variants\s*\.map\(\(variant\)\s*=>\s*`\$\{variant\.src\}\s+\$\{variant\.width\}w`\)\s*\.join\(['"],\s*['"]\)/s,
+  );
+  assert.match(
+    coverSource,
+    /const\s+responsiveSizes\s*=\s*responsiveCover\s*===\s*undefined\s*\?\s*undefined\s*:\s*sizes/,
+  );
+  assert.match(coverSource, /const\s+width\s*=\s*responsiveCover\?\.width/);
+  assert.match(coverSource, /const\s+height\s*=\s*responsiveCover\?\.height/);
+  assert.match(
+    coverSource,
+    /const\s+loading\s*=\s*priority\s*\?\s*['"]eager['"]\s*:\s*['"]lazy['"]/,
+  );
+  assert.match(
+    coverSource,
+    /const\s+fetchpriority\s*=\s*priority\s*\?\s*['"]high['"]\s*:\s*undefined/,
+  );
+  assert.doesNotMatch(coverSource, /\.(?:sort|toSorted)\(|new\s+Set\s*\(/);
+
+  assert.match(coverTemplate, /^<img\b[\s\S]*\/>$/);
+  assert.equal(coverTemplate.match(/<img\b/g)?.length, 1);
+  assert.doesNotMatch(coverTemplate, /<(?:picture|div|style|Image)\b/);
+  assert.match(coverTemplate, /\bsrc=\{src\}/);
+  assert.match(coverTemplate, /\bsrcset=\{srcset\}/);
+  assert.match(coverTemplate, /\bsizes=\{responsiveSizes\}/);
+  assert.match(coverTemplate, /\bwidth=\{width\}/);
+  assert.match(coverTemplate, /\bheight=\{height\}/);
+  assert.match(coverTemplate, /\balt=["']["']/);
+  assert.match(coverTemplate, /\bdecoding=["']async["']/);
+  assert.match(coverTemplate, /\bloading=\{loading\}/);
+  assert.match(coverTemplate, /\bfetchpriority=\{fetchpriority\}/);
+
+  assert.match(
+    cardSource,
+    /import\s+CoverImage\s+from\s+['"]\.\/CoverImage\.astro['"];?/,
+  );
+  assert.match(cardSource, /priority\?:\s*boolean/);
+  assert.match(
+    cardSource,
+    /\{\s*entry,\s*headingLevel\s*=\s*['"]h2['"],\s*priority\s*=\s*false\s*\}\s*=\s*Astro\.props/,
+  );
+  assert.match(cardSource, /\{cover\s*\?\s*\(/);
+  assert.match(
+    cardSource,
+    /<CoverImage\s+(?=[^>]*cover=\{cover\})(?=[^>]*sizes=["']\(max-width: 48rem\) calc\(100vw - 2rem\), 30rem["'])(?=[^>]*priority=\{priority\})[^>]*\/>/s,
+  );
+  assert.match(
+    homeSource,
+    /<PostCard\s+entry=\{featured\}\s+headingLevel=["']h3["']\s+priority\s*\/>/,
+  );
+
+  assert.match(
+    rowSource,
+    /import\s+CoverImage\s+from\s+['"]\.\/CoverImage\.astro['"];?/,
+  );
+  assert.match(rowSource, /\{cover\s*&&\s*\(/);
+  assert.match(rowSource, /['"]post-row--with-cover['"]:\s*cover\s*!==\s*undefined/);
+  assert.match(
+    rowSource,
+    /<CoverImage\s+(?=[^>]*cover=\{cover\})(?=[^>]*sizes=["']\(max-width: 30rem\) 1px, \(max-width: 48rem\) 5\.25rem, 7rem["'])[^>]*\/>/s,
+  );
+  assert.doesNotMatch(rowSource, /\b(?:loading|fetchpriority|priority)\s*=/);
+
+  assert.match(
+    styles,
+    /\.post-card__cover\s+img\s*\{(?=[^}]*width:\s*100%;)(?=[^}]*height:\s*100%;)(?=[^}]*object-fit:\s*cover;)[^}]*\}/s,
+  );
+  assert.match(
+    styles,
+    /\.post-row--with-cover\s*\{[^}]*grid-template-columns:\s*7rem\s+minmax\(0,\s*1fr\);[^}]*\}/s,
+  );
+  assert.match(
+    styles,
+    /\.post-row__cover\s*\{(?=[^}]*width:\s*7rem;)(?=[^}]*height:\s*6\.25rem;)[^}]*\}/s,
+  );
+  assert.match(
+    styles,
+    /\.post-row__cover\s+img\s*\{(?=[^}]*width:\s*100%;)(?=[^}]*height:\s*100%;)(?=[^}]*object-fit:\s*cover;)[^}]*\}/s,
+  );
+  assert.match(
+    styles,
+    /\.post-row:hover\s+\.post-row__cover\s+img\s*\{[^}]*transform:\s*scale\(1\.015\);[^}]*\}/s,
+  );
+  assert.match(
+    styles,
+    /@media\s*\(max-width:\s*48rem\)\s*\{[\s\S]*?\.post-row--with-cover\s*\{[^}]*grid-template-columns:\s*5\.25rem\s+minmax\(0,\s*1fr\);[^}]*\}[\s\S]*?\.post-row__cover\s*\{(?=[^}]*width:\s*5\.25rem;)(?=[^}]*height:\s*5\.75rem;)[^}]*\}/,
+  );
+  assert.match(
+    styles,
+    /@media\s*\(max-width:\s*30rem\)\s*\{[\s\S]*?\.post-row--with-cover\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);[^}]*\}[\s\S]*?\.post-row__cover\s*\{[^}]*display:\s*none;[^}]*\}/,
+  );
+});
+
 test('homepage and archive pages use dense real-content indexes and rows', async () => {
   const [homeSource, postsSource, tagSource] = await Promise.all([
     readSource('src/pages/index.astro'),
@@ -899,7 +1025,10 @@ test('homepage and archive pages use dense real-content indexes and rows', async
   assert.match(homeSource, /const\s+featured\s*=\s*posts\.find/);
   assert.match(homeSource, /post\s*!==\s*featured/);
   assert.match(homeSource, /slice\(0,\s*4\)/);
-  assert.match(homeSource, /<PostCard\s+entry=\{featured\}\s+headingLevel=["']h3["']/);
+  assert.match(
+    homeSource,
+    /<PostCard\s+entry=\{featured\}\s+headingLevel=["']h3["']\s+priority/,
+  );
   assert.match(homeSource, /<PostRow\s+entry=\{post\}\s+headingLevel=["']h3["']/);
   assert.match(homeSource, /aria-label=["']xmo 的博客["']/i);
   assert.match(homeSource, /aria-hidden=["']true["']/);

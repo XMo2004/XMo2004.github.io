@@ -1,6 +1,7 @@
 ---
 import type { CollectionEntry } from 'astro:content';
 
+import CoverImage from './CoverImage.astro';
 import {
   estimateReadingMinutes,
   getCategoryHref,
@@ -47,7 +48,10 @@ const displayColumnOrder = columnOrder === undefined
 <article class:list={['post-row', { 'post-row--with-cover': cover !== undefined }]}>
   {cover && (
     <div class="post-row__cover" aria-hidden="true">
-      <img src={cover} alt="" loading="lazy" decoding="async" />
+      <CoverImage
+        cover={cover}
+        sizes="(max-width: 30rem) 1px, (max-width: 48rem) 5.25rem, 7rem"
+      />
     </div>
   )}
 

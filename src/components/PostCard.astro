@@ -1,15 +1,17 @@
 ---
 import type { CollectionEntry } from 'astro:content';
 
+import CoverImage from './CoverImage.astro';
 import { SITE } from '../config/site';
 import { getPostHref, getPostSlug, normalizeTag } from '../lib/posts';
 
 interface Props {
   entry: CollectionEntry<'posts'>;
   headingLevel?: 'h2' | 'h3';
+  priority?: boolean;
 }
 
-const { entry, headingLevel = 'h2' } = Astro.props;
+const { entry, headingLevel = 'h2', priority = false } = Astro.props;
 const { title, description, pubDate, tags, cover } = entry.data;
 const Heading = headingLevel;
 const routeEntry = {
@@ -30,7 +32,11 @@ const firstTag = tags[0];
 <article class="post-card">
   <div class="post-card__cover" aria-hidden={cover ? undefined : 'true'}>
     {cover ? (
-      <img src={cover} alt="" loading="lazy" decoding="async" />
+      <CoverImage
+        cover={cover}
+        sizes="(max-width: 48rem) calc(100vw - 2rem), 30rem"
+        priority={priority}
+      />
     ) : (
       <div class="post-card__type-cover">
         <span class="post-card__year">{year}</span>

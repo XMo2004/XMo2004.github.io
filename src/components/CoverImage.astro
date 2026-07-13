@@ -1,0 +1,33 @@
+---
+import type { Cover } from '../lib/cover';
+
+interface Props {
+  cover: Cover;
+  sizes: string;
+  priority?: boolean;
+}
+
+const { cover, sizes, priority = false } = Astro.props;
+const src = typeof cover === 'string' ? cover : cover.src;
+const responsiveCover = typeof cover === 'string' ? undefined : cover;
+const srcset = responsiveCover?.variants
+  .map((variant) => `${variant.src} ${variant.width}w`)
+  .join(', ');
+const responsiveSizes = responsiveCover === undefined ? undefined : sizes;
+const width = responsiveCover?.width;
+const height = responsiveCover?.height;
+const loading = priority ? 'eager' : 'lazy';
+const fetchpriority = priority ? 'high' : undefined;
+---
+
+<img
+  src={src}
+  srcset={srcset}
+  sizes={responsiveSizes}
+  width={width}
+  height={height}
+  alt=""
+  decoding="async"
+  loading={loading}
+  fetchpriority={fetchpriority}
+/>

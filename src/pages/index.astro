@@ -95,7 +95,7 @@ const latest = posts.filter((post) => post !== featured).slice(0, 4);
 
     {featured ? (
       <div class="post-grid post-grid--featured">
-        <PostCard entry={featured} headingLevel="h3" />
+        <PostCard entry={featured} headingLevel="h3" priority />
       </div>
     ) : (
       <p class="empty-state">暂时还没有设为精选的文章。</p>

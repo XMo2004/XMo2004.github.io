@@ -56,6 +56,76 @@ slug: build-output-normalized-column
 
 这篇手写夹具只用于验证专栏名称规范化。
 `;
+const structuredCoverFixtureSlug = 'build-output-structured-cover';
+const structuredCoverFixture = `---
+title: 构建输出结构化封面文章
+description: 用真实内容集合条目验证结构化响应式封面输出。
+pubDate: 2025-12-31
+category: 测试
+tags: []
+featured: false
+slug: ${structuredCoverFixtureSlug}
+cover:
+  src: /media/cover-contract-960.webp
+  width: 960
+  height: 540
+  variants:
+    - src: /media/cover-contract-320.webp
+      width: 320
+    - src: /media/cover-contract-640.webp
+      width: 640
+    - src: /media/cover-contract-960.webp
+      width: 960
+---
+
+这篇手写夹具只用于验证结构化响应式封面。
+`;
+const legacyCoverFixtureSlug = 'build-output-legacy-cover';
+const legacyCoverFixture = `---
+title: 构建输出旧版封面文章
+description: 用真实内容集合条目验证旧版字符串封面兼容输出。
+pubDate: 2025-12-30
+category: 测试
+tags: []
+featured: false
+slug: ${legacyCoverFixtureSlug}
+cover: /media/cover-contract-legacy.jpg
+---
+
+这篇手写夹具只用于验证旧版字符串封面。
+`;
+const coverContractPage = `---
+import { getCollection } from 'astro:content';
+
+import PostCard from '../components/PostCard.astro';
+import PostRow from '../components/PostRow.astro';
+
+const posts = await getCollection('posts');
+const structuredEntry = posts.find(
+  ({ data }) => data.slug === '${structuredCoverFixtureSlug}',
+);
+const legacyEntry = posts.find(
+  ({ data }) => data.slug === '${legacyCoverFixtureSlug}',
+);
+
+if (structuredEntry === undefined || legacyEntry === undefined) {
+  throw new Error('Cover contract fixtures were not loaded.');
+}
+---
+
+<section id="structured-card">
+  <PostCard entry={structuredEntry} priority />
+</section>
+<section id="structured-row">
+  <PostRow entry={structuredEntry} />
+</section>
+<section id="legacy-card">
+  <PostCard entry={legacyEntry} priority />
+</section>
+<section id="legacy-row">
+  <PostRow entry={legacyEntry} />
+</section>
+`;
 let temporaryBuildRoot;
 let distRoot;
 const requiredSearchEntryFields = [
@@ -117,6 +187,27 @@ async function runCleanBuild() {
         normalizedColumnPeerFixture,
         { encoding: 'utf8', flag: 'wx' },
       ),
+      writeFile(
+        join(
+          temporaryProjectRoot,
+          'src/content/posts/manual/build-output-structured-cover.md',
+        ),
+        structuredCoverFixture,
+        { encoding: 'utf8', flag: 'wx' },
+      ),
+      writeFile(
+        join(
+          temporaryProjectRoot,
+          'src/content/posts/manual/build-output-legacy-cover.md',
+        ),
+        legacyCoverFixture,
+        { encoding: 'utf8', flag: 'wx' },
+      ),
+      writeFile(
+        join(temporaryProjectRoot, 'src/pages/cover-contract.astro'),
+        coverContractPage,
+        { encoding: 'utf8', flag: 'wx' },
+      ),
     ]);
     distRoot = pathToFileURL(join(temporaryProjectRoot, 'dist', sep));
 
@@ -160,6 +251,58 @@ after(async () => {
 async function readOutput(relativePath) {
   assert.ok(distRoot, 'clean build should initialize its output directory');
   return readFile(new URL(relativePath, distRoot), 'utf8');
+}
+
+function readSection(html, id) {
+  const openingTag = new RegExp(`<section\\b[^>]*\\bid="${id}"[^>]*>`).exec(
+    html,
+  );
+
+  assert.ok(openingTag, `cover contract should include the ${id} section`);
+
+  const start = openingTag.index;
+  const end = html.indexOf('</section>', start + openingTag[0].length);
+
+  assert.notEqual(end, -1, `${id} section should have a closing tag`);
+  return html.slice(start, end + '</section>'.length);
+}
+
+function readOnlyImageAttributes(section, label) {
+  const imageTags = section.match(/<img\b[^>]*>/g) ?? [];
+
+  assert.equal(imageTags.length, 1, `${label} should render exactly one image`);
+
+  const attributes = {};
+  for (const match of imageTags[0].matchAll(
+    /\s+([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'))?/g,
+  )) {
+    attributes[match[1]] = match[2] ?? match[3] ?? '';
+  }
+
+  return attributes;
+}
+
+function assertImageContract(html, sectionId, expected, absent) {
+  const attributes = readOnlyImageAttributes(
+    readSection(html, sectionId),
+    sectionId,
+  );
+
+  for (const [name, value] of Object.entries(expected)) {
+    assert.equal(
+      attributes[name],
+      value,
+      `${sectionId} image should emit ${name}="${value}"`,
+    );
+  }
+
+  for (const name of absent) {
+    assert.equal(
+      Object.hasOwn(attributes, name),
+      false,
+      `${sectionId} image should omit ${name}`,
+    );
+  }
 }
 
 function readJsonLd(html) {
@@ -367,6 +510,75 @@ test('clean build emits every public entry point as a non-empty file', async () 
     assert.ok(outputStat.isFile(), `${relativePath} should be a file`);
     assert.ok(outputStat.size > 0, `${relativePath} should not be empty`);
   }
+});
+
+test('cover contract renders structured and legacy images by page position', async () => {
+  await assert.rejects(
+    stat(join(projectRoot, 'src/pages/cover-contract.astro')),
+    { code: 'ENOENT' },
+    'the cover contract page must exist only in the temporary build copy',
+  );
+
+  const html = await readOutput('cover-contract/index.html');
+  const structuredSrcset = [
+    '/media/cover-contract-320.webp 320w',
+    '/media/cover-contract-640.webp 640w',
+    '/media/cover-contract-960.webp 960w',
+  ].join(', ');
+  const structuredCommon = {
+    src: '/media/cover-contract-960.webp',
+    srcset: structuredSrcset,
+    width: '960',
+    height: '540',
+    alt: '',
+    decoding: 'async',
+  };
+  const legacyCommon = {
+    src: '/media/cover-contract-legacy.jpg',
+    alt: '',
+    decoding: 'async',
+  };
+
+  assertImageContract(
+    html,
+    'structured-card',
+    {
+      ...structuredCommon,
+      sizes: '(max-width: 48rem) calc(100vw - 2rem), 30rem',
+      loading: 'eager',
+      fetchpriority: 'high',
+    },
+    [],
+  );
+  assertImageContract(
+    html,
+    'structured-row',
+    {
+      ...structuredCommon,
+      sizes: '(max-width: 30rem) 1px, (max-width: 48rem) 5.25rem, 7rem',
+      loading: 'lazy',
+    },
+    ['fetchpriority'],
+  );
+  assertImageContract(
+    html,
+    'legacy-card',
+    {
+      ...legacyCommon,
+      loading: 'eager',
+      fetchpriority: 'high',
+    },
+    ['srcset', 'sizes', 'width', 'height'],
+  );
+  assertImageContract(
+    html,
+    'legacy-row',
+    {
+      ...legacyCommon,
+      loading: 'lazy',
+    },
+    ['srcset', 'sizes', 'width', 'height', 'fetchpriority'],
+  );
 });
 
 test('article output has canonical metadata, safe BlogPosting data, taxonomy links, and article content', async () => {
