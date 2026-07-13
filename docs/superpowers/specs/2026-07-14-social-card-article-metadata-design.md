@@ -24,7 +24,7 @@
 - 分享图延续博客的纸张、宋体、砖红和苔绿色气质，形成稳定的 `XMO / NOTES` 视觉身份。
 - 无论文章是否有封面，都能生成完整、清晰、风格一致的卡片。
 - 标题、分类、专栏和日期只取自真实内容数据；长标题安全换行，最多三行。
-- 构建不联网、不读取系统字体，在 macOS 本地和 GitHub Actions Ubuntu 环境使用同一字体和同一渲染链路。
+- 依赖安装完成后的构建不联网、不读取系统字体，在 macOS 本地和 GitHub Actions Ubuntu 环境使用同一字体和同一渲染链路。
 - 图片 URL 随实际视觉输入变化，避免社交平台长期复用旧卡片。
 - 补齐文章 Open Graph 属性，并扩充现有 `BlogPosting`，但不虚构作者主页、社交账号、更新时间或组织 Logo。
 - 保持当前纯静态部署、飞书同步事务、内容 manifest 和回滚边界不变。
@@ -43,7 +43,7 @@
 
 ### 4.1 采用：Satori 排版为 SVG，再由 Sharp 输出 PNG
 
-构建端把纯数据对象交给 Satori。Satori 显式读取仓库内的中文字体字节，完成 Flexbox 布局、换行、三行截断和文字路径嵌入；随后由现有直接依赖 Sharp 把 SVG 转为 `1200 × 630` PNG。
+构建端把纯数据对象交给 Satori。Satori 显式读取锁定依赖内的中文字体字节，完成 Flexbox 布局、换行、三行截断和文字路径嵌入；随后由现有直接依赖 Sharp 把 SVG 转为 `1200 × 630` PNG。
 
 采用原因：
 
@@ -53,7 +53,7 @@
 - 不安装或启动 Chromium，不引入截图时序、DPR、抗锯齿和 CI 浏览器缓存差异。
 - 简单的编辑部版式适合 Satori 支持的布局子集，不需要完整浏览器 CSS。
 
-`satori` 作为锁定版本的直接生产依赖。固定字体采用 Google Fonts 仓库中的 [`ZCOOLXiaoWei-Regular.ttf`](https://github.com/google/fonts/blob/main/ofl/zcoolxiaowei/ZCOOLXiaoWei-Regular.ttf)，许可证采用同目录的 [`OFL.txt`](https://github.com/google/fonts/blob/main/ofl/zcoolxiaowei/OFL.txt)；两者放在 `src/assets/fonts/`，仅用于构建。实现时记录字体文件 SHA-256，哈希也进入图片版本输入。不得使用 Satori 不支持的 WOFF2，也不得在构建时下载 Google Fonts。
+`satori@0.26.0` 与 `@fontsource/zcool-xiaowei@4.5.12` 作为锁定版本的直接生产依赖。渲染读取 Fontsource 包内的 `zcool-xiaowei-all-400-normal.woff`；这是 Satori 支持的 WOFF，而不是其不支持的 WOFF2。许可证采用 Google Fonts 同字体目录中的 [`OFL.txt`](https://github.com/google/fonts/blob/main/ofl/zcoolxiaowei/OFL.txt)，复制为 `src/assets/fonts/ZCOOL-XiaoWei-OFL.txt`。实现时记录实际 WOFF 字节的 SHA-256，哈希也进入图片版本输入。依赖安装完成后，构建不得下载 Google Fonts 或其他远程资源。
 
 ### 4.2 不采用：直接发布 SVG
 
