@@ -49,6 +49,9 @@ export async function createResponsiveCover(
   { maxVariantBytes = MAX_COVER_VARIANT_BYTES } = {},
 ) {
   positiveBudget(maxVariantBytes, 'maxVariantBytes');
+  if (maxVariantBytes > MAX_COVER_VARIANT_BYTES) {
+    throw new Error('maxVariantBytes must not exceed the 1 MiB variant limit.');
+  }
   if (!(bytes instanceof Uint8Array)) {
     throw new Error('Cover source bytes must be a Uint8Array.');
   }

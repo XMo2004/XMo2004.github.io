@@ -4,6 +4,14 @@ import test from 'node:test';
 
 import sharp from 'sharp';
 
+import {
+  COVER_WIDTHS,
+  MAX_COVER_PIXELS,
+  MAX_COVER_SOURCE_BYTES,
+  MAX_COVER_VARIANT_BYTES,
+  createResponsiveCover,
+} from '../scripts/feishu/covers.mjs';
+
 const ANIMATED_GIF = Buffer.from(
   'R0lGODlhAQABAIAAAExpcf8AACH/C05FVFNDQVBFMi4wAwEAAAAh+QQFCgAAACwAAAAAAQABAAACAkwBACH5BAUKAAAALAAAAAABAAEAgExpcQAA/wICTAEAOw==',
   'base64',
@@ -11,12 +19,6 @@ const ANIMATED_GIF = Buffer.from(
 const VECTOR_IMAGE = new TextEncoder().encode(
   '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="4"><rect width="8" height="4"/></svg>',
 );
-
-async function loadCoverModule() {
-  const module = await import('../scripts/feishu/covers.mjs').catch(() => ({}));
-  assert.equal(typeof module.createResponsiveCover, 'function');
-  return module;
-}
 
 function source(bytes, contentType = 'image/png') {
   return Object.freeze({ bytes: new Uint8Array(bytes), contentType });
@@ -33,14 +35,23 @@ async function solidPng(width, height) {
   }).png().toBuffer();
 }
 
+async function stripedPng(width, height, stripeWidth) {
+  const pixels = new Uint8Array(width * height * 3);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const value = Math.floor(x / stripeWidth) % 2 === 0 ? 0 : 255;
+      const offset = (y * width + x) * 3;
+      pixels[offset] = value;
+      pixels[offset + 1] = value;
+      pixels[offset + 2] = value;
+    }
+  }
+  return sharp(pixels, {
+    raw: { width, height, channels: 3 },
+  }).png().toBuffer();
+}
+
 test('responsive cover emits deterministic content-addressed WebP widths', async () => {
-  const {
-    COVER_WIDTHS,
-    MAX_COVER_PIXELS,
-    MAX_COVER_SOURCE_BYTES,
-    MAX_COVER_VARIANT_BYTES,
-    createResponsiveCover,
-  } = await loadCoverModule();
   assert.deepEqual(COVER_WIDTHS, [320, 640, 960, 1440]);
   assert.equal(MAX_COVER_SOURCE_BYTES, 5 * 1024 * 1024);
   assert.equal(MAX_COVER_PIXELS, 24_000_000);
@@ -72,7 +83,6 @@ test('responsive cover emits deterministic content-addressed WebP widths', async
 });
 
 test('responsive cover never enlarges or duplicates small and exact widths', async () => {
-  const { createResponsiveCover } = await loadCoverModule();
   const cases = [
     [200, [200]],
     [320, [320]],
@@ -95,7 +105,6 @@ test('responsive cover never enlarges or duplicates small and exact widths', asy
 });
 
 test('responsive cover applies EXIF orientation before sizing', async () => {
-  const { createResponsiveCover } = await loadCoverModule();
   const jpeg = await sharp({
     create: {
       width: 10,
@@ -115,11 +124,6 @@ test('responsive cover applies EXIF orientation before sizing', async () => {
 });
 
 test('responsive cover rejects invalid source, pixel, animation, decode and output budgets', async () => {
-  const {
-    createResponsiveCover,
-    MAX_COVER_SOURCE_BYTES,
-  } = await loadCoverModule();
-
   const overPixelBudget = await solidPng(5000, 5000);
   const tiny = await solidPng(8, 4);
 
@@ -154,8 +158,34 @@ test('responsive cover rejects invalid source, pixel, animation, decode and outp
   );
 });
 
+test('responsive cover test budget cannot bypass the hard output limit', async () => {
+  const input = source(await solidPng(8, 4));
+
+  await assert.rejects(
+    createResponsiveCover(input, {
+      maxVariantBytes: MAX_COVER_VARIANT_BYTES + 1,
+    }),
+    /maxVariantBytes.*1 MiB variant limit/,
+  );
+});
+
+test('responsive cover applies the output budget to cumulative variant bytes', async () => {
+  const input = source(await stripedPng(500, 1, 11));
+  const baseline = await createResponsiveCover(input);
+  assert.equal(baseline.assets.length, 2);
+
+  const firstVariantBytes = baseline.assets[0].bytes.byteLength;
+  assert.ok(
+    baseline.assets.every(({ bytes }) => bytes.byteLength <= firstVariantBytes),
+    'fixture must keep every individual variant within the first-variant budget',
+  );
+  await assert.rejects(
+    createResponsiveCover(input, { maxVariantBytes: firstVariantBytes }),
+    /1 MiB variant limit/,
+  );
+});
+
 test('responsive cover filenames hash the emitted WebP bytes', async () => {
-  const { createResponsiveCover } = await loadCoverModule();
   const result = await createResponsiveCover(source(await solidPng(1600, 900)));
 
   for (const asset of result.assets) {
