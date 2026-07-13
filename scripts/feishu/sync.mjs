@@ -23,6 +23,7 @@ import {
 import { contentAddressedMedia } from './assets.mjs';
 import { blocksToMarkdown } from './blocks.mjs';
 import { createFeishuClientFromEnv } from './client.mjs';
+import { createResponsiveCover } from './covers.mjs';
 import {
   buildFeishuManifest,
   serializeFeishuManifest,
@@ -65,6 +66,7 @@ export const PUBLIC_SYNC_FAILURE_PHASES = Object.freeze({
   replace: '发布文件替换',
 });
 const syncFailurePhase = new WeakMap();
+const syncFailureSlug = new WeakMap();
 const recordValidationFields = new WeakMap();
 const recordValidationRules = new WeakMap();
 const recordValidationShapes = new WeakMap();
@@ -169,7 +171,12 @@ export function publicSyncFailureMessage(error) {
         ? shapes.get(fields[0])
         : undefined;
     const shapeDetail = typeof shape === 'string' ? `; shape: ${shape}` : '';
-    return `飞书同步失败 [${phase}: ${PUBLIC_SYNC_FAILURE_PHASES[phase]}${fieldDetail}${ruleDetail}${shapeDetail}]：错误详情已脱敏，请重试。`;
+    const slug =
+      phase === 'build' && error instanceof Error
+        ? syncFailureSlug.get(error)
+        : undefined;
+    const slugDetail = typeof slug === 'string' ? `; slug: ${slug}` : '';
+    return `飞书同步失败 [${phase}: ${PUBLIC_SYNC_FAILURE_PHASES[phase]}${fieldDetail}${ruleDetail}${shapeDetail}${slugDetail}]：错误详情已脱敏，请重试。`;
   }
   return '飞书同步失败：错误详情已脱敏。请检查飞书应用权限、博客文章字段和文档内容后重试。';
 }
@@ -445,6 +452,31 @@ function addAsset(assets, asset) {
   assets.set(asset.filename, asset);
 }
 
+function normalizeDownloadedSource(value) {
+  if (value === null || typeof value !== 'object') {
+    throw new Error('Downloaded media must be an object.');
+  }
+  const bytes = value.bytes instanceof Uint8Array
+    ? new Uint8Array(value.bytes)
+    : value.bytes instanceof ArrayBuffer
+      ? new Uint8Array(value.bytes.slice(0))
+      : undefined;
+  if (bytes === undefined) {
+    throw new Error(
+      'Downloaded media bytes must be a Uint8Array or ArrayBuffer.',
+    );
+  }
+  return Object.freeze({ bytes, contentType: value.contentType });
+}
+
+function mediaSourceKey(fileToken, extra) {
+  return JSON.stringify([
+    fileToken,
+    extra === undefined ? 'missing-extra' : 'present-extra',
+    extra,
+  ]);
+}
+
 function postFrontmatter(article) {
   return {
     title: article.title,
@@ -473,21 +505,25 @@ async function buildNextState(client, records) {
   const warnings = [];
   const mediaBudget = createMediaBudget();
 
-  async function download(fileToken, extra) {
-    const cacheKey = `${fileToken}\u0000${extra ?? ''}`;
+  async function downloadSource(fileToken, extra) {
+    const cacheKey = mediaSourceKey(fileToken, extra);
     let pending = downloadCache.get(cacheKey);
     if (pending === undefined) {
       mediaBudget.reserveDownload();
       pending = client
         .downloadMedia(fileToken, extra)
-        .then((value) => contentAddressedMedia(value))
-        .then((asset) => {
-          mediaBudget.accountBytes(asset.bytes.byteLength);
-          return asset;
+        .then((value) => {
+          const source = normalizeDownloadedSource(value);
+          mediaBudget.accountBytes(source.bytes.byteLength);
+          return source;
         });
       downloadCache.set(cacheKey, pending);
     }
     return pending;
+  }
+
+  async function downloadBodyMedia(fileToken, extra) {
+    return contentAddressedMedia(await downloadSource(fileToken, extra));
   }
 
   for (const record of records) {
@@ -496,13 +532,15 @@ async function buildNextState(client, records) {
     let markdown = converted.markdown;
     const articleAssets = new Map();
     const articleMediaKeys = new Set(
-      converted.mediaReferences.map(({ token }) => `${token}\u0000`),
+      converted.mediaReferences.map(({ token }) =>
+        mediaSourceKey(token, undefined),
+      ),
     );
     const preparedCoverExtra =
       record.cover === null ? undefined : coverExtra(record);
     if (record.cover !== null) {
       articleMediaKeys.add(
-        `${record.cover.file_token}\u0000${preparedCoverExtra ?? ''}`,
+        mediaSourceKey(record.cover.file_token, preparedCoverExtra),
       );
     }
     if (articleMediaKeys.size > MAX_MEDIA_PER_ARTICLE) {
@@ -511,7 +549,7 @@ async function buildNextState(client, records) {
       );
     }
     for (const reference of converted.mediaReferences) {
-      const asset = await download(reference.token);
+      const asset = await downloadBodyMedia(reference.token);
       addAsset(assets, asset);
       articleAssets.set(asset.filename, asset);
       markdown = markdown.replaceAll(reference.placeholder, asset.publicPath);
@@ -528,13 +566,22 @@ async function buildNextState(client, records) {
 
     let cover;
     if (record.cover !== null) {
-      const asset = await download(
+      const source = await downloadSource(
         record.cover.file_token,
         preparedCoverExtra,
       );
-      addAsset(assets, asset);
-      articleAssets.set(asset.filename, asset);
-      cover = asset.publicPath;
+      let responsiveCover;
+      try {
+        responsiveCover = await createResponsiveCover(source);
+      } catch (error) {
+        if (error instanceof Error) syncFailureSlug.set(error, record.slug);
+        throw error;
+      }
+      for (const asset of responsiveCover.assets) {
+        addAsset(assets, asset);
+        articleAssets.set(asset.filename, asset);
+      }
+      cover = responsiveCover.cover;
     }
 
     const title = record.title ?? stable.document.title.trim();
@@ -560,7 +607,12 @@ async function buildNextState(client, records) {
     });
   }
 
-  return { articles, assets, warnings };
+  return {
+    articles,
+    assets,
+    warnings,
+    manifest: buildFeishuManifest(articles),
+  };
 }
 
 async function writeStage({ articles, assets, manifest }) {
@@ -907,10 +959,7 @@ export async function syncFeishu({
   const next = await inSyncPhase('build', () =>
     buildNextState(client, records),
   );
-  const stage = await inSyncPhase('stage', async () => {
-    const manifest = buildFeishuManifest(next.articles);
-    return writeStage({ ...next, manifest });
-  });
+  const stage = await inSyncPhase('stage', () => writeStage(next));
 
   try {
     const changed = !(await inSyncPhase('stage', () =>

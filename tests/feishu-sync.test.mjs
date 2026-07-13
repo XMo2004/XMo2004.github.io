@@ -27,6 +27,14 @@ import {
 const APP_TOKEN = 'app-token';
 const TABLE_ID = 'table-id';
 const DOCUMENT_ID = 'doxcnExample123';
+const COVER_IMAGE_BYTES = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAECAIAAAA8r+mnAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEUlEQVQImWPYEmWEFTFQTwIA4Q0oAYnU9ewAAAAASUVORK5CYII=',
+  'base64',
+);
+const DIFFERENT_COVER_IMAGE_BYTES = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAECAIAAAA8r+mnAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEUlEQVQImWMQmXYHK2KgngQAbWswwUGo0YkAAAAASUVORK5CYII=',
+  'base64',
+);
 
 test('public sync failures never expose Feishu internal identifiers', () => {
   const internalValues = [
@@ -134,8 +142,8 @@ function publishedRecord({ id = 'rec-one', slug = 'first-post', fields = {} } = 
       封面: [
         {
           file_token: 'cover_token',
-          name: 'cover.jpg',
-          type: 'image/jpeg',
+          name: 'cover.png',
+          type: 'image/png',
         },
       ],
       ...fields,
@@ -170,7 +178,13 @@ function documentBlocks(body = '来自飞书的正文') {
   ];
 }
 
-function stableClient({ records = [publishedRecord()], body = '来自飞书的正文' } = {}) {
+function stableClient({
+  records = [publishedRecord()],
+  body = '来自飞书的正文',
+  coverBytes = COVER_IMAGE_BYTES,
+  coverContentType = 'image/png',
+  coverFileToken = 'cover_token',
+} = {}) {
   const calls = {
     list: [],
     documents: [],
@@ -196,12 +210,12 @@ function stableClient({ records = [publishedRecord()], body = '来自飞书的�
     },
     async downloadMedia(fileToken, extra) {
       calls.media.push({ fileToken, extra });
-      const isCover = fileToken === 'cover_token';
+      const isCover = fileToken === coverFileToken;
       return {
-        bytes: new TextEncoder().encode(
-          isCover ? 'cover-image-bytes' : 'body-image-bytes',
-        ),
-        contentType: isCover ? 'image/jpeg' : 'image/png',
+        bytes: isCover
+          ? new Uint8Array(coverBytes)
+          : new TextEncoder().encode('body-image-bytes'),
+        contentType: isCover ? coverContentType : 'image/png',
       };
     },
   };
@@ -281,6 +295,24 @@ async function generatedSnapshot(root) {
   await visit(join(root, 'public/media/feishu'));
   await visit(join(root, '.feishu-manifest.json'));
   return entries;
+}
+
+async function generatedPublicOutput(root) {
+  const postsDirectory = join(root, 'src/content/posts/feishu');
+  const postFiles = (await readdir(postsDirectory)).sort();
+  const posts = Object.fromEntries(
+    await Promise.all(
+      postFiles.map(async (name) => [
+        name,
+        await readFile(join(postsDirectory, name), 'utf8'),
+      ]),
+    ),
+  );
+  return JSON.stringify({
+    posts,
+    mediaFiles: (await readdir(join(root, 'public/media/feishu'))).sort(),
+    manifest: await readFile(join(root, '.feishu-manifest.json'), 'utf8'),
+  });
 }
 
 async function publicMessageForRejectedSync(options) {
@@ -423,35 +455,60 @@ test('sync creates valid Markdown, localized media, and a deterministic manifest
     'utf8',
   );
   const { frontmatter, body } = parseMarkdownFile(source);
-  const coverAsset = contentAddressedMedia({
-    bytes: new TextEncoder().encode('cover-image-bytes'),
-    contentType: 'image/jpeg',
-  });
   const bodyAsset = contentAddressedMedia({
     bytes: new TextEncoder().encode('body-image-bytes'),
     contentType: 'image/png',
   });
 
-  assert.deepEqual(frontmatter, {
-    title: '飞书文档标题',
-    description: '这是一篇由飞书同步的测试文章。',
-    pubDate: '2026-07-12',
-    tags: ['飞书', '测试'],
-    category: '技术',
-    column: '博客搭建手记',
-    columnOrder: 2,
-    featured: true,
-    cover: coverAsset.publicPath,
-    slug: 'first-post',
-  });
+  assert.deepEqual(
+    { ...frontmatter, cover: undefined },
+    {
+      title: '飞书文档标题',
+      description: '这是一篇由飞书同步的测试文章。',
+      pubDate: '2026-07-12',
+      tags: ['飞书', '测试'],
+      category: '技术',
+      column: '博客搭建手记',
+      columnOrder: 2,
+      featured: true,
+      cover: undefined,
+      slug: 'first-post',
+    },
+  );
+  assert.equal(typeof frontmatter.cover, 'object');
+  assert.equal(frontmatter.cover.width, 8);
+  assert.equal(frontmatter.cover.height, 4);
+  assert.deepEqual(frontmatter.cover.variants, [
+    { src: frontmatter.cover.src, width: 8 },
+  ]);
+  assert.deepEqual(Object.keys(frontmatter.cover).sort(), [
+    'height',
+    'src',
+    'variants',
+    'width',
+  ]);
+  assert.deepEqual(Object.keys(frontmatter.cover.variants[0]).sort(), [
+    'src',
+    'width',
+  ]);
+  assert.doesNotMatch(
+    JSON.stringify(frontmatter.cover),
+    /cover_token|file_token|extra|nonce|name|type|url/,
+  );
+  assert.match(frontmatter.cover.src, /^\/media\/feishu\/[a-f0-9]{64}\.webp$/);
   assert.doesNotMatch(source, /example\.feishu\.cn|rec-one|doxcnExample123/);
   assert.match(body, /来自飞书的正文/);
   assert.match(body, new RegExp(bodyAsset.publicPath));
   assert.doesNotMatch(body, /feishu-media:/);
-  assert.deepEqual(
-    (await readdir(join(root, 'public/media/feishu'))).sort(),
-    [bodyAsset.filename, coverAsset.filename].sort(),
-  );
+  const mediaFiles = (await readdir(join(root, 'public/media/feishu'))).sort();
+  const rawCoverAsset = contentAddressedMedia({
+    bytes: COVER_IMAGE_BYTES,
+    contentType: 'image/png',
+  });
+  assert.equal(mediaFiles.length, 2);
+  assert.ok(mediaFiles.includes(bodyAsset.filename));
+  assert.ok(mediaFiles.includes(frontmatter.cover.src.split('/').at(-1)));
+  assert.ok(!mediaFiles.includes(rawCoverAsset.filename));
 
   const manifest = JSON.parse(
     await readFile(join(root, '.feishu-manifest.json'), 'utf8'),
@@ -460,9 +517,18 @@ test('sync creates valid Markdown, localized media, and a deterministic manifest
   assert.deepEqual(manifest.records.map(({ slug }) => slug), ['first-post']);
   assert.deepEqual(Object.keys(manifest.records[0]).sort(), ['assets', 'slug']);
   assert.doesNotMatch(JSON.stringify(manifest), /rec-one|doxcnExample123/);
-  assert.deepEqual(
-    manifest.records[0].assets.map(({ hash }) => hash).sort(),
-    [bodyAsset.hash, coverAsset.hash].sort(),
+  const manifestAssets = manifest.records[0].assets;
+  assert.equal(manifestAssets.length, 2);
+  assert.ok(
+    manifestAssets.some(({ filename }) => filename === bodyAsset.filename),
+  );
+  assert.ok(
+    manifestAssets.some(
+      ({ filename }) => filename === frontmatter.cover.src.split('/').at(-1),
+    ),
+  );
+  assert.ok(
+    !manifestAssets.some(({ filename }) => filename === rawCoverAsset.filename),
   );
 });
 
@@ -601,6 +667,231 @@ test('a second identical sync performs no filesystem replacement', async (t) => 
 
   assert.equal(result.changed, false);
   assert.deepEqual(await generatedSnapshot(root), before);
+});
+
+test('changing only cover token and extra with identical bytes does not rewrite output', async (t) => {
+  const root = await makeRoot(t);
+  await syncFeishu({
+    root,
+    client: stableClient().client,
+    appToken: APP_TOKEN,
+    tableId: TABLE_ID,
+  });
+  const before = await generatedSnapshot(root);
+  const publicOutputBefore = await generatedPublicOutput(root);
+  const record = publishedRecord();
+  record.fields.封面[0] = {
+    ...record.fields.封面[0],
+    file_token: 'replacement_cover',
+    extra: { nonce: 'private' },
+  };
+  const second = stableClient({
+    records: [record],
+    coverFileToken: 'replacement_cover',
+  });
+  const result = await syncFeishu({
+    root,
+    client: second.client,
+    appToken: APP_TOKEN,
+    tableId: TABLE_ID,
+  });
+
+  assert.equal(result.changed, false);
+  assert.deepEqual(await generatedSnapshot(root), before);
+  assert.equal(await generatedPublicOutput(root), publicOutputBefore);
+  assert.doesNotMatch(
+    await generatedPublicOutput(root),
+    /replacement_cover|nonce|private/,
+  );
+});
+
+test('a cover source reused by the body downloads once and remains public only for the body', async (t) => {
+  const root = await makeRoot(t);
+  const record = publishedRecord();
+  record.fields.封面[0].file_token = 'body_image';
+  const { client, calls } = stableClient({
+    records: [record],
+    coverFileToken: 'body_image',
+  });
+  await syncFeishu({
+    root,
+    client,
+    appToken: APP_TOKEN,
+    tableId: TABLE_ID,
+  });
+
+  assert.equal(
+    calls.media.filter(({ fileToken }) => fileToken === 'body_image').length,
+    1,
+  );
+  const source = await readFile(
+    join(root, 'src/content/posts/feishu/first-post.md'),
+    'utf8',
+  );
+  const { frontmatter, body } = parseMarkdownFile(source);
+  const original = contentAddressedMedia({
+    bytes: COVER_IMAGE_BYTES,
+    contentType: 'image/png',
+  });
+  assert.match(body, new RegExp(original.publicPath));
+  assert.notEqual(frontmatter.cover.src, original.publicPath);
+  assert.ok(
+    (await readdir(join(root, 'public/media/feishu'))).includes(
+      original.filename,
+    ),
+  );
+});
+
+test('undefined and empty cover extras use distinct download identities', async (t) => {
+  const root = await makeRoot(t);
+  const record = publishedRecord();
+  record.fields.封面[0] = {
+    ...record.fields.封面[0],
+    file_token: 'body_image',
+    extra: '',
+  };
+  const { client, calls } = stableClient({
+    records: [record],
+    coverFileToken: 'body_image',
+  });
+
+  await syncFeishu({
+    root,
+    client,
+    appToken: APP_TOKEN,
+    tableId: TABLE_ID,
+  });
+
+  assert.deepEqual(
+    calls.media
+      .filter(({ fileToken }) => fileToken === 'body_image')
+      .map(({ extra }) => extra),
+    [undefined, ''],
+  );
+});
+
+test('cover decoding is byte-driven rather than gated by the response MIME type', async (t) => {
+  const root = await makeRoot(t);
+  const { client } = stableClient({
+    coverContentType: 'application/octet-stream',
+  });
+
+  await syncFeishu({
+    root,
+    client,
+    appToken: APP_TOKEN,
+    tableId: TABLE_ID,
+  });
+
+  const { frontmatter } = parseMarkdownFile(
+    await readFile(
+      join(root, 'src/content/posts/feishu/first-post.md'),
+      'utf8',
+    ),
+  );
+  assert.equal(typeof frontmatter.cover, 'object');
+  assert.ok(
+    frontmatter.cover.variants.every(({ src }) => src.endsWith('.webp')),
+  );
+});
+
+test('an invalid cover aborts in build and preserves the previous tree byte-for-byte', async (t) => {
+  const root = await makeRoot(t);
+  await syncFeishu({
+    root,
+    client: stableClient().client,
+    appToken: APP_TOKEN,
+    tableId: TABLE_ID,
+  });
+  const before = await generatedSnapshot(root);
+  const invalid = stableClient({
+    coverBytes: new TextEncoder().encode('not an image'),
+  });
+
+  let failure;
+  try {
+    await syncFeishu({
+      root,
+      client: invalid.client,
+      appToken: APP_TOKEN,
+      tableId: TABLE_ID,
+    });
+  } catch (error) {
+    failure = error;
+  }
+  assert.ok(failure instanceof Error);
+  const publicMessage = publicSyncFailureMessage(failure);
+  assert.equal(
+    publicMessage,
+    '飞书同步失败 [build: 文档与素材生成; slug: first-post]：错误详情已脱敏，请重试。',
+  );
+  assert.doesNotMatch(
+    publicMessage,
+    /rec-one|doxcnExample123|cover_token|not an image/,
+  );
+  assert.deepEqual(await generatedSnapshot(root), before);
+  assert.equal(
+    (await readdir(root)).some((name) => name.startsWith('.feishu-sync-')),
+    false,
+  );
+});
+
+test('sync migrates a legacy v2 raw-cover tree without a version bump', async (t) => {
+  const root = await makeRoot(t);
+  const oldBytes = new TextEncoder().encode('legacy raw cover');
+  const oldAsset = contentAddressedMedia({
+    bytes: oldBytes,
+    contentType: 'image/png',
+  });
+  await rm(join(root, 'src/content/posts/feishu/.gitkeep'));
+  await rm(join(root, 'public/media/feishu/.gitkeep'));
+  await writeFile(
+    join(root, 'src/content/posts/feishu/first-post.md'),
+    `---\ntitle: Legacy\ndescription: Legacy\npubDate: 2026-07-12\ncategory: 技术\ntags: []\nfeatured: true\ncover: ${oldAsset.publicPath}\nslug: first-post\n---\n\nLegacy.\n`,
+  );
+  await writeFile(
+    join(root, 'public/media/feishu', oldAsset.filename),
+    oldAsset.bytes,
+  );
+  await writeFile(
+    join(root, '.feishu-manifest.json'),
+    `${JSON.stringify({
+      version: 2,
+      records: [
+        {
+          slug: 'first-post',
+          assets: [{ hash: oldAsset.hash, filename: oldAsset.filename }],
+        },
+      ],
+    }, null, 2)}\n`,
+  );
+
+  await syncFeishu({
+    root,
+    client: stableClient().client,
+    appToken: APP_TOKEN,
+    tableId: TABLE_ID,
+  });
+  const generated = parseMarkdownFile(
+    await readFile(
+      join(root, 'src/content/posts/feishu/first-post.md'),
+      'utf8',
+    ),
+  );
+  const files = await readdir(join(root, 'public/media/feishu'));
+  const manifest = JSON.parse(
+    await readFile(join(root, '.feishu-manifest.json'), 'utf8'),
+  );
+
+  assert.equal(typeof generated.frontmatter.cover, 'object');
+  assert.equal(files.includes(oldAsset.filename), false);
+  assert.ok(
+    generated.frontmatter.cover.variants.every(({ src }) =>
+      src.endsWith('.webp'),
+    ),
+  );
+  assert.equal(manifest.version, 2);
+  assert.equal(JSON.stringify(manifest).includes(oldAsset.hash), false);
 });
 
 test('unexpected symlinks force a clean generated-tree replacement', async (t) => {
@@ -1038,7 +1329,10 @@ test('a replacement rename failure rolls every generated target back', async (t)
     tableId: TABLE_ID,
   });
   const before = await generatedSnapshot(root);
-  const updated = stableClient({ body: '准备发布的新版本' });
+  const updated = stableClient({
+    body: '准备发布的新版本',
+    coverBytes: DIFFERENT_COVER_IMAGE_BYTES,
+  });
   let renameCalls = 0;
 
   await assert.rejects(
@@ -1051,7 +1345,7 @@ test('a replacement rename failure rolls every generated target back', async (t)
         transactionOperations: {
           rename: async (...args) => {
             renameCalls += 1;
-            if (renameCalls === 4) throw new Error('injected rename failure');
+            if (renameCalls === 6) throw new Error('injected rename failure');
             return fsRename(...args);
           },
         },
@@ -1076,7 +1370,10 @@ test('failed rollback keeps its journal and the next sync restores it first', as
     tableId: TABLE_ID,
   });
   const before = await generatedSnapshot(root);
-  const updated = stableClient({ body: '不能留下的部分版本' });
+  const updated = stableClient({
+    body: '不能留下的部分版本',
+    coverBytes: DIFFERENT_COVER_IMAGE_BYTES,
+  });
   let renameCalls = 0;
 
   await assert.rejects(
@@ -1090,8 +1387,8 @@ test('failed rollback keeps its journal and the next sync restores it first', as
           rename: async (from, to) => {
             renameCalls += 1;
             if (
-              renameCalls === 4 ||
-              String(from).endsWith('previous-media')
+              renameCalls === 6 ||
+              String(from).endsWith('previous-manifest.json')
             ) {
               throw new Error('injected rollback failure');
             }
