@@ -2,6 +2,7 @@ import { defineCollection } from 'astro:content';
 import { glob } from 'astro/loaders';
 import { z } from 'astro/zod';
 
+import { coverSchema } from './lib/cover';
 import { validateTagSet } from './lib/posts';
 
 const tagsSchema = z
@@ -36,7 +37,7 @@ const posts = defineCollection({
       columnOrder: z.number().int().positive().optional(),
       tags: tagsSchema,
       featured: z.boolean().default(false),
-      cover: z.string().optional(),
+      cover: coverSchema.optional(),
       slug: z
         .string()
         .regex(
