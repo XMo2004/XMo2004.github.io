@@ -976,7 +976,10 @@ test('global layout keeps dense editorial scanning without shrinking reading tex
   );
   assert.match(styles, /\.post-row:hover\s*\{[^}]*transform:\s*translate3d\([^)]+\);[^}]*\}/s);
   assert.match(styles, /\.post-header\s*\{[^}]*max-width:\s*68rem;[^}]*\}/s);
-  assert.match(styles, /\.post-header h1\s*\{[^}]*max-width:\s*none;[^}]*\}/s);
+  assert.match(
+    styles,
+    /\.post-header h1\s*\{(?=[^}]*max-width:\s*none;)(?=[^}]*font-size:\s*clamp\(2\.2rem,\s*4\.4vw,\s*3\.5rem\);)[^}]*\}/s,
+  );
   assert.match(
     styles,
     /\.post-header__category,\s*\.post-header__column\s*\{(?=[^}]*min-height:\s*2\.75rem;)(?=[^}]*display:\s*inline-flex;)(?=[^}]*border-radius:\s*999px;)[^}]*\}/s,
