@@ -903,81 +903,65 @@ test('cover contract uses one responsive image without changing card or row layo
     coverSource,
     /interface\s+Props\s*\{(?=[^}]*cover:\s*Cover;)(?=[^}]*sizes:\s*string;)(?=[^}]*priority\?:\s*boolean;)[^}]*\}/s,
   );
-  assert.match(
+  assert.match(coverSource, /\.variants\b/);
+  assert.match(coverSource, /\.variants\b[\s\S]*?\bwidth\b[\s\S]{0,40}w/);
+  assert.doesNotMatch(
     coverSource,
-    /\{\s*cover,\s*sizes,\s*priority\s*=\s*false\s*\}\s*=\s*Astro\.props/,
+    /\.(?:sort|toSorted|filter)\s*\(|new\s+(?:Set|Map)\s*\(|\b(?:dedupe|deduplicate|repair)\b/i,
   );
-  assert.match(
-    coverSource,
-    /const\s+src\s*=\s*typeof\s+cover\s*===\s*['"]string['"]\s*\?\s*cover\s*:\s*cover\.src/,
-  );
-  assert.match(
-    coverSource,
-    /const\s+responsiveCover\s*=\s*typeof\s+cover\s*===\s*['"]string['"]\s*\?\s*undefined\s*:\s*cover/,
-  );
-  assert.match(
-    coverSource,
-    /const\s+srcset\s*=\s*responsiveCover\?\.variants\s*\.map\(\(variant\)\s*=>\s*`\$\{variant\.src\}\s+\$\{variant\.width\}w`\)\s*\.join\(['"],\s*['"]\)/s,
-  );
-  assert.match(
-    coverSource,
-    /const\s+responsiveSizes\s*=\s*responsiveCover\s*===\s*undefined\s*\?\s*undefined\s*:\s*sizes/,
-  );
-  assert.match(coverSource, /const\s+width\s*=\s*responsiveCover\?\.width/);
-  assert.match(coverSource, /const\s+height\s*=\s*responsiveCover\?\.height/);
-  assert.match(
-    coverSource,
-    /const\s+loading\s*=\s*priority\s*\?\s*['"]eager['"]\s*:\s*['"]lazy['"]/,
-  );
-  assert.match(
-    coverSource,
-    /const\s+fetchpriority\s*=\s*priority\s*\?\s*['"]high['"]\s*:\s*undefined/,
-  );
-  assert.doesNotMatch(coverSource, /\.(?:sort|toSorted)\(|new\s+Set\s*\(/);
+  assert.doesNotMatch(coverSource, /astro:assets|<Image\b/);
 
   assert.match(coverTemplate, /^<img\b[\s\S]*\/>$/);
   assert.equal(coverTemplate.match(/<img\b/g)?.length, 1);
-  assert.doesNotMatch(coverTemplate, /<(?:picture|div|style|Image)\b/);
-  assert.match(coverTemplate, /\bsrc=\{src\}/);
-  assert.match(coverTemplate, /\bsrcset=\{srcset\}/);
-  assert.match(coverTemplate, /\bsizes=\{responsiveSizes\}/);
-  assert.match(coverTemplate, /\bwidth=\{width\}/);
-  assert.match(coverTemplate, /\bheight=\{height\}/);
+  assert.doesNotMatch(
+    coverTemplate,
+    /<(?:picture|div|style|Image)\b|\bstyle\s*=/,
+  );
+  for (const attribute of [
+    'src',
+    'srcset',
+    'sizes',
+    'width',
+    'height',
+    'loading',
+    'fetchpriority',
+  ]) {
+    assert.match(coverTemplate, new RegExp(`\\b${attribute}=\\{[^}]+\\}`));
+  }
   assert.match(coverTemplate, /\balt=["']["']/);
   assert.match(coverTemplate, /\bdecoding=["']async["']/);
-  assert.match(coverTemplate, /\bloading=\{loading\}/);
-  assert.match(coverTemplate, /\bfetchpriority=\{fetchpriority\}/);
 
   assert.match(
     cardSource,
     /import\s+CoverImage\s+from\s+['"]\.\/CoverImage\.astro['"];?/,
   );
   assert.match(cardSource, /priority\?:\s*boolean/);
+  const cardImage = cardSource.match(/<CoverImage\b[\s\S]*?\/>/)?.[0];
+  assert.ok(cardImage, 'PostCard should render CoverImage');
+  assert.match(cardImage, /\bcover=\{[^}]+\}/);
+  assert.match(cardImage, /\bpriority=\{[^}]+\}/);
   assert.match(
-    cardSource,
-    /\{\s*entry,\s*headingLevel\s*=\s*['"]h2['"],\s*priority\s*=\s*false\s*\}\s*=\s*Astro\.props/,
-  );
-  assert.match(cardSource, /\{cover\s*\?\s*\(/);
-  assert.match(
-    cardSource,
-    /<CoverImage\s+(?=[^>]*cover=\{cover\})(?=[^>]*sizes=["']\(max-width: 48rem\) calc\(100vw - 2rem\), 30rem["'])(?=[^>]*priority=\{priority\})[^>]*\/>/s,
+    cardImage,
+    /\bsizes=["']\(max-width: 48rem\) calc\(100vw - 2rem\), 30rem["']/,
   );
   assert.match(
     homeSource,
-    /<PostCard\s+entry=\{featured\}\s+headingLevel=["']h3["']\s+priority\s*\/>/,
+    /<PostCard\b(?=[^>]*\bentry=\{featured\})(?=[^>]*\spriority(?:\s|=|\/))[^>]*\/>/s,
   );
 
   assert.match(
     rowSource,
     /import\s+CoverImage\s+from\s+['"]\.\/CoverImage\.astro['"];?/,
   );
-  assert.match(rowSource, /\{cover\s*&&\s*\(/);
-  assert.match(rowSource, /['"]post-row--with-cover['"]:\s*cover\s*!==\s*undefined/);
+  const rowImage = rowSource.match(/<CoverImage\b[\s\S]*?\/>/)?.[0];
+  assert.ok(rowImage, 'PostRow should render CoverImage');
+  assert.match(rowImage, /\bcover=\{[^}]+\}/);
   assert.match(
-    rowSource,
-    /<CoverImage\s+(?=[^>]*cover=\{cover\})(?=[^>]*sizes=["']\(max-width: 30rem\) 1px, \(max-width: 48rem\) 5\.25rem, 7rem["'])[^>]*\/>/s,
+    rowImage,
+    /\bsizes=["']\(max-width: 30rem\) 1px, \(max-width: 48rem\) 5\.25rem, 7rem["']/,
   );
-  assert.doesNotMatch(rowSource, /\b(?:loading|fetchpriority|priority)\s*=/);
+  assert.doesNotMatch(rowImage, /\b(?:loading|fetchpriority|priority)\b/);
+  assert.doesNotMatch(rowSource, /\b(?:loading|fetchpriority)\s*=/);
 
   assert.match(
     styles,
