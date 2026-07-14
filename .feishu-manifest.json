@@ -10,6 +10,39 @@
       "assets": []
     },
     {
+      "slug": "internship-day-one",
+      "assets": [
+        {
+          "hash": "2284b89dca991ac7a13533ea9f7ff6504ce98c3de57f0b62a4576fb325a2c796",
+          "filename": "2284b89dca991ac7a13533ea9f7ff6504ce98c3de57f0b62a4576fb325a2c796.webp"
+        },
+        {
+          "hash": "74d2f745aac903fc2e29c56b629217b7cd53c7b159ee29bf92abb89ed2a72f45",
+          "filename": "74d2f745aac903fc2e29c56b629217b7cd53c7b159ee29bf92abb89ed2a72f45.png"
+        },
+        {
+          "hash": "76aceba4e1ffc5f1fe447ca8a793521901ee7b5cc3e2ada43dbb518cceb6b817",
+          "filename": "76aceba4e1ffc5f1fe447ca8a793521901ee7b5cc3e2ada43dbb518cceb6b817.png"
+        },
+        {
+          "hash": "c2f0401b75f5ddafd2c7cd45fe6ac8b1e89093f878a297aad871d25970c9b2e2",
+          "filename": "c2f0401b75f5ddafd2c7cd45fe6ac8b1e89093f878a297aad871d25970c9b2e2.png"
+        },
+        {
+          "hash": "f80c092d17b99ef22103fd6b9bcae278128fb5a4dbd5ea1495ea3b3064388c5e",
+          "filename": "f80c092d17b99ef22103fd6b9bcae278128fb5a4dbd5ea1495ea3b3064388c5e.webp"
+        },
+        {
+          "hash": "fa095c5c9dc5099f7ba97bb150653f97b37fe0d53c5ab0c834accb17b6d0d942",
+          "filename": "fa095c5c9dc5099f7ba97bb150653f97b37fe0d53c5ab0c834accb17b6d0d942.webp"
+        },
+        {
+          "hash": "ffa3c707a2e0ed8d241c53d11acdcad978f395bc423b4658dd9b578eb033df35",
+          "filename": "ffa3c707a2e0ed8d241c53d11acdcad978f395bc423b4658dd9b578eb033df35.webp"
+        }
+      ]
+    },
+    {
       "slug": "published-from-feishu",
       "assets": [
         {
