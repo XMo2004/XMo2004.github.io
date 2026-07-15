@@ -140,12 +140,18 @@ const jsonLd = {
       </dl>
 
       <nav class="post-header__taxonomies" aria-label="文章分类与标签">
-        <a class="post-header__category" href={getCategoryHref(category)}>
+        <a
+          class="taxonomy-pill post-header__category"
+          href={getCategoryHref(category)}
+        >
           {category}
         </a>
 
         {column !== undefined && displayColumnOrder !== undefined && (
-          <a class="post-header__column" href={getColumnHref(column)}>
+          <a
+            class="taxonomy-pill post-header__column"
+            href={getColumnHref(column)}
+          >
             <span aria-label={`专栏第 ${columnOrder} 篇`}>{displayColumnOrder}</span>
             <span>{column}</span>
           </a>
