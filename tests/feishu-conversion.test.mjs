@@ -6,6 +6,10 @@ import {
   blocksToMarkdown,
   FeishuConversionError,
 } from '../scripts/feishu/blocks.mjs';
+import {
+  CALLOUT_EMOJI_BY_ID,
+  CALLOUT_EMOJI_SNAPSHOT,
+} from '../scripts/feishu/callout-emojis.mjs';
 
 const fixture = JSON.parse(
   await readFile(new URL('./fixtures/feishu-document.json', import.meta.url), 'utf8'),
@@ -37,6 +41,22 @@ function pageWith(children, extra = []) {
     ...extra,
   ];
 }
+
+test('vendors the complete pinned Feishu callout emoji catalog', () => {
+  assert.deepEqual(CALLOUT_EMOJI_SNAPSHOT, {
+    source:
+      'https://open.feishu.cn/document/ukTMukTMukTM/uUDN04SN0QjL1QDN/document-docx/docx-v1/emoji.md',
+    sha256: '37928153b9dc57b5e9ac940facb5a9627038bd130a3a0fc17edf59f5741458b7',
+    count: 940,
+  });
+  assert.equal(Object.keys(CALLOUT_EMOJI_BY_ID).length, 940);
+  assert.equal(CALLOUT_EMOJI_BY_ID.gift, '🎁');
+  assert.equal(CALLOUT_EMOJI_BY_ID.grinning, '😀');
+  assert.equal(CALLOUT_EMOJI_BY_ID.beach_with_umbrella, '🏖');
+  assert.equal(CALLOUT_EMOJI_BY_ID.unknown, undefined);
+  assert.equal(Object.hasOwn(CALLOUT_EMOJI_BY_ID, 'toString'), false);
+  assert.equal(Object.hasOwn(CALLOUT_EMOJI_BY_ID, '__proto__'), false);
+});
 
 test('legacy fixture preserves the complete conversion result byte for byte', () => {
   const expected = {
