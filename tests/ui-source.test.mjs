@@ -446,13 +446,19 @@ test('global styles define the editorial tokens and accessibility safeguards', a
     source,
     /(?:^|[\s;{])color:\s*var\(--(?:terracotta|sage|moss)\)/,
   );
+  assert.match(source, /--taxonomy-pill-height:\s*2\.25rem/i);
+  assert.match(source, /--taxonomy-pill-hit-height:\s*2\.75rem/i);
   assert.match(
     source,
-    /\.tag-list a\s*\{[^}]*min-height:\s*2\.75rem;[^}]*\}/s,
+    /\.taxonomy-pill\s*\{(?=[^}]*min-height:\s*var\(--taxonomy-pill-height\);)(?=[^}]*position:\s*relative;)(?=[^}]*border-radius:\s*999px;)[^}]*\}/s,
   );
   assert.match(
     source,
-    /\.tag-list--compact a\s*\{[^}]*min-height:\s*2\.75rem;[^}]*\}/s,
+    /\.taxonomy-pill::before\s*\{(?=[^}]*position:\s*absolute;)(?=[^}]*inset-block:\s*calc\()[^}]*content:\s*['"]{2};[^}]*\}/s,
+  );
+  assert.doesNotMatch(
+    source,
+    /\.(?:tag-list(?:--compact)? a|post-header__category|post-header__column)\s*\{[^}]*min-height:\s*2\.75rem;/s,
   );
   assert.match(
     source,
@@ -479,6 +485,26 @@ test('global styles define the editorial tokens and accessibility safeguards', a
   ]) {
     assert.match(pageSource, /class=["']standalone-action["']/);
   }
+});
+
+test('taxonomy renderers reuse the compact shared pill class', async () => {
+  const [tagList, postLayout] = await Promise.all([
+    readSource('src/components/TagList.astro'),
+    readSource('src/layouts/PostLayout.astro'),
+  ]);
+
+  assert.match(
+    tagList,
+    /<a\s+(?=[^>]*class=["'][^"']*\btaxonomy-pill\b[^"']*["'])(?=[^>]*class=["'][^"']*\btaxonomy-pill--tag\b[^"']*["'])[^>]*>/,
+  );
+  assert.match(
+    postLayout,
+    /<a\s+(?=[^>]*class=["'][^"']*\btaxonomy-pill\b[^"']*["'])(?=[^>]*class=["'][^"']*\bpost-header__category\b[^"']*["'])[^>]*>/,
+  );
+  assert.match(
+    postLayout,
+    /<a\s+(?=[^>]*class=["'][^"']*\btaxonomy-pill\b[^"']*["'])(?=[^>]*class=["'][^"']*\bpost-header__column\b[^"']*["'])[^>]*>/,
+  );
 });
 
 test('SiteHeader keeps all primary destinations available and marks the current one', async () => {
@@ -1095,9 +1121,12 @@ test('global layout keeps dense editorial scanning without shrinking reading tex
   );
   assert.match(
     styles,
-    /\.post-header__category,\s*\.post-header__column\s*\{(?=[^}]*min-height:\s*2\.75rem;)(?=[^}]*display:\s*inline-flex;)(?=[^}]*border-radius:\s*999px;)[^}]*\}/s,
+    /\.taxonomy-pill\s*\{(?=[^}]*min-height:\s*var\(--taxonomy-pill-height\);)(?=[^}]*display:\s*inline-flex;)(?=[^}]*border-radius:\s*999px;)[^}]*\}/s,
   );
-  assert.match(styles, /\.tag-list a\s*\{[^}]*border-radius:\s*999px;[^}]*\}/s);
+  assert.match(
+    styles,
+    /\.post-header__category,\s*\.post-header__column\s*\{[^}]*font-size:\s*0\.8rem;[^}]*\}/s,
+  );
   assert.match(
     styles,
     /\.post-layout--with-toc\s*\{(?=[^}]*grid-template-columns:\s*minmax\(0,\s*var\(--prose-width\)\)\s+minmax\(10rem,\s*13rem\);)(?=[^}]*grid-template-areas:\s*['"]content toc['"];)[^}]*\}/s,
