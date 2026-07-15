@@ -11,6 +11,13 @@ const fixture = JSON.parse(
   await readFile(new URL('./fixtures/feishu-document.json', import.meta.url), 'utf8'),
 );
 
+const legacyFixture = JSON.parse(
+  await readFile(
+    new URL('./fixtures/feishu-legacy-document.json', import.meta.url),
+    'utf8',
+  ),
+);
+
 function textBlock(id, parentId, content = id) {
   return {
     block_id: id,
@@ -30,6 +37,53 @@ function pageWith(children, extra = []) {
     ...extra,
   ];
 }
+
+test('legacy fixture preserves the complete conversion result byte for byte', () => {
+  const expected = {
+    markdown: [
+      '## 二级标题',
+      '',
+      'Markdown \\*特殊\\* 内容：**粗体** *斜体* ~~删除~~ ``a`b`` [链接](https://example.com/docs_%281%29)',
+      '',
+      '- 父级列表',
+      '  - 嵌套列表',
+      '',
+      '1. 有序项目',
+      '',
+      '> 引用内容',
+      '',
+      '- [x] 已经完成',
+      '',
+      '- [ ] 尚未完成',
+      '',
+      '````javascript',
+      'const fence = "```";',
+      'console.log(fence);',
+      '````',
+      '',
+      '---',
+      '',
+      '![图片](\uE000feishu-media:img_v2_example\uE001)',
+      '',
+      '| 列 A | 列 B |',
+      '| --- | --- |',
+      '| 值 \\| A | **值 B** |',
+      '',
+    ].join('\n'),
+    mediaTokens: ['img_v2_example'],
+    mediaReferences: [
+      {
+        token: 'img_v2_example',
+        placeholder: '\uE000feishu-media:img_v2_example\uE001',
+      },
+    ],
+    warnings: [],
+  };
+  const input = structuredClone(legacyFixture.items);
+
+  assert.deepEqual(blocksToMarkdown(input), expected);
+  assert.deepEqual(input, legacyFixture.items);
+});
 
 test('converts supported Feishu text blocks to deterministic Markdown', () => {
   const input = structuredClone(fixture.items);
