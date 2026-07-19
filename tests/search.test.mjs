@@ -265,18 +265,33 @@ test('does not treat an unknown private-use token index as a URL terminator', ()
 });
 
 test('avoids token markers reconstructed through entities and empty comments', () => {
+  const reconstructedToken = '\uE0000\uE001';
+  const encodedToken = '&#xE000;<!---->0&#xE001;';
+
+  assert.equal(
+    markdownToSearchText(`${encodedToken} \`SAFE\``),
+    `${reconstructedToken} SAFE`,
+  );
+});
+
+test('fails closed when every BMP private-use marker is occupied', () => {
   const occupiedBmpMarkers = Array.from(
     { length: 0xf8ff - 0xe000 + 1 },
     (_value, index) => String.fromCodePoint(0xe000 + index),
   ).join('');
-  const supplementaryMarker = String.fromCodePoint(0xf0000);
-  const encodedMarker = '&#xDB80;<!---->&#xDC00;';
-  const encodedToken = `${encodedMarker}0${encodedMarker}`;
+  const surrogateHalves = '&#xDB80;**&#xDC00;';
+  const cases = [
+    occupiedBmpMarkers,
+    `${occupiedBmpMarkers}${surrogateHalves}0${surrogateHalves} \`SAFE\``,
+    `${occupiedBmpMarkers} https&#58;&#47;&#47;${surrogateHalves}0${surrogateHalves}private.example/path \`SAFE\``,
+  ];
 
-  assert.equal(
-    markdownToSearchText(`${occupiedBmpMarkers}${encodedToken} \`SAFE\``),
-    `${occupiedBmpMarkers}${supplementaryMarker}0${supplementaryMarker} SAFE`,
-  );
+  for (const markdown of cases) {
+    assert.throws(
+      () => markdownToSearchText(markdown),
+      /Search preservation token marker space exhausted/,
+    );
+  }
 });
 
 test('markdownToSearchText removes balanced-parenthesis bare URLs and autolinks completely', () => {

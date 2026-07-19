@@ -21,11 +21,7 @@ const URL_TERMINATORS = new Set([
   '、',
 ]);
 
-const PRESERVATION_MARKER_RANGES = [
-  [0xe000, 0xf8ff],
-  [0xf0000, 0xffffd],
-  [0x100000, 0x10fffd],
-] as const;
+const PRESERVATION_MARKER_RANGE = [0xe000, 0xf8ff] as const;
 
 const SEARCH_WEIGHTS = {
   titleExact: 120,
@@ -85,6 +81,7 @@ function findBareUrlEnd(
   start: number,
   schemeLength: number,
   preservationMarker: string,
+  preservedSegmentCount: number,
 ): number {
   let parenthesisDepth = 0;
   let index = start + schemeLength;
@@ -95,7 +92,12 @@ function findBareUrlEnd(
     if (
       /\s/u.test(character) ||
       URL_TERMINATORS.has(character) ||
-      isPreservationTokenAt(value, index, preservationMarker)
+      isPreservationTokenAt(
+        value,
+        index,
+        preservationMarker,
+        preservedSegmentCount,
+      )
     ) {
       break;
     }
@@ -120,15 +122,39 @@ function isPreservationTokenAt(
   value: string,
   start: number,
   marker: string,
+  preservedSegmentCount: number,
 ): boolean {
   if (!value.startsWith(marker, start)) return false;
   let index = start + marker.length;
   const digitsStart = index;
   while (/[0-9]/u.test(value[index] ?? '')) index += 1;
-  return index > digitsStart && value.startsWith(marker, index);
+  if (index === digitsStart || !value.startsWith(marker, index)) return false;
+  return preservationTokenIndex(
+    value.slice(digitsStart, index),
+    preservedSegmentCount,
+  ) !== undefined;
 }
 
-function removeUrls(value: string, preservationMarker: string): string {
+function preservationTokenIndex(
+  digits: string,
+  preservedSegmentCount: number,
+): number | undefined {
+  const index = Number.parseInt(digits, 10);
+  return (
+    Number.isSafeInteger(index) &&
+    index >= 0 &&
+    index < preservedSegmentCount &&
+    String(index) === digits
+  )
+    ? index
+    : undefined;
+}
+
+function removeUrls(
+  value: string,
+  preservationMarker: string,
+  preservedSegmentCount: number,
+): string {
   let result = '';
   let index = 0;
 
@@ -142,6 +168,7 @@ function removeUrls(value: string, preservationMarker: string): string {
           index + 1,
           schemeLength,
           preservationMarker,
+          preservedSegmentCount,
         );
 
         if (value[urlEnd] === '>') {
@@ -162,6 +189,7 @@ function removeUrls(value: string, preservationMarker: string): string {
         index,
         schemeLength,
         preservationMarker,
+        preservedSegmentCount,
       );
       continue;
     }
@@ -483,10 +511,9 @@ function selectPreservationMarker(normalized: string): string {
     }
   }
 
-  for (const [start, end] of PRESERVATION_MARKER_RANGES) {
-    for (let codePoint = start; codePoint <= end; codePoint += 1) {
-      if (!usedCodePoints.has(codePoint)) return String.fromCodePoint(codePoint);
-    }
+  const [start, end] = PRESERVATION_MARKER_RANGE;
+  for (let codePoint = start; codePoint <= end; codePoint += 1) {
+    if (!usedCodePoints.has(codePoint)) return String.fromCodePoint(codePoint);
   }
 
   throw new Error('Search preservation token marker space exhausted.');
@@ -513,7 +540,11 @@ export function markdownToSearchText(markdown: string): string {
       const visibleCode = kind === 'markdown-code-span'
         ? normalizeMarkdownCodeSpanContent(content)
         : content;
-      return preserve(removeUrls(visibleCode, preservationMarker));
+      return preserve(removeUrls(
+        visibleCode,
+        preservationMarker,
+        preservedSegments.length,
+      ));
     },
     equation: ({ source }) => preserve(source.normalize('NFKC')),
     searchUi: () => ' ',
@@ -523,7 +554,7 @@ export function markdownToSearchText(markdown: string): string {
     /\\([\\`*{}[\]()#+\-.!_>~|])/gu,
     (_match, character: string) => preserve(character),
   );
-  text = removeUrls(text, preservationMarker);
+  text = removeUrls(text, preservationMarker, preservedSegments.length);
 
   text = removeReferenceDefinitions(text);
   text = replaceInlineLinkTargets(text);
@@ -558,13 +589,17 @@ export function markdownToSearchText(markdown: string): string {
     value.replaceAll(
       new RegExp(`${preservationMarker}(\\d+)${preservationMarker}`, 'gu'),
       (token, segmentIndex: string) => {
-        const segment = preservedSegments[Number.parseInt(segmentIndex, 10)];
+        const index = preservationTokenIndex(
+          segmentIndex,
+          preservedSegments.length,
+        );
+        const segment = index === undefined ? undefined : preservedSegments[index];
         return segment?.phase === phase ? segment.value : token;
       },
     );
 
   text = restorePhase(text, 'literal');
-  text = removeUrls(text, preservationMarker);
+  text = removeUrls(text, preservationMarker, preservedSegments.length);
   text = restorePhase(text, 'final');
 
   return text.replace(/\s+/gu, ' ').trim().slice(0, MAX_SEARCH_TEXT_LENGTH);
