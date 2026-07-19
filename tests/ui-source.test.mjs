@@ -260,6 +260,7 @@ function selectorAppliesToTarget(selector, target) {
   const selectorSubject = splitTopLevelSelectorCompounds(selector).at(-1);
   const targetSubject = splitTopLevelSelectorCompounds(target).at(-1);
   if (selectorSubject === undefined || targetSubject === undefined) return false;
+  if (compoundHasPseudoElement(selectorSubject)) return false;
 
   // Source contracts know the protected subject identity, not its complete DOM.
   // Additional subject qualifiers and ancestors may apply; only the focus state
@@ -591,22 +592,35 @@ function splitTopLevelSelectorCompounds(selector) {
   return compounds;
 }
 
-function normalizeSupportedClassAttributes(compound) {
-  return compound.replace(
-    /\[\s*class\s*(~=|=)\s*(?:"([^"]*)"|'([^']*)'|([^\]\s]+))\s*\]/gi,
-    (attribute, operator, doubleQuoted, singleQuoted, unquoted) => {
-      const value = doubleQuoted ?? singleQuoted ?? unquoted;
-      const classNames = value.trim().split(/\s+/).filter(Boolean);
-      if (
-        classNames.length === 0 ||
-        classNames.some((className) => !/^[\w-]+$/.test(className)) ||
-        (operator === '~=' && classNames.length !== 1)
-      ) {
-        return attribute;
-      }
-      return classNames.map((className) => `.${className}`).join('');
-    },
-  );
+function classAttributeSelectors(compound) {
+  return [...compound.matchAll(
+    /\[\s*class\s*(?:(\^=|\$=|\*=|~=|\|=|=)\s*(?:"([^"]*)"|'([^']*)'|([^\]\s]+))(?:\s+([is]))?)?\s*\]/gi,
+  )].map((match) => ({
+    flag: match[5]?.toLowerCase(),
+    operator: match[1],
+    value: match[2] ?? match[3] ?? match[4],
+  }));
+}
+
+function classAttributeSelectorMatchesTarget(selector, targetClass) {
+  if (selector.operator === undefined) return true;
+
+  let actual = targetClass;
+  let expected = selector.value;
+  if (selector.flag === 'i') {
+    actual = actual.toLowerCase();
+    expected = expected.toLowerCase();
+  }
+
+  if (selector.operator === '=') {
+    return expected.split(/\s+/).includes(actual);
+  }
+  if (selector.operator === '~=') return expected === actual;
+  if (expected === '') return false;
+  if (selector.operator === '*=') return actual.includes(expected);
+  if (selector.operator === '^=') return actual.startsWith(expected);
+  if (selector.operator === '$=') return actual.endsWith(expected);
+  return actual === expected || actual.startsWith(`${expected}-`);
 }
 
 function compoundHasDirectPseudoClass(compound, expectedName) {
@@ -629,8 +643,38 @@ function compoundHasDirectPseudoClass(compound, expectedName) {
   return false;
 }
 
+function compoundHasPseudoElement(compound) {
+  const legacyPseudoElements = new Set([
+    'after',
+    'before',
+    'first-letter',
+    'first-line',
+  ]);
+
+  for (let index = 0; index < compound.length; index += 1) {
+    if (compound[index] === '[') {
+      index = findMatchingSelectorDelimiter(compound, index, '[', ']');
+      continue;
+    }
+    if (compound[index] !== ':') continue;
+    if (compound[index + 1] === ':') return true;
+
+    const nameMatch = /^[\w-]+/.exec(compound.slice(index + 1));
+    const name = nameMatch?.[0]?.toLowerCase();
+    const opening = index + 1 + (name?.length ?? 0);
+    if (name !== undefined && compound[opening] === '(') {
+      index = findMatchingSelectorDelimiter(compound, opening, '(', ')');
+      continue;
+    }
+    if (legacyPseudoElements.has(name)) return true;
+  }
+  return false;
+}
+
 function compoundMatchesTarget(subject, target) {
-  subject = normalizeSupportedClassAttributes(subject);
+  if (compoundHasPseudoElement(subject)) return false;
+
+  const classAttributes = classAttributeSelectors(subject);
   let direct = '';
 
   for (let index = 0; index < subject.length; index += 1) {
@@ -684,7 +728,11 @@ function compoundMatchesTarget(subject, target) {
   const targetClasses = [...target.matchAll(/\.([\w-]+)/g)].map(([, name]) => name);
   for (const className of targetClasses) {
     const escaped = className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    if (!new RegExp(`\\.${escaped}(?![\\w-])`).test(direct)) return false;
+    const hasDirectClass = new RegExp(`\\.${escaped}(?![\\w-])`).test(direct);
+    const hasMatchingClassAttribute = classAttributes.some((attribute) =>
+      classAttributeSelectorMatchesTarget(attribute, className),
+    );
+    if (!hasDirectClass && !hasMatchingClassAttribute) return false;
   }
   const targetElements = target
     .replace(/#[\w-]+|\.[\w-]+|\[[^\]]+\]|:(?!:)[\w-]+(?:\([^)]*\))?/g, ' ')
@@ -1168,6 +1216,46 @@ test('narrow hierarchy rejects class-token attribute overrides', async () => {
   );
 });
 
+test('protected semantic boundaries reject class-substring attribute resets', async () => {
+  const [styles, feishuStyles] = await Promise.all([
+    readSource('src/styles/global.css'),
+    readSource('src/styles/feishu-content.css'),
+  ]);
+  const fixture = `${styles}
+    [class*='search-dialog__input'] { border: 0; }
+  `;
+
+  assert.throws(
+    () => assertArticleAndSearchBoundarySourceContract(fixture, feishuStyles),
+    /search-dialog__input source selector .* must preserve border width/,
+  );
+});
+
+test('narrow hierarchy rejects class-substring attribute overrides', async () => {
+  const styles = await readSource('src/styles/global.css');
+  const fixture = `${styles}
+    @media (max-width: 48rem) {
+      [class*='home-hero'] { background: var(--surface); }
+    }
+  `;
+
+  assert.throws(
+    () => assertSoftBorderlessNarrowHierarchyAt(fixture),
+    /home-hero should keep the soft paper surface/,
+  );
+});
+
+test('effective search cascade ignores host pseudo-element declarations', async () => {
+  const styles = await readSource('src/styles/global.css');
+  const fixture = `${styles}
+    @media (max-width: 48rem) {
+      .search-toggle::before { min-width: 1rem; min-height: 1rem; }
+    }
+  `;
+
+  assert.doesNotThrow(() => assertEffectiveSearchStyleCascade(fixture));
+});
+
 test('selector applicability uses the known target subject without broad text matches', () => {
   assert.equal(
     selectorAppliesToTarget('.site-header .search-toggle', '.search-toggle'),
@@ -1221,12 +1309,41 @@ test('selector applicability uses the known target subject without broad text ma
   assert.equal(selectorAppliesToTarget('.home-hero__copy', '.home-hero'), false);
 });
 
-test('source selector matching supports only explicit class attribute forms', () => {
+test('source selector matching models class attribute operators and flags', () => {
+  assert.equal(selectorHasTargetToken('[class]', '.home-hero'), true);
   assert.equal(selectorHasTargetToken("[class~='home-hero']", '.home-hero'), true);
   assert.equal(selectorHasTargetToken('[class="home-hero"]', '.home-hero'), true);
   assert.equal(
     selectorHasTargetToken('[class="home-hero featured"]', '.home-hero'),
     true,
+  );
+  assert.equal(selectorHasTargetToken("[class*='home-hero']", '.home-hero'), true);
+  assert.equal(selectorHasTargetToken("[class^='home']", '.home-hero'), true);
+  assert.equal(selectorHasTargetToken("[class$='hero']", '.home-hero'), true);
+  assert.equal(selectorHasTargetToken("[class|='home']", '.home-hero'), true);
+  assert.equal(
+    selectorHasTargetToken("[class*='HOME-HERO' i]", '.home-hero'),
+    true,
+  );
+  assert.equal(
+    selectorHasTargetToken("[class*='HOME-HERO' s]", '.home-hero'),
+    false,
+  );
+  assert.equal(
+    selectorHasTargetToken("[class^='hero']", '.home-hero'),
+    false,
+  );
+  assert.equal(
+    selectorHasTargetToken("[class$='home']", '.home-hero'),
+    false,
+  );
+  assert.equal(
+    selectorHasTargetToken("[class|='hero']", '.home-hero'),
+    false,
+  );
+  assert.equal(
+    selectorHasTargetToken("[class*='home-hero__copy']", '.home-hero'),
+    false,
   );
   assert.equal(
     selectorHasTargetToken('.home-hero .home-hero__copy', '.home-hero'),
@@ -1242,6 +1359,29 @@ test('source selector matching supports only explicit class attribute forms', ()
     false,
   );
   assert.equal(selectorHasTargetToken('.home-hero__copy', '.home-hero'), false);
+});
+
+test('host selector matching excludes modern and legacy pseudo-elements', () => {
+  for (const pseudoElement of [
+    '::before',
+    '::after',
+    '::marker',
+    ':before',
+    ':after',
+    ':first-line',
+    ':first-letter',
+  ]) {
+    assert.equal(
+      selectorAppliesToTarget(`.search-toggle${pseudoElement}`, '.search-toggle'),
+      false,
+      `${pseudoElement} must not apply to the host cascade`,
+    );
+    assert.equal(
+      selectorHasTargetToken(`.home-hero${pseudoElement}`, '.home-hero'),
+      false,
+      `${pseudoElement} must not match the host source contract`,
+    );
+  }
 });
 
 test('protected border component mapping uses LTR physical and logical axes', () => {
