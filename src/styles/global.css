@@ -3,6 +3,8 @@
 
   --paper: #f4f0e7;
   --paper-raised: #fbf8f1;
+  --paper-soft: #f8f4ec;
+  --paper-interactive: #eee8dd;
   --ink: #1d211d;
   --muted: #646960;
   --line: #d7d0c3;
@@ -42,6 +44,7 @@
   --taxonomy-pill-height: 2.25rem;
   --taxonomy-pill-hit-height: 2.75rem;
   --shadow-soft: 0 0.5rem 1.5rem rgb(29 33 29 / 8%);
+  --shadow-header: 0 0.35rem 1rem rgb(29 33 29 / 4%);
   --duration-fast: 180ms;
   --duration-normal: 220ms;
   --ease-standard: cubic-bezier(0.2, 0.7, 0.2, 1);
@@ -53,6 +56,8 @@
 
   --paper: #171a17;
   --paper-raised: #202420;
+  --paper-soft: #1c201c;
+  --paper-interactive: #252a25;
   --ink: #eee9de;
   --muted: #a9afa5;
   --line: #3b413a;
@@ -62,6 +67,7 @@
   --accent-hover: #a8b98c;
   --focus-ring: #e27a5f;
   --shadow-soft: 0 0.5rem 1.5rem rgb(0 0 0 / 16%);
+  --shadow-header: 0 0.35rem 1rem rgb(0 0 0 / 10%);
 }
 
 *,

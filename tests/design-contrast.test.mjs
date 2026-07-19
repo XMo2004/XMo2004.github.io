@@ -41,8 +41,11 @@ const calloutBackgrounds = [
 
 function readTokens(block) {
   return Object.fromEntries(
-    [...block.matchAll(/--([a-z0-9-]+):\s*(#[0-9a-f]{6})\s*;/gi)].map(
-      ([, name, value]) => [name, value.toLowerCase()],
+    [...block.matchAll(/--([a-z0-9-]+)\s*:\s*([^;]+);/gi)].map(
+      ([, name, value]) => [
+        name,
+        value.trim().replace(/\s+/g, ' ').toLowerCase(),
+      ],
     ),
   );
 }
@@ -142,6 +145,64 @@ test('semantic accent text tokens meet WCAG AA on every paper surface', async ()
       }
     }
   }
+});
+
+test('soft paper hierarchy uses approved colors and meets WCAG AA', async () => {
+  const source = await readFile(
+    new URL('../src/styles/global.css', import.meta.url),
+    'utf8',
+  );
+  const themes = themeTokens(source);
+  const expectedPaperHierarchy = {
+    light: {
+      'paper-soft': '#f8f4ec',
+      'paper-interactive': '#eee8dd',
+    },
+    dark: {
+      'paper-soft': '#1c201c',
+      'paper-interactive': '#252a25',
+    },
+  };
+
+  for (const [themeName, tokens] of Object.entries(themes)) {
+    for (const [tokenName, expectedColor] of Object.entries(
+      expectedPaperHierarchy[themeName],
+    )) {
+      assert.equal(
+        tokens[tokenName],
+        expectedColor,
+        `${themeName} --${tokenName} must use the approved paper color`,
+      );
+    }
+
+    for (const foregroundName of [
+      'ink',
+      'muted',
+      'accent-text',
+      'accent-hover',
+    ]) {
+      for (const backgroundName of ['paper-soft', 'paper-interactive']) {
+        assertContrast(
+          tokens,
+          themeName,
+          foregroundName,
+          backgroundName,
+          'soft paper hierarchy',
+        );
+      }
+    }
+  }
+
+  assert.equal(
+    themes.light['shadow-header'],
+    '0 0.35rem 1rem rgb(29 33 29 / 4%)',
+    'light --shadow-header must use the approved subtle shadow',
+  );
+  assert.equal(
+    themes.dark['shadow-header'],
+    '0 0.35rem 1rem rgb(0 0 0 / 10%)',
+    'dark --shadow-header must use the approved subtle shadow',
+  );
 });
 
 test('Feishu foreground, background, callout, link, and quote matrices meet WCAG AA', async () => {
