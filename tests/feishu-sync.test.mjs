@@ -35,6 +35,12 @@ const DIFFERENT_COVER_IMAGE_BYTES = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAECAIAAAA8r+mnAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEUlEQVQImWMQmXYHK2KgngQAbWswwUGo0YkAAAAASUVORK5CYII=',
   'base64',
 );
+const RICH_CONTENT_FIXTURE = JSON.parse(
+  await readFile(
+    new URL('./fixtures/feishu-rich-content.json', import.meta.url),
+    'utf8',
+  ),
+);
 
 test('public sync failures never expose Feishu internal identifiers', () => {
   const internalValues = [
@@ -178,9 +184,63 @@ function documentBlocks(body = '来自飞书的正文') {
   ];
 }
 
+function equationFailureBlocks(source) {
+  return [
+    {
+      block_id: 'page_private',
+      block_type: 1,
+      children: ['block_private', 'image_private'],
+      page: { elements: [] },
+    },
+    {
+      block_id: 'block_private',
+      block_type: 2,
+      parent_id: 'page_private',
+      text: {
+        elements: [
+          { equation: { content: source, text_element_style: {} } },
+        ],
+      },
+    },
+    {
+      block_id: 'image_private',
+      block_type: 27,
+      parent_id: 'page_private',
+      image: { token: 'body_media_private' },
+    },
+  ];
+}
+
+function referenceSyncedFailureBlocks() {
+  return [
+    {
+      block_id: 'page_private',
+      block_type: 1,
+      children: ['block_private', 'image_private'],
+      page: { elements: [] },
+    },
+    {
+      block_id: 'block_private',
+      block_type: 50,
+      parent_id: 'page_private',
+      reference_synced: {
+        source_document_id: 'document_private',
+        source_block_id: 'source_block_private',
+      },
+    },
+    {
+      block_id: 'image_private',
+      block_type: 27,
+      parent_id: 'page_private',
+      image: { token: 'body_media_private' },
+    },
+  ];
+}
+
 function stableClient({
   records = [publishedRecord()],
   body = '来自飞书的正文',
+  blocks = documentBlocks(body),
   coverBytes = COVER_IMAGE_BYTES,
   coverContentType = 'image/png',
   coverFileToken = 'cover_token',
@@ -206,7 +266,7 @@ function stableClient({
     },
     async listDocumentBlocks(documentId, revisionId) {
       calls.blocks.push({ documentId, revisionId });
-      return documentBlocks(body);
+      return structuredClone(blocks);
     },
     async downloadMedia(fileToken, extra) {
       calls.media.push({ fileToken, extra });
@@ -609,7 +669,7 @@ test('changing only Feishu internal identifiers does not rewrite public output',
   assert.deepEqual(await generatedSnapshot(root), before);
 });
 
-test('conversion warnings expose only the public slug and warning details', async (t) => {
+test('supported underline conversion emits controlled HTML without warnings', async (t) => {
   const root = await makeRoot(t);
   const { client } = stableClient({
     records: [publishedRecord({ fields: { 封面: [] } })],
@@ -645,11 +705,202 @@ test('conversion warnings expose only the public slug and warning details', asyn
     tableId: TABLE_ID,
   });
 
-  assert.deepEqual(result.warnings, [{ slug: 'first-post', type: 'underline' }]);
-  assert.doesNotMatch(
-    JSON.stringify(result.warnings),
-    /rec-one|doxcnExample123|private-page-id|private-paragraph-id/,
+  assert.deepEqual(result.warnings, []);
+  assert.match(
+    await readFile(
+      join(root, 'src/content/posts/feishu/first-post.md'),
+      'utf8',
+    ),
+    /<u class="feishu-underline">带下划线的正文<\/u>/,
   );
+});
+
+test('rich content sync is idempotent and keeps Feishu identifiers out of the generated post', async (t) => {
+  const root = await makeRoot(t);
+  const record = publishedRecord({
+    id: 'record_private',
+    slug: 'example-post',
+    fields: { 封面: [] },
+  });
+  record.fields.文档链接.link =
+    'https://example.feishu.cn/docx/documentprivate123';
+  const { client } = stableClient({
+    records: [record],
+    blocks: RICH_CONTENT_FIXTURE.items,
+  });
+
+  const first = await syncFeishu({
+    root,
+    client,
+    appToken: APP_TOKEN,
+    tableId: TABLE_ID,
+  });
+  const firstSnapshot = await generatedSnapshot(root);
+  const second = await syncFeishu({
+    root,
+    client,
+    appToken: APP_TOKEN,
+    tableId: TABLE_ID,
+  });
+
+  assert.equal(first.changed, true);
+  assert.equal(second.changed, false);
+  assert.deepEqual(first.warnings, []);
+  assert.deepEqual(second.warnings, []);
+  assert.deepEqual(await generatedSnapshot(root), firstSnapshot);
+
+  const markdown = await readFile(
+    join(root, 'src/content/posts/feishu/example-post.md'),
+    'utf8',
+  );
+  assert.match(markdown, /<div class="feishu-document">/);
+  assert.match(markdown, /<aside class="feishu-callout /);
+  assert.match(markdown, /<span class="feishu-equation /);
+  assert.match(markdown, /<section class="feishu-source-synced">/);
+  assert.doesNotMatch(markdown, /record_private|documentprivate123/);
+  for (const { block_id: blockId } of RICH_CONTENT_FIXTURE.items) {
+    assert.equal(
+      markdown.includes(blockId),
+      false,
+      `generated Markdown must not expose block id ${blockId}`,
+    );
+  }
+});
+
+test('equation and reference synced failures preserve published output and expose only build plus slug', async (t) => {
+  const cases = [
+    {
+      name: 'empty equation',
+      blocks: equationFailureBlocks(''),
+    },
+    {
+      name: 'invalid equation',
+      blocks: equationFailureBlocks(
+        String.raw`\htmlClass{document_private}{E=mc^2}`,
+      ),
+    },
+    {
+      name: 'equation source over 8 KiB',
+      blocks: equationFailureBlocks('x'.repeat(8_193)),
+    },
+    {
+      name: 'reference synced block',
+      blocks: referenceSyncedFailureBlocks(),
+    },
+  ];
+
+  for (const subject of cases) {
+    await t.test(subject.name, async (t) => {
+      const root = await makeRoot(t);
+      const record = publishedRecord({
+        id: 'record_private',
+        slug: 'example-post',
+        fields: { 封面: [] },
+      });
+      record.fields.文档链接.link =
+        'https://example.feishu.cn/docx/documentprivate123';
+      await syncFeishu({
+        root,
+        client: stableClient({ records: [record] }).client,
+        appToken: APP_TOKEN,
+        tableId: TABLE_ID,
+      });
+      const before = await generatedSnapshot(root);
+      const publicOutputBefore = await generatedPublicOutput(root);
+      const rejected = stableClient({ records: [record], blocks: subject.blocks });
+
+      const publicMessage = await publicMessageForRejectedSync({
+        root,
+        client: rejected.client,
+        appToken: APP_TOKEN,
+        tableId: TABLE_ID,
+      });
+
+      assert.equal(
+        publicMessage,
+        '飞书同步失败 [build: 文档与素材生成; slug: example-post]：错误详情已脱敏，请重试。',
+      );
+      assert.match(publicMessage, /build/);
+      assert.match(publicMessage, /example-post/);
+      assert.doesNotMatch(
+        publicMessage,
+        /documentprivate123|document_private|record_private|block_private|source_block_private|body_media_private|\\htmlClass|E=mc\^2/,
+      );
+      assert.deepEqual(await generatedSnapshot(root), before);
+      assert.equal(await generatedPublicOutput(root), publicOutputBefore);
+      assert.deepEqual(rejected.calls.media, []);
+      assert.deepEqual(
+        (await readdir(root)).filter((name) =>
+          name.startsWith('.feishu-sync-'),
+        ),
+        [],
+      );
+    });
+  }
+});
+
+test('a reused conversion Error exposes a slug only for the build attempt that produced it', async (t) => {
+  const root = await makeRoot(t);
+  const oldRecord = publishedRecord({
+    id: 'old-record-private',
+    slug: 'old-slug',
+    fields: { 封面: [] },
+  });
+  const first = stableClient({
+    records: [oldRecord],
+    blocks: equationFailureBlocks(''),
+  });
+  let reusedError;
+
+  await assert.rejects(
+    () =>
+      syncFeishu({
+        root,
+        client: first.client,
+        appToken: APP_TOKEN,
+        tableId: TABLE_ID,
+      }),
+    (error) => {
+      reusedError = error;
+      return error instanceof Error;
+    },
+  );
+  assert.equal(
+    publicSyncFailureMessage(reusedError),
+    '飞书同步失败 [build: 文档与素材生成; slug: old-slug]：错误详情已脱敏，请重试。',
+  );
+
+  const newRecord = publishedRecord({
+    id: 'new-record-private',
+    slug: 'new-slug',
+    fields: { 封面: [] },
+  });
+  const second = stableClient({ records: [newRecord] });
+  second.client.getDocument = async () => {
+    throw reusedError;
+  };
+  let secondFailure;
+  await assert.rejects(
+    () =>
+      syncFeishu({
+        root,
+        client: second.client,
+        appToken: APP_TOKEN,
+        tableId: TABLE_ID,
+      }),
+    (error) => {
+      secondFailure = error;
+      return true;
+    },
+  );
+
+  assert.strictEqual(secondFailure, reusedError);
+  const publicMessage = publicSyncFailureMessage(secondFailure);
+  assert.equal(
+    publicMessage,
+    '飞书同步失败 [build: 文档与素材生成]：错误详情已脱敏，请重试。',
+  );
+  assert.doesNotMatch(publicMessage, /old-slug|new-slug/);
 });
 
 test('a second identical sync performs no filesystem replacement', async (t) => {

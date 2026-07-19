@@ -28,3 +28,15 @@ test('Astro is configured as a static site at the GitHub Pages origin', async ()
 
   assert.equal(config.output, 'static');
 });
+
+test('KaTeX is an exact production dependency in package and lock files', async () => {
+  const [packageJson, packageLock] = await Promise.all([
+    readFile(new URL('../package.json', import.meta.url), 'utf8').then(JSON.parse),
+    readFile(new URL('../package-lock.json', import.meta.url), 'utf8').then(JSON.parse),
+  ]);
+
+  assert.equal(packageJson.dependencies.katex, '0.17.0');
+  assert.equal(packageJson.devDependencies?.katex, undefined);
+  assert.equal(packageLock.packages[''].dependencies.katex, '0.17.0');
+  assert.equal(packageLock.packages['node_modules/katex'].version, '0.17.0');
+});

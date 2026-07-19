@@ -67,16 +67,20 @@ export const PUBLIC_SYNC_FAILURE_PHASES = Object.freeze({
 });
 const syncFailurePhase = new WeakMap();
 const syncFailureSlug = new WeakMap();
+const syncFailureBuildScope = new WeakMap();
 const recordValidationFields = new WeakMap();
 const recordValidationRules = new WeakMap();
 const recordValidationShapes = new WeakMap();
 
-async function inSyncPhase(phase, operation) {
+async function inSyncPhase(phase, operation, { buildScope } = {}) {
   try {
     return await operation();
   } catch (error) {
     if (error instanceof Error) {
       syncFailurePhase.set(error, phase);
+      if (phase === 'build' && buildScope !== undefined) {
+        syncFailureBuildScope.set(error, buildScope);
+      }
     }
     throw error;
   }
@@ -171,9 +175,14 @@ export function publicSyncFailureMessage(error) {
         ? shapes.get(fields[0])
         : undefined;
     const shapeDetail = typeof shape === 'string' ? `; shape: ${shape}` : '';
-    const slug =
+    const slugMetadata =
       phase === 'build' && error instanceof Error
         ? syncFailureSlug.get(error)
+        : undefined;
+    const slug =
+      slugMetadata !== undefined &&
+      slugMetadata.buildScope === syncFailureBuildScope.get(error)
+        ? slugMetadata.slug
         : undefined;
     const slugDetail = typeof slug === 'string' ? `; slug: ${slug}` : '';
     return `飞书同步失败 [${phase}: ${PUBLIC_SYNC_FAILURE_PHASES[phase]}${fieldDetail}${ruleDetail}${shapeDetail}${slugDetail}]：错误详情已脱敏，请重试。`;
@@ -498,7 +507,7 @@ function renderPost(article) {
   return `---\n${yaml}---\n\n${article.markdown}`;
 }
 
-async function buildNextState(client, records) {
+async function buildNextState(client, records, buildScope) {
   const articles = [];
   const assets = new Map();
   const downloadCache = new Map();
@@ -528,7 +537,15 @@ async function buildNextState(client, records) {
 
   for (const record of records) {
     const stable = await readStableDocument(client, record);
-    const converted = blocksToMarkdown(stable.blocks);
+    let converted;
+    try {
+      converted = blocksToMarkdown(stable.blocks);
+    } catch (error) {
+      if (error instanceof Error) {
+        syncFailureSlug.set(error, { buildScope, slug: record.slug });
+      }
+      throw error;
+    }
     let markdown = converted.markdown;
     const articleAssets = new Map();
     const articleMediaKeys = new Set(
@@ -574,7 +591,9 @@ async function buildNextState(client, records) {
       try {
         responsiveCover = await createResponsiveCover(source);
       } catch (error) {
-        if (error instanceof Error) syncFailureSlug.set(error, record.slug);
+        if (error instanceof Error) {
+          syncFailureSlug.set(error, { buildScope, slug: record.slug });
+        }
         throw error;
       }
       for (const asset of responsiveCover.assets) {
@@ -956,8 +975,11 @@ export async function syncFeishu({
     rejectManualSlugCollisions(manualPosts, records);
     validateNextTaxonomy(manualPosts, records);
   });
-  const next = await inSyncPhase('build', () =>
-    buildNextState(client, records),
+  const buildScope = Object.freeze({});
+  const next = await inSyncPhase(
+    'build',
+    () => buildNextState(client, records, buildScope),
+    { buildScope },
   );
   const stage = await inSyncPhase('stage', () => writeStage(next));
 

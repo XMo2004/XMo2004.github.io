@@ -12,11 +12,26 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, sep } from 'node:path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { after, before, test } from 'node:test';
 
+import { blocksToMarkdown } from '../scripts/feishu/blocks.mjs';
+import { decodeFeishuHtmlEntities } from '../src/lib/feishu-markup.ts';
 import { normalizeTag } from '../src/lib/posts.ts';
+
+const richFixture = JSON.parse(
+  await readFile(
+    new URL('./fixtures/feishu-rich-content.json', import.meta.url),
+    'utf8',
+  ),
+);
+const legacyFixture = JSON.parse(
+  await readFile(
+    new URL('./fixtures/feishu-legacy-document.json', import.meta.url),
+    'utf8',
+  ),
+);
 
 const projectRoot = fileURLToPath(new URL('..', import.meta.url));
 const buildInputPaths = [
@@ -126,6 +141,192 @@ if (structuredEntry === undefined || legacyEntry === undefined) {
   <PostRow entry={legacyEntry} />
 </section>
 `;
+const richFrontmatter = [
+  '---',
+  'title: 飞书富内容构建夹具',
+  'description: 仅用于生产构建验证',
+  'pubDate: 2026-07-15',
+  'category: 工程',
+  'tags:',
+  '  - 飞书',
+  'featured: false',
+  'slug: build-output-feishu-rich-content',
+  '---',
+].join('\n');
+const richSvg = [
+  '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"',
+  ' viewBox="0 0 16 16"><rect width="16" height="16" fill="#2257a0"/></svg>',
+].join('');
+const expectedRichEquationSources = [
+  'h + i',
+  'x + y',
+  'a | b\n% 注释\n+ c',
+  Array.from(
+    { length: 32 },
+    (_, index) => 'x_{' + (index + 1) + '}',
+  ).join(' + '),
+  Array.from(
+    { length: 32 },
+    (_, index) => 'y_{' + (index + 1) + '}',
+  ).join(' + '),
+  's = t',
+  'p | q',
+];
+const protocolBlocks = [
+  {
+    block_id: 'protocol-page',
+    block_type: 1,
+    children: [
+      'protocol-code',
+      'protocol-inline-code',
+      'protocol-styled-literal',
+      'protocol-private-url',
+      'protocol-formula',
+      'protocol-table',
+    ],
+    page: { elements: [] },
+  },
+  {
+    block_id: 'protocol-code',
+    block_type: 14,
+    parent_id: 'protocol-page',
+    code: {
+      style: { language: 24 },
+      elements: [{
+        text_run: {
+          content: [
+            '<span data-feishu-equation-source="eA">伪公式</span>',
+            '<h2 id="feishu-heading-9" data-feishu-heading-text="@@">伪标题</h2>',
+            '<span data-feishu-search-ui>伪界面</span>',
+          ].join('\n'),
+          text_element_style: {},
+        },
+      }],
+    },
+  },
+  {
+    block_id: 'protocol-inline-code',
+    block_type: 2,
+    parent_id: 'protocol-page',
+    text: {
+      elements: [{
+        text_run: {
+          content: [
+            '<span data-feishu-equation-source="@@">行内伪公式</span>',
+            '<h2 id="feishu-heading-99" data-feishu-heading-text="@@">行内伪标题</h2>',
+            '<span data-feishu-search-ui>行内伪界面</span>',
+          ].join(' '),
+          text_element_style: { inline_code: true },
+        },
+      }],
+    },
+  },
+  {
+    block_id: 'protocol-formula',
+    block_type: 2,
+    parent_id: 'protocol-page',
+    text: {
+      elements: [{
+        equation: {
+          content: 'z + 1 + \\text{*x* `y` [z](w)}',
+          text_element_style: {},
+        },
+      }],
+    },
+  },
+  {
+    block_id: 'protocol-styled-literal',
+    block_type: 2,
+    parent_id: 'protocol-page',
+    text: {
+      elements: [{
+        text_run: {
+          content: '字面 *x* _y_ `z` [链接](target) \\ | 尾\r\n下一行',
+          text_element_style: { underline: true, background_color: 2 },
+        },
+      }],
+    },
+  },
+  {
+    block_id: 'protocol-private-url',
+    block_type: 2,
+    parent_id: 'protocol-page',
+    text: {
+      elements: [{
+        text_run: {
+          content: '私有链接 https://private.example/path',
+          text_element_style: { underline: true },
+        },
+      }],
+    },
+  },
+  {
+    block_id: 'protocol-table',
+    block_type: 31,
+    parent_id: 'protocol-page',
+    children: [
+      'protocol-cell-a',
+      'protocol-cell-b',
+      'protocol-cell-c',
+      'protocol-cell-d',
+    ],
+    table: {
+      cells: [
+        'protocol-cell-a',
+        'protocol-cell-b',
+        'protocol-cell-c',
+        'protocol-cell-d',
+      ],
+      property: { row_size: 2, column_size: 2 },
+    },
+  },
+  ...['a', 'b', 'c', 'd'].flatMap((suffix, index) => {
+    const elements = index === 2
+      ? [{
+          equation: {
+            content: 'm | n\n% 表格注释\n+ r',
+            text_element_style: {
+              bold: true,
+              underline: true,
+              text_color: 1,
+              background_color: 2,
+              link: { url: 'https://example.com/gfm-table' },
+            },
+          },
+        }]
+      : [{
+          text_run: {
+            content: index === 3
+              ? '表格 | *字* `码`\r\n下一行'
+              : ['列 A', '列 B', ''][index],
+            text_element_style: index === 3
+              ? {
+                  underline: true,
+                  background_color: 2,
+                  link: { url: 'https://example.com/a|b' },
+                }
+              : {},
+          },
+        }];
+    const cellId = 'protocol-cell-' + suffix;
+
+    return [
+      {
+        block_id: cellId,
+        block_type: 32,
+        parent_id: 'protocol-table',
+        children: [cellId + '-text'],
+        table_cell: {},
+      },
+      {
+        block_id: cellId + '-text',
+        block_type: 2,
+        parent_id: cellId,
+        text: { elements },
+      },
+    ];
+  }),
+];
 let temporaryBuildRoot;
 let distRoot;
 const requiredSearchEntryFields = [
@@ -171,6 +372,100 @@ async function runCleanBuild() {
       getNodeModulesLinkType(process.platform),
     );
     await Promise.all([
+      mkdir(
+        join(temporaryProjectRoot, 'src/content/posts/feishu'),
+        { recursive: true },
+      ),
+      mkdir(
+        join(temporaryProjectRoot, 'public/media/feishu'),
+        { recursive: true },
+      ),
+    ]);
+
+    const converted = blocksToMarkdown(structuredClone(richFixture.items));
+    const richBody = converted.mediaReferences.reduce(
+      (markdown, { placeholder }) =>
+        markdown.replaceAll(
+          placeholder,
+          '/media/feishu/build-output-rich.svg',
+        ),
+      converted.markdown,
+    );
+    const richPost = richFrontmatter + '\n' + richBody;
+    const legacyConverted = blocksToMarkdown(
+      structuredClone(legacyFixture.items),
+    );
+    const legacyBody = legacyConverted.mediaReferences.reduce(
+      (markdown, { placeholder }) =>
+        markdown.replaceAll(
+          placeholder,
+          '/media/feishu/build-output-rich.svg',
+        ),
+      legacyConverted.markdown,
+    );
+    const legacyPost = [
+      '---',
+      'title: 飞书旧格式构建夹具',
+      'description: 验证默认 Markdown 兼容',
+      'pubDate: 2026-07-14',
+      'category: 工程',
+      'tags: []',
+      'featured: false',
+      'slug: build-output-feishu-legacy',
+      '---',
+      '',
+      legacyBody,
+    ].join('\n');
+    const protocolConverted = blocksToMarkdown(
+      structuredClone(protocolBlocks),
+    );
+    const protocolPost = [
+      '---',
+      'title: 飞书协议代码边界夹具',
+      'description: 验证默认 Markdown 代码伪协议',
+      'pubDate: 2026-07-13',
+      'category: 工程',
+      'tags: []',
+      'featured: false',
+      'slug: build-output-feishu-code-protocol',
+      '---',
+      '',
+      protocolConverted.markdown,
+    ].join('\n');
+
+    await Promise.all([
+      writeFile(
+        join(
+          temporaryProjectRoot,
+          'src/content/posts/feishu/rich-content.md',
+        ),
+        richPost,
+        { encoding: 'utf8', flag: 'wx' },
+      ),
+      writeFile(
+        join(
+          temporaryProjectRoot,
+          'src/content/posts/manual/build-output-feishu-legacy.md',
+        ),
+        legacyPost,
+        { encoding: 'utf8', flag: 'wx' },
+      ),
+      writeFile(
+        join(
+          temporaryProjectRoot,
+          'src/content/posts/manual/build-output-feishu-code-protocol.md',
+        ),
+        protocolPost,
+        { encoding: 'utf8', flag: 'wx' },
+      ),
+      writeFile(
+        join(
+          temporaryProjectRoot,
+          'public/media/feishu/build-output-rich.svg',
+        ),
+        richSvg,
+        { encoding: 'utf8', flag: 'wx' },
+      ),
       writeFile(
         join(
           temporaryProjectRoot,
@@ -251,6 +546,252 @@ after(async () => {
 async function readOutput(relativePath) {
   assert.ok(distRoot, 'clean build should initialize its output directory');
   return readFile(new URL(relativePath, distRoot), 'utf8');
+}
+
+function readClassTokens(openingTag) {
+  return openingTag.match(/\bclass="([^"]*)"/)?.[1].split(/\s+/) ?? [];
+}
+
+function readEquationElements(html) {
+  const equations = [];
+
+  for (const openingMatch of html.matchAll(/<span\b[^>]*>/g)) {
+    const openingTag = openingMatch[0];
+    const classTokens = readClassTokens(openingTag);
+
+    if (!classTokens.includes('feishu-equation')) {
+      continue;
+    }
+
+    const encodedSource = openingTag.match(
+      /\bdata-feishu-equation-source="([A-Za-z0-9_-]+)"/,
+    )?.[1];
+    const displayClass = classTokens.find((className) =>
+      /^feishu-equation--(?:inline|block)$/u.test(className));
+
+    assert.ok(
+      encodedSource,
+      'each rendered Feishu equation should keep its source',
+    );
+    assert.ok(
+      displayClass,
+      'each rendered Feishu equation should keep its display mode',
+    );
+
+    const spanTags = /<\/?span\b[^>]*>/g;
+    spanTags.lastIndex = openingMatch.index;
+    let depth = 0;
+    let equationEnd = -1;
+
+    for (
+      let spanMatch = spanTags.exec(html);
+      spanMatch !== null;
+      spanMatch = spanTags.exec(html)
+    ) {
+      if (spanMatch[0].startsWith('</')) {
+        depth -= 1;
+      } else if (!spanMatch[0].endsWith('/>')) {
+        depth += 1;
+      }
+
+      assert.ok(depth >= 0, 'Feishu equation span nesting should be valid');
+      if (depth === 0) {
+        equationEnd = spanTags.lastIndex;
+        break;
+      }
+    }
+
+    assert.notEqual(
+      equationEnd,
+      -1,
+      'each rendered Feishu equation should have a closing span',
+    );
+    equations.push({
+      display: displayClass.endsWith('block') ? 'block' : 'inline',
+      raw: html.slice(openingMatch.index, equationEnd),
+      source: Buffer.from(encodedSource, 'base64url').toString('utf8'),
+    });
+  }
+
+  return equations;
+}
+
+function assertRenderedEquationContract(html, expectedSources) {
+  const equations = readEquationElements(html);
+
+  assert.equal(equations.length, expectedSources.length);
+  assert.deepEqual(
+    equations.map(({ source }) => source).toSorted(),
+    expectedSources.toSorted(),
+  );
+
+  for (const { display, raw, source } of equations) {
+    const body = raw
+      .slice(raw.indexOf('>') + 1, -'</span>'.length)
+      .trim();
+    const renderedSpans = [...body.matchAll(/<span\b[^>]*>/g)];
+    const countClass = (className) =>
+      renderedSpans.filter(([openingTag]) =>
+        readClassTokens(openingTag).includes(className)).length;
+
+    assert.equal(
+      countClass('katex'),
+      1,
+      'equation should contain one KaTeX root: ' + source,
+    );
+    assert.equal(
+      countClass('katex-html'),
+      1,
+      'equation should contain one KaTeX HTML tree: ' + source,
+    );
+    assert.equal(
+      (body.match(/<math\b[^>]*>/g) ?? []).length,
+      1,
+      'equation should contain one MathML tree: ' + source,
+    );
+    if (display === 'inline') {
+      assert.match(
+        body,
+        /^<span class="katex"(?:\s[^>]*)?>/,
+        'inline equation should have a top-level KaTeX root: ' + source,
+      );
+    } else {
+      assert.match(
+        body,
+        /^<span class="katex-display"(?:\s[^>]*)?>\s*<span class="katex"(?:\s[^>]*)?>/,
+        'block equation should have a top-level KaTeX display root: ' + source,
+      );
+    }
+  }
+}
+
+function readTagAttributes(openingTag) {
+  const attributes = new Map();
+
+  for (const match of openingTag.matchAll(
+    /\s+([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>\x60]+)))?/g,
+  )) {
+    attributes.set(
+      match[1].toLocaleLowerCase('en-US'),
+      decodeFeishuHtmlEntities(match[2] ?? match[3] ?? match[4] ?? ''),
+    );
+  }
+
+  return attributes;
+}
+
+function resolveOutputAssetPath(href) {
+  assert.ok(distRoot, 'clean build should initialize its output directory');
+  const pathOnly = href.split(/[?#]/u, 1)[0];
+
+  assert.match(
+    pathOnly,
+    /^\/(?!\/)/u,
+    'linked build assets must use a root-relative path',
+  );
+  const decodedSegments = pathOnly.slice(1).split('/').map((segment) => {
+    let decodedSegment;
+
+    try {
+      decodedSegment = decodeURIComponent(segment);
+    } catch {
+      assert.fail('linked build asset path must use valid percent encoding');
+    }
+    assert.notEqual(decodedSegment, '.');
+    assert.notEqual(decodedSegment, '..');
+    assert.doesNotMatch(
+      decodedSegment,
+      /(?:%[0-9a-f]{2}|[\\/\0:])/iu,
+      'linked build asset path must not contain nested or separator encoding',
+    );
+    return decodedSegment;
+  });
+  const outputRoot = resolve(fileURLToPath(distRoot));
+  const assetPath = resolve(outputRoot, ...decodedSegments);
+  const relativePath = relative(outputRoot, assetPath);
+
+  assert.ok(relativePath.length > 0, 'linked build asset must resolve to a file');
+  assert.ok(
+    relativePath !== '..' &&
+      !relativePath.startsWith('..' + sep) &&
+      !isAbsolute(relativePath),
+    'linked build asset must remain inside the production output',
+  );
+  return assetPath;
+}
+
+async function readLinkedStylesheets(html) {
+  const stylesheetHrefs = [...html.matchAll(/<link\b[^>]*>/giu)]
+    .map(([openingTag]) => readTagAttributes(openingTag))
+    .filter((attributes) =>
+      (attributes.get('rel') ?? '')
+        .toLocaleLowerCase('en-US')
+        .split(/\s+/)
+        .includes('stylesheet'))
+    .map((attributes) => {
+      const href = attributes.get('href');
+
+      assert.ok(href, 'each stylesheet link should include an href');
+      return href;
+    });
+
+  assert.ok(
+    stylesheetHrefs.length > 0,
+    'the rendered article should link at least one stylesheet',
+  );
+  return (
+    await Promise.all(
+      stylesheetHrefs.map((href) =>
+        readFile(resolveOutputAssetPath(href), 'utf8')),
+    )
+  ).join('\n');
+}
+
+const executableScriptTypes = new Set([
+  '',
+  'module',
+  'text/javascript',
+  'application/javascript',
+  'text/ecmascript',
+  'application/ecmascript',
+  'application/x-javascript',
+]);
+const nonExecutableDataScriptTypes = new Set([
+  'application/json',
+  'application/ld+json',
+  'application/manifest+json',
+  'importmap',
+  'speculationrules',
+]);
+
+function readExecutableInlineScripts(html) {
+  const scripts = [];
+
+  for (const match of html.matchAll(
+    /<script\b([^>]*)>([\s\S]*?)<\/script>/giu,
+  )) {
+    const attributes = readTagAttributes('<script' + match[1] + '>');
+
+    if (attributes.has('src')) {
+      continue;
+    }
+
+    const type = (attributes.get('type') ?? '')
+      .split(';', 1)[0]
+      .trim()
+      .toLocaleLowerCase('en-US');
+    if (executableScriptTypes.has(type)) {
+      scripts.push(match[2]);
+      continue;
+    }
+
+    assert.ok(
+      nonExecutableDataScriptTypes.has(type),
+      'inline script type must be explicitly classified: ' + type,
+    );
+  }
+
+  return scripts;
 }
 
 function readSection(html, id) {
@@ -623,6 +1164,268 @@ test('article output omits both contents variants for a lone body h1', async () 
   assert.doesNotMatch(articleHtml, /<summary>本页目录<\/summary>/);
 });
 
+test('build renders the complete controlled Feishu document', async () => {
+  const html = await readOutput(
+    'posts/build-output-feishu-rich-content/index.html',
+  );
+
+  assert.equal((html.match(/class="feishu-document"/g) ?? []).length, 1);
+  assert.match(html, /class="katex-html"/);
+  assert.match(html, /<math\b/);
+  assert.match(html, /class="feishu-source-synced"/);
+
+  const firstCalloutText = html.indexOf('高亮块 1');
+  const firstCalloutStart = html.lastIndexOf('<aside', firstCalloutText);
+  const firstCalloutEnd = html.indexOf('</aside>', firstCalloutText);
+  const calloutListText = html.indexOf('高亮块内列表');
+  assert.ok(
+    firstCalloutStart >= 0 &&
+      calloutListText > firstCalloutStart &&
+      calloutListText < firstCalloutEnd,
+    'the first callout should contain its list before the callout closes',
+  );
+  const firstCalloutHtml = html.slice(
+    firstCalloutStart,
+    firstCalloutEnd + '</aside>'.length,
+  );
+  assert.match(firstCalloutHtml, /class="feishu-text-color--blue"/);
+  assert.match(
+    firstCalloutHtml,
+    /<span class="feishu-callout__emoji" aria-hidden="true">🎁<\/span>/,
+  );
+  const calloutHeadingId = firstCalloutHtml.match(
+    /<h2\b[^>]*id="(feishu-heading-\d+)"[^>]*>[\s\S]*?高亮块内标题[\s\S]*?<\/h2>/,
+  )?.[1];
+  assert.ok(calloutHeadingId);
+  assert.match(
+    firstCalloutHtml,
+    /<blockquote\b[^>]*>[\s\S]*高亮块内引用[\s\S]*<\/blockquote>/,
+  );
+  assert.match(
+    firstCalloutHtml,
+    /<li\b[^>]*>[\s\S]*高亮块内列表[\s\S]*<ul\b[^>]*>[\s\S]*<li\b[^>]*>[\s\S]*嵌套列表项[\s\S]*<\/li>[\s\S]*<\/ul>[\s\S]*<\/li>/,
+  );
+
+  const sourceStart = html.indexOf('<section class="feishu-source-synced">');
+  const sourceEnd = html.indexOf('</section>', sourceStart);
+  const sourceHtml = html.slice(sourceStart, sourceEnd + '</section>'.length);
+  assert.match(
+    sourceHtml,
+    /class="feishu-source-synced__title feishu-source-synced__title--align-center"/,
+  );
+  const sourceHeadingId = sourceHtml.match(
+    /<h2\b[^>]*id="(feishu-heading-\d+)"[^>]*>[\s\S]*?同步块内标题[\s\S]*?<\/h2>/,
+  )?.[1];
+  assert.ok(sourceHeadingId);
+  const sourceListText = sourceHtml.indexOf('列表包含高亮块');
+  const nestedCalloutText = sourceHtml.indexOf('列表内高亮块');
+  const sourceListEnd = sourceHtml.indexOf('</li>', sourceListText);
+  assert.ok(
+    sourceListText >= 0 &&
+      nestedCalloutText > sourceListText &&
+      nestedCalloutText < sourceListEnd,
+    'the source list item should contain a callout before the item closes',
+  );
+  for (const tag of [
+    'blockquote',
+    'a',
+    'strong',
+    'em',
+    'del',
+    'u',
+    'code',
+    'table',
+    'img',
+  ]) {
+    assert.match(
+      sourceHtml,
+      new RegExp('<' + tag + '\\b'),
+      'source synced content is missing rendered <' + tag + '>',
+    );
+  }
+  assert.match(
+    html,
+    /<pre\b[^>]*><code\b[^>]*>[\s\S]*未配对反引号[\s\S]*伪公式[\s\S]*<\/code><\/pre>/,
+  );
+  assert.match(
+    html,
+    /<p\b[^>]*>[\s\S]*<u class="feishu-underline"><code>[\s\S]*HTML 行内伪公式[\s\S]*HTML 行内伪标题[\s\S]*HTML 行内伪界面[\s\S]*<\/code><\/u>[\s\S]*<\/p>/,
+  );
+
+  const tableHtml = sourceHtml.match(/<table\b[\s\S]*?<\/table>/)?.[0];
+  assert.ok(tableHtml);
+  const tableRows = [...tableHtml.matchAll(/<tr\b[\s\S]*?<\/tr>/g)]
+    .map((match) => match[0]);
+  assert.equal(tableRows.length, 2);
+  assert.equal((tableRows[0].match(/<th\b/g) ?? []).length, 2);
+  assert.equal((tableRows[1].match(/<td\b/g) ?? []).length, 2);
+  assert.match(html, /<ol>[\s\S]*受控有序列表[\s\S]*<\/ol>/);
+  assert.match(
+    html,
+    /class="feishu-task-list"[\s\S]*class="feishu-task-list__marker" aria-hidden="true">☑<\/span><span class="visually-hidden">已完成：<\/span>[\s\S]*受控待办事项/,
+  );
+  assert.match(
+    html,
+    /class="feishu-task-list"[\s\S]*class="feishu-task-list__marker" aria-hidden="true">☐<\/span><span class="visually-hidden">未完成：<\/span>[\s\S]*未完成待办事项/,
+  );
+  assert.match(html, /<hr\s*\/?>/);
+  assert.doesNotMatch(
+    html,
+    /\uE000feishu-media:|\x60{3}|\*\*&lt;组合样式&gt;\*\*|~~&lt;组合样式&gt;~~|\[仅背景链接\]\(https:\/\/example\.com\/background-only\)/,
+  );
+
+  assertRenderedEquationContract(html, expectedRichEquationSources);
+
+  const headingIds = [...html.matchAll(
+    /<h[1-6]\b[^>]*\bid="(feishu-heading-\d+)"/g,
+  )].map((match) => match[1]);
+  assert.deepEqual(
+    headingIds,
+    headingIds.map((_, index) => 'feishu-heading-' + (index + 1)),
+  );
+  assert.equal(new Set(headingIds).size, headingIds.length);
+  for (const [containerHeadingId, label] of [
+    [calloutHeadingId, '高亮块内标题'],
+    [sourceHeadingId, '同步块内标题'],
+  ]) {
+    assert.ok(headingIds.includes(containerHeadingId));
+    assert.equal(
+      (
+        html.match(
+          new RegExp(
+            'href="#' + containerHeadingId + '"[^>]*>' + label + '<\\/a>',
+            'g',
+          ),
+        ) ?? []
+      ).length,
+      2,
+    );
+  }
+  for (const headingId of headingIds) {
+    assert.ok(
+      (html.match(new RegExp('href="#' + headingId + '"', 'g')) ?? [])
+        .length >= 2,
+      'desktop and mobile TOCs should link to ' + headingId,
+    );
+  }
+  assert.equal(
+    (
+      html.match(
+        /href="#feishu-heading-1"[^>]*>公式标题 h \+ i<\/a>/g,
+      ) ?? []
+    ).length,
+    2,
+  );
+  const duplicateHeadingIds = [...html.matchAll(
+    /<h3\b[^>]*id="(feishu-heading-\d+)"[^>]*data-feishu-heading-text="5pmu6YCa5qCH6aKY"/g,
+  )].map((match) => match[1]);
+  assert.equal(duplicateHeadingIds.length, 2);
+  assert.equal(new Set(duplicateHeadingIds).size, 2);
+  for (const headingId of duplicateHeadingIds) {
+    assert.equal(
+      (html.match(new RegExp('href="#' + headingId + '"', 'g')) ?? []).length,
+      2,
+    );
+  }
+
+  const legacyHtml = await readOutput(
+    'posts/build-output-feishu-legacy/index.html',
+  );
+  assert.doesNotMatch(legacyHtml, /class="feishu-document"/);
+  assert.match(legacyHtml, /<h2 id="二级标题">二级标题<\/h2>/);
+
+  const protocolHtml = await readOutput(
+    'posts/build-output-feishu-code-protocol/index.html',
+  );
+  assert.doesNotMatch(protocolHtml, /class="feishu-document"/);
+  assert.match(protocolHtml, /伪公式/);
+  assert.match(protocolHtml, /行内伪公式/);
+  assert.match(protocolHtml, /行内伪标题/);
+  assert.match(protocolHtml, /行内伪界面/);
+  const markdownPunctuationFormula =
+    'z + 1 + \\text{*x* `y` [z](w)}';
+  const markdownPunctuationSource = Buffer.from(
+    markdownPunctuationFormula,
+  ).toString('base64url');
+  const protocolParagraphs = [...protocolHtml.matchAll(
+    /<p\b[^>]*>[\s\S]*?<\/p>/g,
+  )].map((match) => match[0]);
+  const markdownPunctuationParagraph = protocolParagraphs.find((paragraph) =>
+    paragraph.includes(
+      'data-feishu-equation-source="' + markdownPunctuationSource + '"',
+    ));
+  assert.ok(markdownPunctuationParagraph);
+  assert.doesNotMatch(markdownPunctuationParagraph, /<(?:em|code|a)\b/);
+
+  const styledParagraph = protocolParagraphs.find((paragraph) =>
+    paragraph.includes('字面 ') && paragraph.includes('下一行'));
+  assert.ok(styledParagraph);
+  assert.match(styledParagraph, /<u class="feishu-underline">/);
+  assert.match(
+    styledParagraph,
+    /class="feishu-text-background--light-orange"/,
+  );
+  assert.doesNotMatch(styledParagraph, /<(?:em|code|a)\b/);
+  assert.equal(
+    decodeFeishuHtmlEntities(styledParagraph.replace(/<[^>]+>/g, ''))
+      .replace(/\r\n?/g, '\n'),
+    '字面 *x* _y_ `z` [链接](target) \\ | 尾\n下一行',
+  );
+
+  const privateUrlParagraph = protocolParagraphs.find((paragraph) =>
+    paragraph.includes('私有链接'));
+  assert.ok(privateUrlParagraph);
+  assert.match(privateUrlParagraph, /<!---->/);
+  assert.doesNotMatch(privateUrlParagraph, /<a\b/);
+  assert.equal(
+    decodeFeishuHtmlEntities(privateUrlParagraph.replace(/<[^>]+>/g, '')),
+    '私有链接 https://private.example/path',
+  );
+
+  const protocolTable = protocolHtml.match(/<table\b[\s\S]*?<\/table>/)?.[0];
+  assert.ok(protocolTable);
+  const protocolRows = [...protocolTable.matchAll(/<tr\b[\s\S]*?<\/tr>/g)]
+    .map((match) => match[0]);
+  assert.equal(protocolRows.length, 2);
+  assert.equal((protocolRows[0].match(/<th\b/g) ?? []).length, 2);
+  assert.equal((protocolRows[1].match(/<td\b/g) ?? []).length, 2);
+  const protocolCells = [...protocolRows[1].matchAll(
+    /<td\b[\s\S]*?<\/td>/g,
+  )].map((match) => match[0]);
+  assert.equal(protocolCells.length, 2);
+  const [formulaCell, styledCell] = protocolCells;
+  assert.match(
+    formulaCell,
+    /^<td\b[^>]*><a class="feishu-link" href="https:\/\/example\.com\/gfm-table"><span class="feishu-text-color--red feishu-text-background--light-orange"><u class="feishu-underline"><strong><span class="feishu-equation feishu-equation--inline" data-feishu-equation-source="[A-Za-z0-9_-]+">[\s\S]*<\/span><\/strong><\/u><\/span><\/a><\/td>$/,
+  );
+  assert.doesNotMatch(formulaCell, /feishu-equation--block/);
+  assert.match(
+    styledCell,
+    /class="feishu-text-background--light-orange"/,
+  );
+  assert.match(styledCell, /<u class="feishu-underline">/);
+  assert.equal((styledCell.match(/<a\b/g) ?? []).length, 1);
+  assert.match(
+    styledCell,
+    /class="feishu-link" href="https:\/\/example\.com\/a(?:\||&#124;)b"/,
+  );
+  assert.doesNotMatch(styledCell, /<(?:em|code)\b/);
+  assert.equal(
+    decodeFeishuHtmlEntities(styledCell.replace(/<[^>]+>/g, ''))
+      .replace(/\r\n?/g, '\n'),
+    '表格 | *字* `码`\n下一行',
+  );
+  assertRenderedEquationContract(
+    protocolHtml,
+    [markdownPunctuationFormula, 'm | n\n% 表格注释\n+ r'],
+  );
+
+  assert.equal(
+    await readOutput('media/feishu/build-output-rich.svg'),
+    richSvg,
+  );
+});
+
 test('column articles render ordered series navigation without duplicate generic pagination', async () => {
   const index = assertPublicSearchIndexContract(
     await readOutput('search-index.json'),
@@ -729,6 +1532,133 @@ test('search index contains only deterministic public article data', async () =>
     assert.equal(jsonLd.description, entry.description);
     assert.ok(entry.searchText.trim().length > 0);
   }
+});
+
+test('build indexes Feishu formulas once without visual or UI noise', async () => {
+  const index = assertPublicSearchIndexContract(
+    await readOutput('search-index.json'),
+  );
+  const entry = index.entries.find(
+    ({ href }) => href === '/posts/build-output-feishu-rich-content/',
+  );
+  assert.ok(entry);
+  for (const source of expectedRichEquationSources) {
+    const normalizedSource = source.replace(/\s+/g, ' ');
+    assert.equal(
+      entry.searchText.split(normalizedSource).length - 1,
+      1,
+      'the search index should contain the equation source once: ' +
+        normalizedSource,
+    );
+  }
+  assert.match(entry.searchText, /伪公式/);
+  assert.match(entry.searchText, /伪标题/);
+  assert.match(entry.searchText, /伪界面/);
+  assert.match(entry.searchText, /HTML 行内伪公式/);
+  assert.match(entry.searchText, /HTML 行内伪标题/);
+  assert.match(entry.searchText, /HTML 行内伪界面/);
+  assert.doesNotMatch(entry.searchText, /private\.example|html-code/);
+  assert.doesNotMatch(
+    entry.searchText,
+    /katex|mathml|↻ 同步内容|feishu-document|feishu-callout|feishu-equation--/i,
+  );
+
+  const protocolEntry = index.entries.find(
+    ({ href }) => href === '/posts/build-output-feishu-code-protocol/',
+  );
+  assert.ok(protocolEntry);
+  assert.match(protocolEntry.searchText, /伪公式/);
+  assert.match(protocolEntry.searchText, /行内伪公式/);
+  assert.match(protocolEntry.searchText, /行内伪标题/);
+  assert.match(protocolEntry.searchText, /行内伪界面/);
+  assert.equal((protocolEntry.searchText.match(/z \+ 1/g) ?? []).length, 1);
+  assert.equal(
+    (
+      protocolEntry.searchText.match(/m \| n % 表格注释 \+ r/g) ?? []
+    ).length,
+    1,
+  );
+  assert.equal(
+    (
+      protocolEntry.searchText.match(
+        /字面 \*x\* _y_ `z` \[链接\]\(target\) \\ \| 尾 下一行/g,
+      ) ?? []
+    ).length,
+    1,
+  );
+  assert.match(protocolEntry.searchText, /私有链接/);
+  assert.doesNotMatch(protocolEntry.searchText, /https?:|example\.com|private/i);
+
+  const html = await readOutput(
+    'posts/build-output-feishu-rich-content/index.html',
+  );
+  for (const unsafeHref of [
+    '//example.com/theme.css',
+    '/../theme.css',
+    '/%2e%2e/theme.css',
+    '/%252e%252e/theme.css',
+    '/_astro/%2ftheme.css',
+    '/_astro/%ZZ.css',
+  ]) {
+    assert.throws(
+      () => resolveOutputAssetPath(unsafeHref),
+      { name: 'AssertionError' },
+    );
+  }
+  const linkedStylesheets = await readLinkedStylesheets(html);
+
+  assert.match(
+    linkedStylesheets,
+    /(?:^|[},])\.katex(?=[\s,.#:\[>{+~])/mu,
+    'the article stylesheet should contain the KaTeX root selector',
+  );
+  assert.match(
+    linkedStylesheets,
+    /@font-face\s*\{[^}]*font-family:\s*["']?KaTeX_[^}]*\burl\((?:"|')?[^)"']*KaTeX_[^)"']+\.(?:woff2?|ttf)(?:"|')?\)[^}]*\}/iu,
+    'the article stylesheet should reference an emitted KaTeX font',
+  );
+  assert.doesNotMatch(html, /<script\b[^>]*src="[^"]*katex/i);
+  const outputFiles = await readdir(fileURLToPath(distRoot), {
+    recursive: true,
+  });
+  assert.ok(
+    outputFiles.some((path) => /KaTeX_[^/]+\.(?:woff2?|ttf)$/i.test(path)),
+    'the production build should emit KaTeX fonts',
+  );
+  const [browserJavaScript, outputHtml] = await Promise.all([
+    Promise.all(
+      outputFiles
+        .filter((path) => path.endsWith('.js'))
+        .map((path) =>
+          readFile(join(fileURLToPath(distRoot), path), 'utf8')),
+    ),
+    Promise.all(
+      outputFiles
+        .filter((path) => path.endsWith('.html'))
+        .map((path) =>
+          readFile(join(fileURLToPath(distRoot), path), 'utf8')),
+    ),
+  ]);
+  const inlineExecutableScripts = outputHtml.flatMap(
+    readExecutableInlineScripts,
+  );
+
+  assert.ok(
+    browserJavaScript.length > 0,
+    'the production output should include browser JavaScript assets',
+  );
+  assert.ok(
+    inlineExecutableScripts.length > 0,
+    'the production output should include executable inline scripts',
+  );
+  const browserExecutableSource = [
+    ...browserJavaScript,
+    ...inlineExecutableScripts,
+  ].join('\n');
+  assert.doesNotMatch(
+    browserExecutableSource,
+    /node:buffer|\bBuffer\.from\b|\brenderToString\b|katex-error|KaTeX parse error/i,
+  );
 });
 
 test('RSS identifies the site and links to the published article URL', async () => {

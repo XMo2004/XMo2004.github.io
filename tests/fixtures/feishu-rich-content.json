@@ -1,0 +1,1451 @@
+{
+  "items": [
+    {
+      "block_id": "rich-page",
+      "block_type": 1,
+      "children": [
+        "rich-heading-formula",
+        "rich-heading-plain",
+        "rich-heading-duplicate",
+        "rich-text-colors",
+        "rich-text-backgrounds",
+        "rich-background-only-link",
+        "rich-combined-style",
+        "rich-html-inline-code-protocol",
+        "rich-inline-formula",
+        "rich-block-formula",
+        "rich-long-inline-formula",
+        "rich-long-block-formula",
+        "rich-controlled-code-protocol",
+        "rich-ordered",
+        "rich-todo",
+        "rich-todo-open",
+        "rich-divider",
+        "rich-callout-1",
+        "rich-callout-2",
+        "rich-callout-3",
+        "rich-callout-4",
+        "rich-callout-5",
+        "rich-callout-6",
+        "rich-callout-7",
+        "rich-callout-8",
+        "rich-callout-9",
+        "rich-callout-10",
+        "rich-callout-11",
+        "rich-callout-12",
+        "rich-callout-13",
+        "rich-callout-14",
+        "rich-callout-15",
+        "rich-source"
+      ],
+      "page": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "富内容夹具",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-heading-formula",
+      "block_type": 4,
+      "parent_id": "rich-page",
+      "heading2": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "公式标题 ",
+              "text_element_style": {}
+            }
+          },
+          {
+            "equation": {
+              "content": "h + i",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-heading-plain",
+      "block_type": 5,
+      "parent_id": "rich-page",
+      "heading3": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "普通标题",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-heading-duplicate",
+      "block_type": 5,
+      "parent_id": "rich-page",
+      "heading3": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "普通标题",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-text-colors",
+      "block_type": 2,
+      "parent_id": "rich-page",
+      "text": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "文字色 1",
+              "text_element_style": {
+                "text_color": 1
+              }
+            }
+          },
+          {
+            "text_run": {
+              "content": " ",
+              "text_element_style": {}
+            }
+          },
+          {
+            "text_run": {
+              "content": "文字色 2",
+              "text_element_style": {
+                "text_color": 2
+              }
+            }
+          },
+          {
+            "text_run": {
+              "content": " ",
+              "text_element_style": {}
+            }
+          },
+          {
+            "text_run": {
+              "content": "文字色 3",
+              "text_element_style": {
+                "text_color": 3
+              }
+            }
+          },
+          {
+            "text_run": {
+              "content": " ",
+              "text_element_style": {}
+            }
+          },
+          {
+            "text_run": {
+              "content": "文字色 4",
+              "text_element_style": {
+                "text_color": 4
+              }
+            }
+          },
+          {
+            "text_run": {
+              "content": " ",
+              "text_element_style": {}
+            }
+          },
+          {
+            "text_run": {
+              "content": "文字色 5",
+              "text_element_style": {
+                "text_color": 5
+              }
+            }
+          },
+          {
+            "text_run": {
+              "content": " ",
+              "text_element_style": {}
+            }
+          },
+          {
+            "text_run": {
+              "content": "文字色 6",
+              "text_element_style": {
+                "text_color": 6
+              }
+            }
+          },
+          {
+            "text_run": {
+              "content": " ",
+              "text_element_style": {}
+            }
+          },
+          {
+            "text_run": {
+              "content": "文字色 7",
+              "text_element_style": {
+                "text_color": 7
+              }
+            }
+          },
+          {
+            "text_run": {
+              "content": "",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-text-backgrounds",
+      "block_type": 2,
+      "parent_id": "rich-page",
+      "text": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "背景色 1",
+              "text_element_style": {
+                "background_color": 1
+              }
+            }
+          },
+          {
+            "text_run": {
+              "content": " ",
+              "text_element_style": {}
+            }
+          },
+          {
+            "text_run": {
+              "content": "背景色 2",
+              "text_element_style": {
+                "background_color": 2
+              }
+            }
+          },
+          {
+            "text_run": {
+              "content": " ",
+              "text_element_style": {}
+            }
+          },
+          {
+            "text_run": {
+              "content": "背景色 3",
+              "text_element_style": {
+                "background_color": 3
+              }
+            }
+          },
+          {
+            "text_run": {
+              "content": " ",
+              "text_element_style": {}
+            }
+          },
+          {
+            "text_run": {
+              "content": "背景色 4",
+              "text_element_style": {
+                "background_color": 4
+              }
+            }
+          },
+          {
+            "text_run": {
+              "content": " ",
+              "text_element_style": {}
+            }
+          },
+          {
+            "text_run": {
+              "content": "背景色 5",
+              "text_element_style": {
+                "background_color": 5
+              }
+            }
+          },
+          {
+            "text_run": {
+              "content": " ",
+              "text_element_style": {}
+            }
+          },
+          {
+            "text_run": {
+              "content": "背景色 6",
+              "text_element_style": {
+                "background_color": 6
+              }
+            }
+          },
+          {
+            "text_run": {
+              "content": " ",
+              "text_element_style": {}
+            }
+          },
+          {
+            "text_run": {
+              "content": "背景色 7",
+              "text_element_style": {
+                "background_color": 7
+              }
+            }
+          },
+          {
+            "text_run": {
+              "content": " ",
+              "text_element_style": {}
+            }
+          },
+          {
+            "text_run": {
+              "content": "背景色 8",
+              "text_element_style": {
+                "background_color": 8
+              }
+            }
+          },
+          {
+            "text_run": {
+              "content": " ",
+              "text_element_style": {}
+            }
+          },
+          {
+            "text_run": {
+              "content": "背景色 9",
+              "text_element_style": {
+                "background_color": 9
+              }
+            }
+          },
+          {
+            "text_run": {
+              "content": " ",
+              "text_element_style": {}
+            }
+          },
+          {
+            "text_run": {
+              "content": "背景色 10",
+              "text_element_style": {
+                "background_color": 10
+              }
+            }
+          },
+          {
+            "text_run": {
+              "content": " ",
+              "text_element_style": {}
+            }
+          },
+          {
+            "text_run": {
+              "content": "背景色 11",
+              "text_element_style": {
+                "background_color": 11
+              }
+            }
+          },
+          {
+            "text_run": {
+              "content": " ",
+              "text_element_style": {}
+            }
+          },
+          {
+            "text_run": {
+              "content": "背景色 12",
+              "text_element_style": {
+                "background_color": 12
+              }
+            }
+          },
+          {
+            "text_run": {
+              "content": " ",
+              "text_element_style": {}
+            }
+          },
+          {
+            "text_run": {
+              "content": "背景色 13",
+              "text_element_style": {
+                "background_color": 13
+              }
+            }
+          },
+          {
+            "text_run": {
+              "content": " ",
+              "text_element_style": {}
+            }
+          },
+          {
+            "text_run": {
+              "content": "背景色 14",
+              "text_element_style": {
+                "background_color": 14
+              }
+            }
+          },
+          {
+            "text_run": {
+              "content": " ",
+              "text_element_style": {}
+            }
+          },
+          {
+            "text_run": {
+              "content": "背景色 15",
+              "text_element_style": {
+                "background_color": 15
+              }
+            }
+          },
+          {
+            "text_run": {
+              "content": "",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-background-only-link",
+      "block_type": 2,
+      "parent_id": "rich-page",
+      "text": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "仅背景链接",
+              "text_element_style": {
+                "background_color": 9,
+                "link": {
+                  "url": "https://example.com/background-only"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-combined-style",
+      "block_type": 2,
+      "parent_id": "rich-page",
+      "text": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "<组合样式>",
+              "text_element_style": {
+                "bold": true,
+                "italic": true,
+                "strikethrough": true,
+                "underline": true,
+                "inline_code": true,
+                "text_color": 1,
+                "background_color": 5,
+                "link": {
+                  "url": "https://example.com/docs"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-html-inline-code-protocol",
+      "block_type": 2,
+      "parent_id": "rich-page",
+      "text": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "<span data-feishu-equation-source=\"@@\">HTML 行内伪公式</span> <h2 id=\"feishu-heading-99\" data-feishu-heading-text=\"@@\">HTML 行内伪标题</h2> <span data-feishu-search-ui>HTML 行内伪界面</span> https://private.example/html-code",
+              "text_element_style": {
+                "inline_code": true,
+                "underline": true
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-inline-formula",
+      "block_type": 2,
+      "parent_id": "rich-page",
+      "text": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "混排 ",
+              "text_element_style": {}
+            }
+          },
+          {
+            "equation": {
+              "content": "x + y",
+              "text_element_style": {
+                "bold": true,
+                "underline": true,
+                "text_color": 5,
+                "background_color": 2,
+                "link": {
+                  "url": "https://example.com/formula"
+                }
+              }
+            }
+          },
+          {
+            "text_run": {
+              "content": " 完成",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-block-formula",
+      "block_type": 2,
+      "parent_id": "rich-page",
+      "text": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "  ",
+              "text_element_style": {}
+            }
+          },
+          {
+            "equation": {
+              "content": "a | b\n% 注释\n+ c",
+              "text_element_style": {}
+            }
+          },
+          {
+            "text_run": {
+              "content": "\n",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-long-inline-formula",
+      "block_type": 2,
+      "parent_id": "rich-page",
+      "text": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "长行内公式 ",
+              "text_element_style": {}
+            }
+          },
+          {
+            "equation": {
+              "content": "x_{1} + x_{2} + x_{3} + x_{4} + x_{5} + x_{6} + x_{7} + x_{8} + x_{9} + x_{10} + x_{11} + x_{12} + x_{13} + x_{14} + x_{15} + x_{16} + x_{17} + x_{18} + x_{19} + x_{20} + x_{21} + x_{22} + x_{23} + x_{24} + x_{25} + x_{26} + x_{27} + x_{28} + x_{29} + x_{30} + x_{31} + x_{32}",
+              "text_element_style": {}
+            }
+          },
+          {
+            "text_run": {
+              "content": " 结束",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-long-block-formula",
+      "block_type": 2,
+      "parent_id": "rich-page",
+      "text": {
+        "elements": [
+          {
+            "equation": {
+              "content": "y_{1} + y_{2} + y_{3} + y_{4} + y_{5} + y_{6} + y_{7} + y_{8} + y_{9} + y_{10} + y_{11} + y_{12} + y_{13} + y_{14} + y_{15} + y_{16} + y_{17} + y_{18} + y_{19} + y_{20} + y_{21} + y_{22} + y_{23} + y_{24} + y_{25} + y_{26} + y_{27} + y_{28} + y_{29} + y_{30} + y_{31} + y_{32}",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-controlled-code-protocol",
+      "block_type": 14,
+      "parent_id": "rich-page",
+      "code": {
+        "style": {
+          "language": 24
+        },
+        "elements": [
+          {
+            "text_run": {
+              "content": "` 未配对反引号\n~~~\n<span data-feishu-equation-source=\"eA\">伪公式</span>\n<h2 id=\"feishu-heading-9\" data-feishu-heading-text=\"@@\">伪标题</h2>\n<span data-feishu-search-ui>伪界面</span>",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-ordered",
+      "block_type": 13,
+      "parent_id": "rich-page",
+      "ordered": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "受控有序列表",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-todo",
+      "block_type": 17,
+      "parent_id": "rich-page",
+      "todo": {
+        "style": {
+          "done": true
+        },
+        "elements": [
+          {
+            "text_run": {
+              "content": "受控待办事项",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-todo-open",
+      "block_type": 17,
+      "parent_id": "rich-page",
+      "todo": {
+        "style": {
+          "done": false
+        },
+        "elements": [
+          {
+            "text_run": {
+              "content": "未完成待办事项",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-divider",
+      "block_type": 22,
+      "parent_id": "rich-page",
+      "divider": {}
+    },
+    {
+      "block_id": "rich-callout-1",
+      "block_type": 19,
+      "parent_id": "rich-page",
+      "children": [
+        "rich-callout-1-paragraph",
+        "rich-callout-1-heading",
+        "rich-callout-1-quote",
+        "rich-callout-1-list"
+      ],
+      "callout": {
+        "background_color": 1,
+        "border_color": 1,
+        "text_color": 1
+      }
+    },
+    {
+      "block_id": "rich-callout-1-paragraph",
+      "block_type": 2,
+      "parent_id": "rich-callout-1",
+      "text": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "高亮块 1",
+              "text_element_style": {
+                "text_color": 5
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-callout-2",
+      "block_type": 19,
+      "parent_id": "rich-page",
+      "children": [
+        "rich-callout-2-paragraph"
+      ],
+      "callout": {
+        "background_color": 2,
+        "border_color": 2,
+        "text_color": 2,
+        "emoji_id": "grinning"
+      }
+    },
+    {
+      "block_id": "rich-callout-2-paragraph",
+      "block_type": 2,
+      "parent_id": "rich-callout-2",
+      "text": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "高亮块 2",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-callout-3",
+      "block_type": 19,
+      "parent_id": "rich-page",
+      "children": [
+        "rich-callout-3-paragraph"
+      ],
+      "callout": {
+        "background_color": 3,
+        "border_color": 3,
+        "text_color": 3,
+        "emoji_id": "gift"
+      }
+    },
+    {
+      "block_id": "rich-callout-3-paragraph",
+      "block_type": 2,
+      "parent_id": "rich-callout-3",
+      "text": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "高亮块 3",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-callout-4",
+      "block_type": 19,
+      "parent_id": "rich-page",
+      "children": [
+        "rich-callout-4-paragraph"
+      ],
+      "callout": {
+        "background_color": 4,
+        "border_color": 4,
+        "text_color": 4,
+        "emoji_id": "gift"
+      }
+    },
+    {
+      "block_id": "rich-callout-4-paragraph",
+      "block_type": 2,
+      "parent_id": "rich-callout-4",
+      "text": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "高亮块 4",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-callout-5",
+      "block_type": 19,
+      "parent_id": "rich-page",
+      "children": [
+        "rich-callout-5-paragraph"
+      ],
+      "callout": {
+        "background_color": 5,
+        "border_color": 5,
+        "text_color": 5,
+        "emoji_id": "gift"
+      }
+    },
+    {
+      "block_id": "rich-callout-5-paragraph",
+      "block_type": 2,
+      "parent_id": "rich-callout-5",
+      "text": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "高亮块 5",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-callout-6",
+      "block_type": 19,
+      "parent_id": "rich-page",
+      "children": [
+        "rich-callout-6-paragraph"
+      ],
+      "callout": {
+        "background_color": 6,
+        "border_color": 6,
+        "text_color": 6,
+        "emoji_id": "gift"
+      }
+    },
+    {
+      "block_id": "rich-callout-6-paragraph",
+      "block_type": 2,
+      "parent_id": "rich-callout-6",
+      "text": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "高亮块 6",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-callout-7",
+      "block_type": 19,
+      "parent_id": "rich-page",
+      "children": [
+        "rich-callout-7-paragraph"
+      ],
+      "callout": {
+        "background_color": 7,
+        "border_color": 7,
+        "text_color": 7,
+        "emoji_id": "gift"
+      }
+    },
+    {
+      "block_id": "rich-callout-7-paragraph",
+      "block_type": 2,
+      "parent_id": "rich-callout-7",
+      "text": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "高亮块 7",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-callout-8",
+      "block_type": 19,
+      "parent_id": "rich-page",
+      "children": [
+        "rich-callout-8-paragraph"
+      ],
+      "callout": {
+        "background_color": 8,
+        "border_color": 1,
+        "text_color": 1,
+        "emoji_id": "gift"
+      }
+    },
+    {
+      "block_id": "rich-callout-8-paragraph",
+      "block_type": 2,
+      "parent_id": "rich-callout-8",
+      "text": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "高亮块 8",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-callout-9",
+      "block_type": 19,
+      "parent_id": "rich-page",
+      "children": [
+        "rich-callout-9-paragraph"
+      ],
+      "callout": {
+        "background_color": 9,
+        "border_color": 2,
+        "text_color": 2,
+        "emoji_id": "gift"
+      }
+    },
+    {
+      "block_id": "rich-callout-9-paragraph",
+      "block_type": 2,
+      "parent_id": "rich-callout-9",
+      "text": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "高亮块 9",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-callout-10",
+      "block_type": 19,
+      "parent_id": "rich-page",
+      "children": [
+        "rich-callout-10-paragraph"
+      ],
+      "callout": {
+        "background_color": 10,
+        "border_color": 3,
+        "text_color": 3,
+        "emoji_id": "gift"
+      }
+    },
+    {
+      "block_id": "rich-callout-10-paragraph",
+      "block_type": 2,
+      "parent_id": "rich-callout-10",
+      "text": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "高亮块 10",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-callout-11",
+      "block_type": 19,
+      "parent_id": "rich-page",
+      "children": [
+        "rich-callout-11-paragraph"
+      ],
+      "callout": {
+        "background_color": 11,
+        "border_color": 4,
+        "text_color": 4,
+        "emoji_id": "gift"
+      }
+    },
+    {
+      "block_id": "rich-callout-11-paragraph",
+      "block_type": 2,
+      "parent_id": "rich-callout-11",
+      "text": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "高亮块 11",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-callout-12",
+      "block_type": 19,
+      "parent_id": "rich-page",
+      "children": [
+        "rich-callout-12-paragraph"
+      ],
+      "callout": {
+        "background_color": 12,
+        "border_color": 5,
+        "text_color": 5,
+        "emoji_id": "gift"
+      }
+    },
+    {
+      "block_id": "rich-callout-12-paragraph",
+      "block_type": 2,
+      "parent_id": "rich-callout-12",
+      "text": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "高亮块 12",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-callout-13",
+      "block_type": 19,
+      "parent_id": "rich-page",
+      "children": [
+        "rich-callout-13-paragraph"
+      ],
+      "callout": {
+        "background_color": 13,
+        "border_color": 6,
+        "text_color": 6,
+        "emoji_id": "gift"
+      }
+    },
+    {
+      "block_id": "rich-callout-13-paragraph",
+      "block_type": 2,
+      "parent_id": "rich-callout-13",
+      "text": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "高亮块 13",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-callout-14",
+      "block_type": 19,
+      "parent_id": "rich-page",
+      "children": [
+        "rich-callout-14-paragraph"
+      ],
+      "callout": {
+        "background_color": 14,
+        "border_color": 7,
+        "text_color": 7,
+        "emoji_id": "gift"
+      }
+    },
+    {
+      "block_id": "rich-callout-14-paragraph",
+      "block_type": 2,
+      "parent_id": "rich-callout-14",
+      "text": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "高亮块 14",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-callout-15",
+      "block_type": 19,
+      "parent_id": "rich-page",
+      "children": [
+        "rich-callout-15-paragraph"
+      ],
+      "callout": {
+        "background_color": 15,
+        "border_color": 1,
+        "text_color": 1,
+        "emoji_id": "gift"
+      }
+    },
+    {
+      "block_id": "rich-callout-15-paragraph",
+      "block_type": 2,
+      "parent_id": "rich-callout-15",
+      "text": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "高亮块 15",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-callout-1-heading",
+      "block_type": 4,
+      "parent_id": "rich-callout-1",
+      "heading2": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "高亮块内标题",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-callout-1-quote",
+      "block_type": 15,
+      "parent_id": "rich-callout-1",
+      "quote": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "高亮块内引用",
+              "text_element_style": {
+                "background_color": 13,
+                "link": {
+                  "url": "https://example.com/callout-quote"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-callout-1-list",
+      "block_type": 12,
+      "parent_id": "rich-callout-1",
+      "children": [
+        "rich-callout-1-list-child"
+      ],
+      "bullet": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "高亮块内列表",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-callout-1-list-child",
+      "block_type": 12,
+      "parent_id": "rich-callout-1-list",
+      "bullet": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "嵌套列表项",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-source",
+      "block_type": 49,
+      "parent_id": "rich-page",
+      "children": [
+        "rich-source-heading",
+        "rich-source-paragraph",
+        "rich-source-list",
+        "rich-source-quote",
+        "rich-source-table",
+        "rich-source-image"
+      ],
+      "source_synced": {
+        "align": 2,
+        "elements": [
+          {
+            "text_run": {
+              "content": "同步标题 ",
+              "text_element_style": {}
+            }
+          },
+          {
+            "equation": {
+              "content": "s = t",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-source-heading",
+      "block_type": 4,
+      "parent_id": "rich-source",
+      "heading2": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "同步块内标题",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-source-paragraph",
+      "block_type": 2,
+      "parent_id": "rich-source",
+      "text": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "同步正文与安全链接",
+              "text_element_style": {
+                "bold": true,
+                "italic": true,
+                "strikethrough": true,
+                "underline": true,
+                "inline_code": true,
+                "text_color": 5,
+                "background_color": 2,
+                "link": {
+                  "url": "https://example.com/source"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-source-list",
+      "block_type": 12,
+      "parent_id": "rich-source",
+      "children": [
+        "rich-source-list-callout"
+      ],
+      "bullet": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "列表包含高亮块",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-source-list-callout",
+      "block_type": 19,
+      "parent_id": "rich-source-list",
+      "children": [
+        "rich-source-list-callout-text"
+      ],
+      "callout": {
+        "background_color": 8,
+        "border_color": 1,
+        "text_color": 1,
+        "emoji_id": "gift"
+      }
+    },
+    {
+      "block_id": "rich-source-list-callout-text",
+      "block_type": 2,
+      "parent_id": "rich-source-list-callout",
+      "text": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "列表内高亮块",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-source-quote",
+      "block_type": 15,
+      "parent_id": "rich-source",
+      "quote": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "同步引用背景链接",
+              "text_element_style": {
+                "background_color": 13,
+                "link": {
+                  "url": "https://example.com/source-quote"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-source-table",
+      "block_type": 31,
+      "parent_id": "rich-source",
+      "children": [
+        "rich-cell-a",
+        "rich-cell-b",
+        "rich-cell-c",
+        "rich-cell-d"
+      ],
+      "table": {
+        "cells": [
+          "rich-cell-a",
+          "rich-cell-b",
+          "rich-cell-c",
+          "rich-cell-d"
+        ],
+        "property": {
+          "row_size": 2,
+          "column_size": 2
+        }
+      }
+    },
+    {
+      "block_id": "rich-cell-a",
+      "block_type": 32,
+      "parent_id": "rich-source-table",
+      "children": [
+        "rich-cell-a-text"
+      ],
+      "table_cell": {}
+    },
+    {
+      "block_id": "rich-cell-a-text",
+      "block_type": 2,
+      "parent_id": "rich-cell-a",
+      "text": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "列 A",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-cell-b",
+      "block_type": 32,
+      "parent_id": "rich-source-table",
+      "children": [
+        "rich-cell-b-text"
+      ],
+      "table_cell": {}
+    },
+    {
+      "block_id": "rich-cell-b-text",
+      "block_type": 2,
+      "parent_id": "rich-cell-b",
+      "text": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "列 B",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-cell-c",
+      "block_type": 32,
+      "parent_id": "rich-source-table",
+      "children": [
+        "rich-cell-c-text"
+      ],
+      "table_cell": {}
+    },
+    {
+      "block_id": "rich-cell-c-text",
+      "block_type": 2,
+      "parent_id": "rich-cell-c",
+      "text": {
+        "elements": [
+          {
+            "equation": {
+              "content": "p | q",
+              "text_element_style": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-cell-d",
+      "block_type": 32,
+      "parent_id": "rich-source-table",
+      "children": [
+        "rich-cell-d-text"
+      ],
+      "table_cell": {}
+    },
+    {
+      "block_id": "rich-cell-d-text",
+      "block_type": 2,
+      "parent_id": "rich-cell-d",
+      "text": {
+        "elements": [
+          {
+            "text_run": {
+              "content": "值 B",
+              "text_element_style": {
+                "bold": true,
+                "underline": true,
+                "link": {
+                  "url": "https://example.com/table"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "block_id": "rich-source-image",
+      "block_type": 27,
+      "parent_id": "rich-source",
+      "image": {
+        "token": "img_rich_example"
+      }
+    }
+  ]
+}

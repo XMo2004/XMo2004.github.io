@@ -1,112 +1,17 @@
+import {
+  CODE_LANGUAGES,
+  normalizeFeishuDocument,
+  TEXT_PROPERTY_BY_TYPE,
+} from './semantics.mjs';
+import { renderFeishuDocument } from './markdown.mjs';
+
 const SUPPORTED_BLOCK_TYPES = new Set([
-  1, 2, 3, 4, 5, 6, 7, 8, 12, 13, 14, 15, 17, 22, 27, 31, 32,
+  1, 2, 3, 4, 5, 6, 7, 8, 12, 13, 14, 15, 17, 19, 22, 27, 31, 32, 49,
 ]);
 
-const CONTAINER_BLOCK_TYPES = new Set([1, 12, 13, 17, 31, 32]);
-
-const TEXT_PROPERTY_BY_TYPE = new Map([
-  [2, 'text'],
-  [3, 'heading1'],
-  [4, 'heading2'],
-  [5, 'heading3'],
-  [6, 'heading4'],
-  [7, 'heading5'],
-  [8, 'heading6'],
-  [12, 'bullet'],
-  [13, 'ordered'],
-  [14, 'code'],
-  [15, 'quote'],
-  [17, 'todo'],
-]);
-
-const CODE_LANGUAGES = new Map([
-  [1, 'text'],
-  [2, 'abap'],
-  [3, 'ada'],
-  [4, 'apache'],
-  [5, 'apex'],
-  [6, 'asm'],
-  [7, 'bash'],
-  [8, 'csharp'],
-  [9, 'cpp'],
-  [10, 'c'],
-  [11, 'cobol'],
-  [12, 'css'],
-  [13, 'coffeescript'],
-  [14, 'd'],
-  [15, 'dart'],
-  [16, 'pascal'],
-  [17, 'jinja'],
-  [18, 'dockerfile'],
-  [19, 'erlang'],
-  [20, 'fortran-free-form'],
-  [21, 'text'],
-  [22, 'go'],
-  [23, 'groovy'],
-  [24, 'html'],
-  [25, 'handlebars'],
-  [26, 'http'],
-  [27, 'haskell'],
-  [28, 'json'],
-  [29, 'java'],
-  [30, 'javascript'],
-  [31, 'julia'],
-  [32, 'kotlin'],
-  [33, 'latex'],
-  [34, 'lisp'],
-  [35, 'logo'],
-  [36, 'lua'],
-  [37, 'matlab'],
-  [38, 'makefile'],
-  [39, 'markdown'],
-  [40, 'nginx'],
-  [41, 'objective-c'],
-  [42, 'text'],
-  [43, 'php'],
-  [44, 'perl'],
-  [45, 'text'],
-  [46, 'powershell'],
-  [47, 'prolog'],
-  [48, 'protobuf'],
-  [49, 'python'],
-  [50, 'r'],
-  [51, 'text'],
-  [52, 'ruby'],
-  [53, 'rust'],
-  [54, 'sas'],
-  [55, 'scss'],
-  [56, 'sql'],
-  [57, 'scala'],
-  [58, 'scheme'],
-  [59, 'text'],
-  [60, 'shell'],
-  [61, 'swift'],
-  [62, 'text'],
-  [63, 'typescript'],
-  [64, 'vb'],
-  [65, 'vb'],
-  [66, 'xml'],
-  [67, 'yaml'],
-  [68, 'cmake'],
-  [69, 'diff'],
-  [70, 'gherkin'],
-  [71, 'graphql'],
-  [72, 'glsl'],
-  [73, 'properties'],
-  [74, 'solidity'],
-  [75, 'toml'],
-]);
-
-const PLAIN_TEXT_CODE_FALLBACKS = new Set([21, 42, 45, 51, 59, 62]);
+const CONTAINER_BLOCK_TYPES = new Set([1, 12, 13, 17, 19, 31, 32, 49]);
 
 const MEDIA_TOKEN = /^[A-Za-z0-9_-]+$/;
-const MEDIA_PLACEHOLDER_PREFIX = '\uE000feishu-media:';
-const MEDIA_PLACEHOLDER_SUFFIX = '\uE001';
-
-function mediaPlaceholder(token) {
-  return `${MEDIA_PLACEHOLDER_PREFIX}${token}${MEDIA_PLACEHOLDER_SUFFIX}`;
-}
-
 export class FeishuConversionError extends Error {
   constructor(issues) {
     super(
@@ -140,40 +45,6 @@ function blockChildren(block, issues) {
   return block.children;
 }
 
-function textDataFor(block) {
-  const property = TEXT_PROPERTY_BY_TYPE.get(block.block_type);
-  return property === undefined ? undefined : block[property];
-}
-
-function normalizeLinkUrl(value) {
-  if (typeof value !== 'string' || value.length === 0) {
-    throw new Error('link URL is missing');
-  }
-
-  let decoded = value;
-  try {
-    decoded = decodeURIComponent(value);
-  } catch {
-    // A normal URL may contain a literal percent. URL parsing below remains final.
-  }
-
-  let url;
-  try {
-    url = new URL(decoded);
-  } catch {
-    throw new Error(`link URL "${value}" is invalid`);
-  }
-
-  if (!['http:', 'https:', 'mailto:'].includes(url.protocol)) {
-    throw new Error(`link protocol "${url.protocol}" is not allowed`);
-  }
-  if (url.username || url.password) {
-    throw new Error('link URL must not contain credentials');
-  }
-
-  return url.href.replace(/\(/g, '%28').replace(/\)/g, '%29');
-}
-
 function validateRichElements(block, elements, issues) {
   if (!Array.isArray(elements)) {
     issues.push(
@@ -198,10 +69,11 @@ function validateRichElements(block, elements, issues) {
       continue;
     }
 
-    const elementTypes = Object.keys(element).filter(
-      (key) => element[key] !== undefined && element[key] !== null,
-    );
-    if (elementTypes.length !== 1 || elementTypes[0] !== 'text_run') {
+    const elementTypes = Object.keys(element);
+    if (
+      elementTypes.length !== 1 ||
+      !['text_run', 'equation'].includes(elementTypes[0])
+    ) {
       const names = elementTypes.length > 0 ? elementTypes.join(', ') : '<empty>';
       for (const elementType of elementTypes.length > 0 ? elementTypes : ['<empty>']) {
         issues.push(
@@ -215,49 +87,6 @@ function validateRichElements(block, elements, issues) {
       continue;
     }
 
-    const textRun = element.text_run;
-    if (
-      textRun === null ||
-      typeof textRun !== 'object' ||
-      typeof textRun.content !== 'string'
-    ) {
-      issues.push(
-        issue(
-          'invalid_text_run',
-          `Block "${block.block_id}" contains a text_run without string content.`,
-          block.block_id,
-        ),
-      );
-      continue;
-    }
-
-    if (
-      textRun.content.includes(MEDIA_PLACEHOLDER_PREFIX) ||
-      textRun.content.includes(MEDIA_PLACEHOLDER_SUFFIX)
-    ) {
-      issues.push(
-        issue(
-          'reserved_media_placeholder',
-          `Block "${block.block_id}" contains reserved media placeholder characters.`,
-          block.block_id,
-        ),
-      );
-    }
-
-    const style = textRun.text_element_style;
-    if (style?.link !== undefined) {
-      try {
-        normalizeLinkUrl(style.link?.url);
-      } catch (error) {
-        issues.push(
-          issue(
-            'unsafe_link',
-            `Block "${block.block_id}" has an unsafe link: ${error.message}.`,
-            block.block_id,
-          ),
-        );
-      }
-    }
   }
 }
 
@@ -269,6 +98,27 @@ function validateBlocks(items) {
     throw new FeishuConversionError([
       issue('invalid_input', 'Block list must be an array.'),
     ]);
+  }
+
+  const referenceSyncedIssues = items
+    .filter(
+      (block) =>
+        block !== null &&
+        typeof block === 'object' &&
+        !Array.isArray(block) &&
+        block.block_type === 50,
+    )
+    .map((block) =>
+      issue(
+        'unsupported_reference_synced',
+        'Block is a reference synced block; only source synced blocks are supported.',
+        typeof block.block_id === 'string' && block.block_id.length > 0
+          ? block.block_id
+          : undefined,
+      ),
+    );
+  if (referenceSyncedIssues.length > 0) {
+    throw new FeishuConversionError(referenceSyncedIssues);
   }
 
   for (const block of items) {
@@ -633,262 +483,15 @@ function validateBlocks(items) {
   return { blocks, root };
 }
 
-function escapeMarkdown(value) {
-  return value
-    .replace(/\\/g, '\\\\')
-    .replace(/([!"#$%&'()*+,\-./:;<=>?@\[\]^_`{|}~])/g, '\\$1');
-}
-
-function maxBacktickRun(value) {
-  return Math.max(0, ...(value.match(/`+/g) ?? []).map((run) => run.length));
-}
-
-function inlineCode(value) {
-  if (value.length === 0 || /^\s+$/.test(value)) {
-    return value;
-  }
-  const fence = '`'.repeat(Math.max(1, maxBacktickRun(value) + 1));
-  const needsPadding = /^\s|\s$|^`|`$/.test(value);
-  const padding = needsPadding ? ' ' : '';
-  return `${fence}${padding}${value}${padding}${fence}`;
-}
-
-function tableInlineCode(value) {
-  const escaped = value
-    .replace(/&/g, '&amp;')
-    .replace(/\\/g, '&#92;')
-    .replace(/\|/g, '&#124;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-  return `<code>${escaped}</code>`;
-}
-
-function protectLeadingIndentation(value) {
-  return value.replace(/^[ \t]+/gm, (indentation) => {
-    if (!indentation.includes('\t') && indentation.length < 4) {
-      return indentation;
-    }
-    return [...indentation]
-      .map((character) =>
-        character === '\t' ? '&nbsp;'.repeat(4) : '&nbsp;',
-      )
-      .join('');
-  });
-}
-
-function escapeTablePipes(value) {
-  let escaped = '';
-  let precedingBackslashes = 0;
-  for (const character of value) {
-    if (character === '\\') {
-      escaped += character;
-      precedingBackslashes += 1;
-      continue;
-    }
-    if (character === '|' && precedingBackslashes % 2 === 0) {
-      escaped += '\\';
-    }
-    escaped += character;
-    precedingBackslashes = 0;
-  }
-  return escaped;
-}
-
-function renderElements(
-  block,
-  warnings,
-  { raw = false, tableCell = false } = {},
-) {
-  const textData = textDataFor(block);
-  if (textData === undefined) {
-    return '';
-  }
-
-  const rendered = textData.elements
-    .map((element) => {
-      const textRun = element.text_run;
-      const style = textRun.text_element_style ?? {};
-      if (!raw && /^\s*$/.test(textRun.content)) {
-        return textRun.content;
-      }
-      let rendered = raw
-        ? textRun.content
-        : style.inline_code
-          ? tableCell
-            ? tableInlineCode(textRun.content)
-            : inlineCode(textRun.content)
-          : escapeMarkdown(textRun.content);
-
-      if (!raw) {
-        if (style.bold) rendered = `**${rendered}**`;
-        if (style.italic) rendered = `*${rendered}*`;
-        if (style.strikethrough) rendered = `~~${rendered}~~`;
-        if (style.link !== undefined) {
-          rendered = `[${rendered}](${normalizeLinkUrl(style.link.url)})`;
-        }
-
-        for (const warningType of [
-          style.underline ? 'underline' : undefined,
-          style.text_color !== undefined ? 'text_color' : undefined,
-          style.background_color !== undefined ? 'background_color' : undefined,
-        ]) {
-          if (
-            warningType !== undefined &&
-            !warnings.some(
-              (warning) =>
-                warning.blockId === block.block_id &&
-                warning.type === warningType,
-            )
-          ) {
-            warnings.push({ blockId: block.block_id, type: warningType });
-          }
-        }
-      }
-
-      return rendered;
-    })
-    .join('');
-  return raw ? rendered : protectLeadingIndentation(rendered);
-}
-
-function codeFence(value) {
-  return '`'.repeat(Math.max(3, maxBacktickRun(value) + 1));
-}
-
-function indentBlock(value, indentation) {
-  return indentation.length === 0
-    ? value
-    : value
-        .split('\n')
-        .map((line) => `${indentation}${line}`)
-        .join('\n');
-}
-
 export function blocksToMarkdown(items) {
   const { blocks, root } = validateBlocks(items);
-  const warnings = [];
-  const mediaTokens = [];
-  const mediaTokenSet = new Set();
-  const mediaReferences = [];
-
-  function renderBlock(blockId, indentation = '') {
-    const block = blocks.get(blockId);
-
-    if (block.block_type >= 3 && block.block_type <= 8) {
-      const level = block.block_type - 2;
-      return indentBlock(
-        `${'#'.repeat(level)} ${renderElements(block, warnings)}`,
-        indentation,
-      );
-    }
-
-    switch (block.block_type) {
-      case 2:
-        return indentBlock(renderElements(block, warnings), indentation);
-      case 12:
-      case 13:
-      case 17: {
-        const marker =
-          block.block_type === 12
-            ? '-'
-            : block.block_type === 13
-              ? '1.'
-              : block.todo.style?.done
-                ? '- [x]'
-                : '- [ ]';
-        const line = `${indentation}${marker} ${renderElements(block, warnings)}`;
-        const markerWidth = block.block_type === 13 ? 3 : 2;
-        const childIndentation = `${indentation}${' '.repeat(markerWidth)}`;
-        const children = (block.children ?? []).map((childId) =>
-          renderBlock(childId, childIndentation),
-        );
-        return [line, ...children].filter(Boolean).join('\n');
-      }
-      case 14: {
-        const content = renderElements(block, warnings, { raw: true });
-        const fence = codeFence(content);
-        const languageEnum = block.code.style?.language;
-        const language = CODE_LANGUAGES.get(languageEnum) ?? 'text';
-        if (PLAIN_TEXT_CODE_FALLBACKS.has(languageEnum)) {
-          warnings.push({
-            blockId: block.block_id,
-            type: 'code_language_fallback',
-            language: languageEnum,
-          });
-        }
-        const beforeClosingFence = content.endsWith('\n') ? '' : '\n';
-        return indentBlock(
-          `${fence}${language}\n${content}${beforeClosingFence}${fence}`,
-          indentation,
-        );
-      }
-      case 15:
-        return indentBlock(
-          renderElements(block, warnings)
-            .split('\n')
-            .map((line) => `> ${line}`)
-            .join('\n'),
-          indentation,
-        );
-      case 22:
-        return indentBlock('---', indentation);
-      case 27: {
-        const token = block.image.token;
-        if (!mediaTokenSet.has(token)) {
-          mediaTokenSet.add(token);
-          mediaTokens.push(token);
-          mediaReferences.push({ token, placeholder: mediaPlaceholder(token) });
-        }
-        return indentBlock(
-          `![图片](${mediaPlaceholder(token)})`,
-          indentation,
-        );
-      }
-      case 31: {
-        const { row_size: rowSize, column_size: columnSize } =
-          block.table.property;
-        const cellValues = block.table.cells.map((cellId) => {
-          const cell = blocks.get(cellId);
-          return (cell.children ?? [])
-            .map((childId) =>
-              escapeTablePipes(
-                renderElements(blocks.get(childId), warnings, {
-                  tableCell: true,
-                }).replace(/\n/g, '<br>'),
-              ),
-            )
-            .join('<br>');
-        });
-        const rows = Array.from({ length: rowSize }, (_, rowIndex) =>
-          cellValues.slice(
-            rowIndex * columnSize,
-            (rowIndex + 1) * columnSize,
-          ),
-        );
-        const header = rows[0];
-        return indentBlock(
-          [
-            `| ${header.join(' | ')} |`,
-            `| ${Array.from({ length: columnSize }, () => '---').join(' | ')} |`,
-            ...rows.slice(1).map((row) => `| ${row.join(' | ')} |`),
-          ].join('\n'),
-          indentation,
-        );
-      }
-      default:
-        return '';
-    }
+  const normalized = normalizeFeishuDocument({ blocks, root });
+  if (normalized.issues.length > 0) {
+    throw new FeishuConversionError(normalized.issues);
   }
-
-  const markdown = (root.children ?? [])
-    .map((blockId) => renderBlock(blockId))
-    .filter(Boolean)
-    .join('\n\n');
-
-  return {
-    markdown: markdown ? `${markdown}\n` : '',
-    mediaTokens,
-    mediaReferences,
-    warnings,
-  };
+  const rendered = renderFeishuDocument(normalized.document);
+  if (rendered.issues.length > 0) {
+    throw new FeishuConversionError(rendered.issues);
+  }
+  return rendered.conversion;
 }

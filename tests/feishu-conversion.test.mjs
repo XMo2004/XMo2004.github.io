@@ -6,9 +6,40 @@ import {
   blocksToMarkdown,
   FeishuConversionError,
 } from '../scripts/feishu/blocks.mjs';
+import {
+  CALLOUT_EMOJI_BY_ID,
+  CALLOUT_EMOJI_SNAPSHOT,
+} from '../scripts/feishu/callout-emojis.mjs';
+import {
+  CALLOUT_BACKGROUND_BY_ENUM,
+  CALLOUT_BORDER_BY_ENUM,
+  FONT_BACKGROUND_BY_ENUM,
+  FONT_COLOR_BY_ENUM,
+} from '../scripts/feishu/semantics.mjs';
 
 const fixture = JSON.parse(
   await readFile(new URL('./fixtures/feishu-document.json', import.meta.url), 'utf8'),
+);
+
+const legacyFixture = JSON.parse(
+  await readFile(
+    new URL('./fixtures/feishu-legacy-document.json', import.meta.url),
+    'utf8',
+  ),
+);
+
+const referenceSyncedFixture = JSON.parse(
+  await readFile(
+    new URL('./fixtures/feishu-reference-synced.json', import.meta.url),
+    'utf8',
+  ),
+);
+
+const richFixture = JSON.parse(
+  await readFile(
+    new URL('./fixtures/feishu-rich-content.json', import.meta.url),
+    'utf8',
+  ),
 );
 
 function textBlock(id, parentId, content = id) {
@@ -31,6 +62,69 @@ function pageWith(children, extra = []) {
   ];
 }
 
+test('vendors the complete pinned Feishu callout emoji catalog', () => {
+  assert.deepEqual(CALLOUT_EMOJI_SNAPSHOT, {
+    source:
+      'https://open.feishu.cn/document/ukTMukTMukTM/uUDN04SN0QjL1QDN/document-docx/docx-v1/emoji.md',
+    sha256: '37928153b9dc57b5e9ac940facb5a9627038bd130a3a0fc17edf59f5741458b7',
+    count: 940,
+  });
+  assert.equal(Object.keys(CALLOUT_EMOJI_BY_ID).length, 940);
+  assert.equal(CALLOUT_EMOJI_BY_ID.gift, '🎁');
+  assert.equal(CALLOUT_EMOJI_BY_ID.grinning, '😀');
+  assert.equal(CALLOUT_EMOJI_BY_ID.beach_with_umbrella, '🏖');
+  assert.equal(CALLOUT_EMOJI_BY_ID.unknown, undefined);
+  assert.equal(Object.hasOwn(CALLOUT_EMOJI_BY_ID, 'toString'), false);
+  assert.equal(Object.hasOwn(CALLOUT_EMOJI_BY_ID, '__proto__'), false);
+});
+
+test('legacy fixture preserves the complete conversion result byte for byte', () => {
+  const expected = {
+    markdown: [
+      '## 二级标题',
+      '',
+      'Markdown \\*特殊\\* 内容：**粗体** *斜体* ~~删除~~ ``a`b`` [链接](https://example.com/docs_%281%29)',
+      '',
+      '- 父级列表',
+      '  - 嵌套列表',
+      '',
+      '1. 有序项目',
+      '',
+      '> 引用内容',
+      '',
+      '- [x] 已经完成',
+      '',
+      '- [ ] 尚未完成',
+      '',
+      '````javascript',
+      'const fence = "```";',
+      'console.log(fence);',
+      '````',
+      '',
+      '---',
+      '',
+      '![图片](\uE000feishu-media:img_v2_example\uE001)',
+      '',
+      '| 列 A | 列 B |',
+      '| --- | --- |',
+      '| 值 \\| A | **值 B** |',
+      '',
+    ].join('\n'),
+    mediaTokens: ['img_v2_example'],
+    mediaReferences: [
+      {
+        token: 'img_v2_example',
+        placeholder: '\uE000feishu-media:img_v2_example\uE001',
+      },
+    ],
+    warnings: [],
+  };
+  const input = structuredClone(legacyFixture.items);
+
+  assert.deepEqual(blocksToMarkdown(input), expected);
+  assert.deepEqual(input, legacyFixture.items);
+});
+
 test('converts supported Feishu text blocks to deterministic Markdown', () => {
   const input = structuredClone(fixture.items);
   const first = blocksToMarkdown(input);
@@ -45,6 +139,7 @@ test('converts supported Feishu text blocks to deterministic Markdown', () => {
   assert.match(first.markdown, /~~删除~~/);
   assert.match(first.markdown, /``a`b``/);
   assert.match(first.markdown, /\[链接\]\(https:\/\/example\.com\/docs_%281%29\)/);
+  assert.match(first.markdown, /<u class="feishu-underline"> 下划线<\/u>/);
   assert.match(first.markdown, /^- 父级列表$/m);
   assert.match(first.markdown, /^  - 嵌套列表$/m);
   assert.match(first.markdown, /^1\. 有序项目$/m);
@@ -66,9 +161,59 @@ test('converts supported Feishu text blocks to deterministic Markdown', () => {
   assert.match(first.markdown, /^\| --- \| --- \|$/m);
   assert.match(first.markdown, /^\| 值 \\\| A \| \*\*值 B\*\* \|$/m);
   assert.deepEqual(first.mediaTokens, ['img_v2_example']);
-  assert.deepEqual(first.warnings, [
-    { blockId: 'formatted-paragraph', type: 'underline' },
+  assert.deepEqual(first.warnings, []);
+});
+
+test('rich-content fixture renders one complete controlled HTML document', () => {
+  const input = structuredClone(richFixture.items);
+  const first = blocksToMarkdown(input);
+  const second = blocksToMarkdown(input);
+
+  assert.deepEqual(first, second);
+  assert.deepEqual(input, richFixture.items);
+  assert.deepEqual(Object.keys(first), [
+    'markdown',
+    'mediaTokens',
+    'mediaReferences',
+    'warnings',
   ]);
+  assert.equal(first.markdown.match(/<div class="feishu-document">/g)?.length, 1);
+  assert.match(first.markdown, /^<div class="feishu-document">/);
+  assert.match(first.markdown, /<aside class="feishu-callout /);
+  assert.match(first.markdown, /<section class="feishu-source-synced">/);
+  assert.match(first.markdown, /data-feishu-search-ui>↻ 同步内容<\/span>/);
+  assert.match(first.markdown, /<h2 id="feishu-heading-1" data-feishu-heading-text="[A-Za-z0-9_-]+">/);
+  assert.match(first.markdown, /<ul>.*<li>.*<aside class="feishu-callout /s);
+  assert.match(first.markdown, /<aside class="feishu-callout .*<blockquote>/s);
+  assert.match(first.markdown, /<table><thead><tr><th>/);
+  assert.match(first.markdown, /<\/thead><tbody><tr><td>/);
+  assert.match(
+    first.markdown,
+    /<a class="feishu-link" href="https:\/\/example\.com\/formula"><span class="feishu-text-color--blue feishu-text-background--light-orange"><u class="feishu-underline"><strong><span class="feishu-equation /,
+  );
+  assert.match(first.markdown, /class="feishu-task-list__marker" aria-hidden="true">☑<\/span><span class="visually-hidden">已完成：<\/span>[\s\S]*受控待办事项/);
+  assert.match(first.markdown, /class="feishu-task-list__marker" aria-hidden="true">☐<\/span><span class="visually-hidden">未完成：<\/span>[\s\S]*未完成待办事项/);
+  assert.doesNotMatch(first.markdown, /\n[-*] |\n> |```|\uE000feishu-media:[^)"<]+\uE001(?!")/);
+
+  for (const [prefix, tokens] of [
+    ['feishu-text-color--', Object.values(FONT_COLOR_BY_ENUM)],
+    ['feishu-text-background--', Object.values(FONT_BACKGROUND_BY_ENUM)],
+    ['feishu-callout--background-', Object.values(CALLOUT_BACKGROUND_BY_ENUM)],
+    ['feishu-callout--border-', Object.values(CALLOUT_BORDER_BY_ENUM)],
+    ['feishu-callout--text-', Object.values(FONT_COLOR_BY_ENUM)],
+  ]) {
+    for (const token of tokens) {
+      assert.match(first.markdown, new RegExp(`${prefix}${token}(?:["\\s])`));
+    }
+  }
+
+  assert.deepEqual(first.mediaTokens, ['img_rich_example']);
+  assert.deepEqual(first.mediaReferences, [{
+    token: 'img_rich_example',
+    placeholder: '\uE000feishu-media:img_rich_example\uE001',
+  }]);
+  assert.equal(first.markdown.endsWith('\n'), true);
+  assert.equal(first.markdown.endsWith('\n\n'), false);
 });
 
 test('aggregates unsupported block types before rendering', () => {
@@ -87,6 +232,137 @@ test('aggregates unsupported block types before rendering', () => {
       return true;
     },
   );
+});
+
+test('rejects reference synced blocks with a dedicated issue', () => {
+  const items = structuredClone(referenceSyncedFixture.items);
+  assert.throws(() => blocksToMarkdown(items), (error) => {
+    assert.ok(error instanceof FeishuConversionError);
+    assert.equal(
+      error.issues.find(({ code }) => code === 'unsupported_reference_synced')
+        ?.code,
+      'unsupported_reference_synced',
+    );
+    assert.deepEqual(error.issues.map(({ code }) => code), [
+      'unsupported_reference_synced',
+    ]);
+    assert.doesNotMatch(error.message, /document_private|block_private/);
+    return true;
+  });
+});
+
+test('reference synced rejection short-circuits descendants and graph validation', () => {
+  const reference = {
+    block_id: 'reference',
+    block_type: 50,
+    parent_id: 'page',
+    children: ['secret-child-id'],
+    reference_synced: {
+      source_document_id: 'secret-document-id',
+      source_block_id: 'secret-source-block-id',
+    },
+  };
+  const malformedChild = textBlock(
+    'secret-child-id',
+    'wrong-private-parent',
+    'secret-descendant-content',
+  );
+  malformedChild.text.elements[0].text_run.text_element_style.link = {
+    url: 'javascript:secret-descendant-link',
+  };
+  const duplicateChild = textBlock(
+    'secret-child-id',
+    'reference',
+    'ordinary-duplicate-content',
+  );
+
+  assert.throws(
+    () =>
+      blocksToMarkdown(
+        pageWith(['reference'], [reference, malformedChild, duplicateChild]),
+      ),
+    (error) => {
+      assert.ok(error instanceof FeishuConversionError);
+      assert.deepEqual(error.issues.map(({ code }) => code), [
+        'unsupported_reference_synced',
+      ]);
+      assert.doesNotMatch(
+        error.message,
+        /secret-child-id|secret-document-id|secret-source-block-id|secret-descendant|ordinary-duplicate/,
+      );
+      return true;
+    },
+  );
+});
+
+for (const [label, container, child, expected] of [
+  [
+    'callout',
+    {
+      block_id: 'callout-private',
+      block_type: 19,
+      parent_id: 'page',
+      children: ['callout-child'],
+      callout: { emoji_id: 'gift' },
+    },
+    textBlock('callout-child', 'callout-private', 'private-callout-body'),
+    /<aside class="feishu-callout[^>]*>[\s\S]*private&#45;callout&#45;body/,
+  ],
+  [
+    'source synced',
+    {
+      block_id: 'source-private',
+      block_type: 49,
+      parent_id: 'page',
+      children: ['source-child'],
+      source_synced: {
+        elements: [
+          {
+            text_run: {
+              content: 'private-source-title',
+              text_element_style: {},
+            },
+          },
+        ],
+      },
+    },
+    textBlock('source-child', 'source-private', 'private-source-body'),
+    /<section class="feishu-source-synced">[\s\S]*private&#45;source&#45;title[\s\S]*private&#45;source&#45;body/,
+  ],
+]) {
+  test(`renders a ${label} without dropping visible content`, () => {
+    const result = blocksToMarkdown(
+      pageWith([container.block_id], [container, child]),
+    );
+    assert.match(result.markdown, expected);
+  });
+}
+
+test('omits a source-synced title div when its public title is whitespace only', () => {
+  const source = {
+    block_id: 'source-whitespace-title',
+    block_type: 49,
+    parent_id: 'page',
+    source_synced: {
+      align: 3,
+      elements: [
+        {
+          text_run: {
+            content: ' \n ',
+            text_element_style: {},
+          },
+        },
+      ],
+    },
+  };
+
+  const result = blocksToMarkdown(
+    pageWith(['source-whitespace-title'], [source]),
+  );
+
+  assert.match(result.markdown, /<section class="feishu-source-synced">/);
+  assert.match(result.markdown, /data-feishu-search-ui>↻ 同步内容<\/span>/);
+  assert.doesNotMatch(result.markdown, /feishu-source-synced__title/);
 });
 
 test('aggregates unsupported rich-text element types', () => {
@@ -109,15 +385,36 @@ test('aggregates unsupported rich-text element types', () => {
   );
 });
 
-test('rejects dangerous rich-text links', () => {
-  const block = textBlock('link', 'page', '危险链接');
-  block.text.elements[0].text_run.text_element_style.link = {
-    url: 'javascript:alert(1)',
+test('aggregates dangerous links and unknown styles in the public entry point', () => {
+  const first = textBlock('link-first', 'page', '第一段敏感正文');
+  first.text.elements[0].text_run.text_element_style.link = {
+    url: 'https://user:password@private.example/first',
   };
+  const second = textBlock('link-second', 'page', '第二段敏感正文');
+  second.text.elements[0].text_run.text_element_style.link = {
+    url: 'javascript:private-secret',
+  };
+  const third = textBlock('unknown-style', 'page', '第三段敏感正文');
+  third.text.elements[0].text_run.text_element_style.unknown_private_style = true;
 
   assert.throws(
-    () => blocksToMarkdown(pageWith(['link'], [block])),
-    /link.*javascript/s,
+    () => blocksToMarkdown(pageWith(
+      ['link-first', 'link-second', 'unknown-style'],
+      [first, second, third],
+    )),
+    (error) => {
+      assert.ok(error instanceof FeishuConversionError);
+      assert.deepEqual(error.issues.map(({ code }) => code), [
+        'unsafe_link',
+        'unsafe_link',
+        'unsupported_text_style',
+      ]);
+      assert.doesNotMatch(
+        error.message,
+        /user:password|private\.example|javascript:private-secret|第一段敏感正文|第二段敏感正文|第三段敏感正文/,
+      );
+      return true;
+    },
   );
 });
 
@@ -202,7 +499,14 @@ test('rejects reserved structured media placeholder characters in author text', 
   const block = textBlock('reserved-marker', 'page', '\uE000feishu-media:a\uE001');
   assert.throws(
     () => blocksToMarkdown(pageWith(['reserved-marker'], [block])),
-    /reserved-marker.*reserved media placeholder/i,
+    (error) => {
+      assert.ok(error instanceof FeishuConversionError);
+      assert.deepEqual(error.issues.map(({ code }) => code), [
+        'reserved_media_placeholder',
+      ]);
+      assert.doesNotMatch(error.message, /reserved-marker|feishu-media:a/i);
+      return true;
+    },
   );
 });
 

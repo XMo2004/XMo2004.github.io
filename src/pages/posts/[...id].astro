@@ -3,6 +3,7 @@ import type { CollectionEntry } from 'astro:content';
 import { getCollection, render } from 'astro:content';
 
 import PostLayout from '../../layouts/PostLayout.astro';
+import { extractFeishuHeadings } from '../../lib/feishu-headings';
 import {
   buildPostRouteRecords,
   buildRelatedPosts,
@@ -54,6 +55,8 @@ if (post.body === undefined) {
   throw new Error(`Post "${post.id}" does not expose its Markdown body.`);
 }
 
+const controlledHeadings = extractFeishuHeadings(post.body);
+const articleHeadings = controlledHeadings ?? headings;
 const readingMinutes = estimateReadingMinutes(post.body);
 const canonicalPath = getPostHref(post);
 ---
@@ -69,7 +72,7 @@ const canonicalPath = getPostHref(post);
   columnOrder={post.data.columnOrder}
   tags={post.data.tags}
   readingMinutes={readingMinutes}
-  headings={headings}
+  headings={articleHeadings}
   previous={previous}
   next={next}
   series={series}
