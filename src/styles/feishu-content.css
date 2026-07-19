@@ -1,0 +1,281 @@
+:root {
+  --feishu-fg-red: #8a2737;
+  --feishu-fg-orange: #7a3e00;
+  --feishu-fg-yellow: #5f4b00;
+  --feishu-fg-green: #1f5d3a;
+  --feishu-fg-blue: #2257a0;
+  --feishu-fg-purple: #633c8f;
+  --feishu-fg-gray: #46505c;
+  --feishu-border-red: #8a2737;
+  --feishu-border-orange: #7a3e00;
+  --feishu-border-yellow: #5f4b00;
+  --feishu-border-green: #1f5d3a;
+  --feishu-border-blue: #2257a0;
+  --feishu-border-purple: #633c8f;
+  --feishu-border-gray: #46505c;
+  --feishu-font-bg-light-red: #fff0f2;
+  --feishu-font-bg-light-orange: #fff4e8;
+  --feishu-font-bg-light-yellow: #fff9d8;
+  --feishu-font-bg-light-green: #eaf8ef;
+  --feishu-font-bg-light-blue: #edf4ff;
+  --feishu-font-bg-light-purple: #f5efff;
+  --feishu-font-bg-medium-gray: #e9edf2;
+  --feishu-font-bg-red: #f8dce1;
+  --feishu-font-bg-orange: #fbe3cc;
+  --feishu-font-bg-yellow: #f4e8ad;
+  --feishu-font-bg-green: #d8efdf;
+  --feishu-font-bg-blue: #dbe9fb;
+  --feishu-font-bg-purple: #e8dcf6;
+  --feishu-font-bg-gray: #dfe3e8;
+  --feishu-font-bg-light-gray: #f3f5f7;
+  --feishu-callout-bg-light-red: #fff0f2;
+  --feishu-callout-bg-light-orange: #fff4e8;
+  --feishu-callout-bg-light-yellow: #fff9d8;
+  --feishu-callout-bg-light-green: #eaf8ef;
+  --feishu-callout-bg-light-blue: #edf4ff;
+  --feishu-callout-bg-light-purple: #f5efff;
+  --feishu-callout-bg-medium-gray: #e9edf2;
+  --feishu-callout-bg-medium-red: #f8dce1;
+  --feishu-callout-bg-medium-orange: #fbe3cc;
+  --feishu-callout-bg-medium-yellow: #f4e8ad;
+  --feishu-callout-bg-medium-green: #d8efdf;
+  --feishu-callout-bg-medium-blue: #dbe9fb;
+  --feishu-callout-bg-medium-purple: #e8dcf6;
+  --feishu-callout-bg-gray: #dfe3e8;
+  --feishu-callout-bg-light-gray: #f3f5f7;
+}
+
+:root[data-theme='dark'] {
+  --feishu-fg-red: #ff9aa8;
+  --feishu-fg-orange: #ffb26b;
+  --feishu-fg-yellow: #e8ce73;
+  --feishu-fg-green: #85d6a1;
+  --feishu-fg-blue: #8fbaff;
+  --feishu-fg-purple: #c8a7ff;
+  --feishu-fg-gray: #c4ccd6;
+  --feishu-border-red: #ff9aa8;
+  --feishu-border-orange: #ffb26b;
+  --feishu-border-yellow: #e8ce73;
+  --feishu-border-green: #85d6a1;
+  --feishu-border-blue: #8fbaff;
+  --feishu-border-purple: #c8a7ff;
+  --feishu-border-gray: #c4ccd6;
+  --feishu-font-bg-light-red: #2b1c20;
+  --feishu-font-bg-light-orange: #2c2117;
+  --feishu-font-bg-light-yellow: #292617;
+  --feishu-font-bg-light-green: #17271e;
+  --feishu-font-bg-light-blue: #172233;
+  --feishu-font-bg-light-purple: #241b31;
+  --feishu-font-bg-medium-gray: #242a31;
+  --feishu-font-bg-red: #42232a;
+  --feishu-font-bg-orange: #43301f;
+  --feishu-font-bg-yellow: #3d371d;
+  --feishu-font-bg-green: #203a29;
+  --feishu-font-bg-blue: #20334e;
+  --feishu-font-bg-purple: #342449;
+  --feishu-font-bg-gray: #303740;
+  --feishu-font-bg-light-gray: #1b2026;
+  --feishu-callout-bg-light-red: #2b1c20;
+  --feishu-callout-bg-light-orange: #2c2117;
+  --feishu-callout-bg-light-yellow: #292617;
+  --feishu-callout-bg-light-green: #17271e;
+  --feishu-callout-bg-light-blue: #172233;
+  --feishu-callout-bg-light-purple: #241b31;
+  --feishu-callout-bg-medium-gray: #242a31;
+  --feishu-callout-bg-medium-red: #42232a;
+  --feishu-callout-bg-medium-orange: #43301f;
+  --feishu-callout-bg-medium-yellow: #3d371d;
+  --feishu-callout-bg-medium-green: #203a29;
+  --feishu-callout-bg-medium-blue: #20334e;
+  --feishu-callout-bg-medium-purple: #342449;
+  --feishu-callout-bg-gray: #303740;
+  --feishu-callout-bg-light-gray: #1b2026;
+}
+
+.prose .feishu-document > * + * {
+  margin-block-start: var(--space-5);
+}
+
+.prose .feishu-underline {
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.16em;
+}
+
+.prose a.feishu-link,
+.prose a.feishu-link:hover {
+  color: inherit;
+}
+
+.prose .feishu-task-list {
+  list-style: none;
+  padding-inline-start: 0;
+}
+
+.prose .feishu-task-list__marker {
+  display: inline-block;
+  inline-size: 1.25em;
+}
+
+.prose [class*='feishu-text-background--'] {
+  color: var(--feishu-context-text, var(--ink));
+  padding-inline: 0.08em;
+  border-radius: 0.2em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+.prose [class*='feishu-text-background--'] code {
+  background: transparent;
+}
+
+.prose [class*='feishu-text-color--'] :is(code, .katex) {
+  color: inherit;
+}
+
+.prose .feishu-equation {
+  max-inline-size: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+}
+
+.prose .feishu-equation--inline {
+  display: inline-block;
+  vertical-align: -0.15em;
+}
+
+.prose .feishu-equation--block {
+  display: block;
+  padding-block: var(--space-2);
+}
+
+.prose .feishu-callout,
+.prose .feishu-source-synced {
+  min-inline-size: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+
+.prose .feishu-callout {
+  --feishu-callout-text: var(--ink);
+  --feishu-context-text: var(--feishu-callout-text);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-3);
+  color: var(--feishu-callout-text);
+}
+
+.prose .feishu-callout :is(h1, h2, h3, h4, h5, h6, blockquote, code) {
+  color: inherit;
+}
+
+.prose .feishu-source-synced {
+  border-color: var(--line);
+  background: color-mix(in srgb, var(--paper-raised) 65%, transparent);
+}
+
+.prose .feishu-callout__content,
+.prose .feishu-source-synced__content {
+  min-inline-size: 0;
+}
+
+.prose :is(.feishu-callout__content, .feishu-source-synced__content) > * + * {
+  margin-block-start: var(--space-4);
+}
+
+.prose .feishu-callout__emoji {
+  line-height: 1.7;
+}
+
+.prose .feishu-source-synced__label {
+  display: inline-flex;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+
+.prose .feishu-source-synced__title--align-left {
+  text-align: left;
+}
+
+.prose .feishu-source-synced__title--align-center {
+  text-align: center;
+}
+
+.prose .feishu-source-synced__title--align-right {
+  text-align: right;
+}
+
+.prose :is(
+  .feishu-callout__content,
+  .feishu-source-synced__content
+) :is(ul, ol, blockquote, pre, table) {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.prose :is(.feishu-callout__content, .feishu-source-synced__content) table {
+  display: block;
+  overflow-x: auto;
+}
+
+@media (max-width: 40rem) {
+  .prose .feishu-callout,
+  .prose .feishu-source-synced {
+    padding: var(--space-3);
+  }
+}
+
+/* Feishu enum mappings */
+.prose .feishu-text-color--red { color: var(--feishu-fg-red); }
+.prose .feishu-text-color--orange { color: var(--feishu-fg-orange); }
+.prose .feishu-text-color--yellow { color: var(--feishu-fg-yellow); }
+.prose .feishu-text-color--green { color: var(--feishu-fg-green); }
+.prose .feishu-text-color--blue { color: var(--feishu-fg-blue); }
+.prose .feishu-text-color--purple { color: var(--feishu-fg-purple); }
+.prose .feishu-text-color--gray { color: var(--feishu-fg-gray); }
+.prose .feishu-text-background--light-red { background: var(--feishu-font-bg-light-red); }
+.prose .feishu-text-background--light-orange { background: var(--feishu-font-bg-light-orange); }
+.prose .feishu-text-background--light-yellow { background: var(--feishu-font-bg-light-yellow); }
+.prose .feishu-text-background--light-green { background: var(--feishu-font-bg-light-green); }
+.prose .feishu-text-background--light-blue { background: var(--feishu-font-bg-light-blue); }
+.prose .feishu-text-background--light-purple { background: var(--feishu-font-bg-light-purple); }
+.prose .feishu-text-background--medium-gray { background: var(--feishu-font-bg-medium-gray); }
+.prose .feishu-text-background--red { background: var(--feishu-font-bg-red); }
+.prose .feishu-text-background--orange { background: var(--feishu-font-bg-orange); }
+.prose .feishu-text-background--yellow { background: var(--feishu-font-bg-yellow); }
+.prose .feishu-text-background--green { background: var(--feishu-font-bg-green); }
+.prose .feishu-text-background--blue { background: var(--feishu-font-bg-blue); }
+.prose .feishu-text-background--purple { background: var(--feishu-font-bg-purple); }
+.prose .feishu-text-background--gray { background: var(--feishu-font-bg-gray); }
+.prose .feishu-text-background--light-gray { background: var(--feishu-font-bg-light-gray); }
+.prose .feishu-callout--background-light-red { background: var(--feishu-callout-bg-light-red); }
+.prose .feishu-callout--background-light-orange { background: var(--feishu-callout-bg-light-orange); }
+.prose .feishu-callout--background-light-yellow { background: var(--feishu-callout-bg-light-yellow); }
+.prose .feishu-callout--background-light-green { background: var(--feishu-callout-bg-light-green); }
+.prose .feishu-callout--background-light-blue { background: var(--feishu-callout-bg-light-blue); }
+.prose .feishu-callout--background-light-purple { background: var(--feishu-callout-bg-light-purple); }
+.prose .feishu-callout--background-medium-gray { background: var(--feishu-callout-bg-medium-gray); }
+.prose .feishu-callout--background-medium-red { background: var(--feishu-callout-bg-medium-red); }
+.prose .feishu-callout--background-medium-orange { background: var(--feishu-callout-bg-medium-orange); }
+.prose .feishu-callout--background-medium-yellow { background: var(--feishu-callout-bg-medium-yellow); }
+.prose .feishu-callout--background-medium-green { background: var(--feishu-callout-bg-medium-green); }
+.prose .feishu-callout--background-medium-blue { background: var(--feishu-callout-bg-medium-blue); }
+.prose .feishu-callout--background-medium-purple { background: var(--feishu-callout-bg-medium-purple); }
+.prose .feishu-callout--background-gray { background: var(--feishu-callout-bg-gray); }
+.prose .feishu-callout--background-light-gray { background: var(--feishu-callout-bg-light-gray); }
+.prose .feishu-callout--border-red { border-color: var(--feishu-border-red); }
+.prose .feishu-callout--border-orange { border-color: var(--feishu-border-orange); }
+.prose .feishu-callout--border-yellow { border-color: var(--feishu-border-yellow); }
+.prose .feishu-callout--border-green { border-color: var(--feishu-border-green); }
+.prose .feishu-callout--border-blue { border-color: var(--feishu-border-blue); }
+.prose .feishu-callout--border-purple { border-color: var(--feishu-border-purple); }
+.prose .feishu-callout--border-gray { border-color: var(--feishu-border-gray); }
+.prose .feishu-callout--text-red { --feishu-callout-text: var(--feishu-fg-red); }
+.prose .feishu-callout--text-orange { --feishu-callout-text: var(--feishu-fg-orange); }
+.prose .feishu-callout--text-yellow { --feishu-callout-text: var(--feishu-fg-yellow); }
+.prose .feishu-callout--text-green { --feishu-callout-text: var(--feishu-fg-green); }
+.prose .feishu-callout--text-blue { --feishu-callout-text: var(--feishu-fg-blue); }
+.prose .feishu-callout--text-purple { --feishu-callout-text: var(--feishu-fg-purple); }
+.prose .feishu-callout--text-gray { --feishu-callout-text: var(--feishu-fg-gray); }

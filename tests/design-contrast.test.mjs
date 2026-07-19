@@ -3,6 +3,41 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const MINIMUM_CONTRAST = 4.5;
+const fontColors = ['red', 'orange', 'yellow', 'green', 'blue', 'purple', 'gray'];
+const fontBackgrounds = [
+  'light-red',
+  'light-orange',
+  'light-yellow',
+  'light-green',
+  'light-blue',
+  'light-purple',
+  'medium-gray',
+  'red',
+  'orange',
+  'yellow',
+  'green',
+  'blue',
+  'purple',
+  'gray',
+  'light-gray',
+];
+const calloutBackgrounds = [
+  'light-red',
+  'light-orange',
+  'light-yellow',
+  'light-green',
+  'light-blue',
+  'light-purple',
+  'medium-gray',
+  'medium-red',
+  'medium-orange',
+  'medium-yellow',
+  'medium-green',
+  'medium-blue',
+  'medium-purple',
+  'gray',
+  'light-gray',
+];
 
 function readTokens(block) {
   return Object.fromEntries(
@@ -33,6 +68,31 @@ function contrastRatio(firstColor, secondColor) {
   const darker = Math.min(firstLuminance, secondLuminance);
 
   return (lighter + 0.05) / (darker + 0.05);
+}
+
+function themeTokens(source) {
+  const lightBlock = source.match(/:root\s*\{([\s\S]*?)\}/)?.[1] ?? '';
+  const darkBlock =
+    source.match(/:root\[data-theme=['"]dark['"]\]\s*\{([\s\S]*?)\}/)?.[1] ??
+    '';
+  return {
+    light: readTokens(lightBlock),
+    dark: readTokens(darkBlock),
+  };
+}
+
+function assertContrast(tokens, themeName, foregroundName, backgroundName, context) {
+  const foreground = tokens[foregroundName];
+  const background = tokens[backgroundName];
+
+  assert.ok(foreground, `${themeName} --${foregroundName} must be defined`);
+  assert.ok(background, `${themeName} --${backgroundName} must be defined`);
+
+  const ratio = contrastRatio(foreground, background);
+  assert.ok(
+    ratio >= MINIMUM_CONTRAST,
+    `${context}: ${themeName} --${foregroundName} on --${backgroundName} is ${ratio.toFixed(2)}:1`,
+  );
 }
 
 test('semantic accent text tokens meet WCAG AA on every paper surface', async () => {
@@ -80,6 +140,95 @@ test('semantic accent text tokens meet WCAG AA on every paper surface', async ()
           `${themeName} --${tokenName} contrast on --${surfaceName} is ${ratio.toFixed(2)}:1`,
         );
       }
+    }
+  }
+});
+
+test('Feishu foreground, background, callout, link, and quote matrices meet WCAG AA', async () => {
+  const [globalSource, feishuSource] = await Promise.all([
+    readFile(new URL('../src/styles/global.css', import.meta.url), 'utf8'),
+    readFile(new URL('../src/styles/feishu-content.css', import.meta.url), 'utf8').catch(
+      () => '',
+    ),
+  ]);
+  const globalThemes = themeTokens(globalSource);
+  const feishuThemes = themeTokens(feishuSource);
+
+  for (const themeName of ['light', 'dark']) {
+    const tokens = {
+      ...globalThemes[themeName],
+      ...feishuThemes[themeName],
+    };
+    const foregroundTokens = fontColors.map((token) => `feishu-fg-${token}`);
+    const textBackgroundTokens = fontBackgrounds.map(
+      (token) => `feishu-font-bg-${token}`,
+    );
+    const calloutBackgroundTokens = calloutBackgrounds.map(
+      (token) => `feishu-callout-bg-${token}`,
+    );
+
+    for (const foregroundName of foregroundTokens) {
+      for (const backgroundName of textBackgroundTokens) {
+        assertContrast(
+          tokens,
+          themeName,
+          foregroundName,
+          backgroundName,
+          'explicit Feishu text and background',
+        );
+        assertContrast(
+          tokens,
+          themeName,
+          foregroundName,
+          backgroundName,
+          'Callout inline background and inherited link/quote text',
+        );
+      }
+
+      assertContrast(
+        tokens,
+        themeName,
+        foregroundName,
+        'paper',
+        'text-color-only body content',
+      );
+
+      for (const backgroundName of calloutBackgroundTokens) {
+        assertContrast(
+          tokens,
+          themeName,
+          foregroundName,
+          backgroundName,
+          'explicit Callout text and inherited link',
+        );
+      }
+    }
+
+    for (const backgroundName of textBackgroundTokens) {
+      assertContrast(
+        tokens,
+        themeName,
+        'ink',
+        backgroundName,
+        'background-only inline and inherited link',
+      );
+      assertContrast(
+        tokens,
+        themeName,
+        'ink',
+        backgroundName,
+        'ordinary or SourceSynced quote inline background',
+      );
+    }
+
+    for (const backgroundName of calloutBackgroundTokens) {
+      assertContrast(
+        tokens,
+        themeName,
+        'ink',
+        backgroundName,
+        'default Callout text and inherited link',
+      );
     }
   }
 });

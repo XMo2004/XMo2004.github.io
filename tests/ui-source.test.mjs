@@ -1555,3 +1555,152 @@ test('article routes use shared controlled headings without adding a client runt
     /new TextDecoder\(['"]utf-8['"],\s*\{\s*fatal:\s*true/,
   );
 });
+
+test('PostLayout loads KaTeX before the Feishu content overrides', async () => {
+  const source = await readSource('src/layouts/PostLayout.astro');
+  const katexImport = "import 'katex/dist/katex.min.css';";
+  const contentImport = "import '../styles/feishu-content.css';";
+
+  assert.ok(source.includes(katexImport), 'PostLayout must load KaTeX CSS');
+  assert.ok(
+    source.indexOf(contentImport) > source.indexOf(katexImport),
+    'Feishu content CSS must load after KaTeX CSS',
+  );
+});
+
+test('Feishu content styles expose every semantic enum and structural contract', async () => {
+  const source = await readSource('src/styles/feishu-content.css').catch(() => '');
+  const fontColors = [
+    'red',
+    'orange',
+    'yellow',
+    'green',
+    'blue',
+    'purple',
+    'gray',
+  ];
+  const fontBackgrounds = [
+    'light-red',
+    'light-orange',
+    'light-yellow',
+    'light-green',
+    'light-blue',
+    'light-purple',
+    'medium-gray',
+    'red',
+    'orange',
+    'yellow',
+    'green',
+    'blue',
+    'purple',
+    'gray',
+    'light-gray',
+  ];
+  const calloutBackgrounds = [
+    'light-red',
+    'light-orange',
+    'light-yellow',
+    'light-green',
+    'light-blue',
+    'light-purple',
+    'medium-gray',
+    'medium-red',
+    'medium-orange',
+    'medium-yellow',
+    'medium-green',
+    'medium-blue',
+    'medium-purple',
+    'gray',
+    'light-gray',
+  ];
+
+  const baseIndex = source.indexOf('.prose .feishu-callout,');
+  const mappingIndex = source.indexOf('/* Feishu enum mappings */');
+  assert.ok(baseIndex >= 0 && mappingIndex > baseIndex);
+  assert.match(source, /\.prose \.feishu-document > \* \+ \*/);
+  assert.match(source, /\.prose \.feishu-equation--inline\s*\{/);
+  assert.match(source, /\.prose \.feishu-equation--block\s*\{/);
+  assert.match(source, /\.prose \.feishu-callout\s*\{/);
+  assert.match(
+    source,
+    /\.prose \.feishu-source-synced\s*\{[^}]*border-color:\s*var\(--line\);[^}]*background:\s*color-mix\(/s,
+  );
+  assert.match(
+    source,
+    /\.feishu-callout--text-red\s*\{\s*--feishu-callout-text:\s*var\(--feishu-fg-red\);\s*\}/,
+  );
+  assert.match(
+    source,
+    /\.feishu-callout :is\(h1, h2, h3, h4, h5, h6, blockquote, code\)\s*\{\s*color:\s*inherit;/,
+  );
+  assert.match(
+    source,
+    /\.prose a\.feishu-link,\s*\.prose a\.feishu-link:hover\s*\{\s*color:\s*inherit;/,
+  );
+  assert.match(
+    source,
+    /\.prose \.feishu-task-list\s*\{[^}]*list-style:\s*none;/s,
+  );
+  assert.match(
+    source,
+    /\[class\*=['"]feishu-text-background--['"]\]\s*\{[^}]*color:\s*var\(--feishu-context-text,\s*var\(--ink\)\);/s,
+  );
+  assert.match(
+    source,
+    /\[class\*=['"]feishu-text-background--['"]\] code\s*\{\s*background:\s*transparent;/,
+  );
+  assert.match(
+    source,
+    /\.prose \.feishu-callout\s*\{[^}]*--feishu-callout-text:\s*var\(--ink\);[^}]*--feishu-context-text:\s*var\(--feishu-callout-text\);/s,
+  );
+
+  const linkRule =
+    source.match(/\.prose a\.feishu-link,[\s\S]*?\}/)?.[0] ?? '';
+  assert.doesNotMatch(linkRule, /--accent-(?:text|hover)/);
+  assert.doesNotMatch(linkRule, /outline:\s*none/);
+
+  const mappingContracts = [
+    ['feishu-text-color--', 'color', '--feishu-fg-', fontColors],
+    [
+      'feishu-text-background--',
+      'background',
+      '--feishu-font-bg-',
+      fontBackgrounds,
+    ],
+    [
+      'feishu-callout--background-',
+      'background',
+      '--feishu-callout-bg-',
+      calloutBackgrounds,
+    ],
+    ['feishu-callout--border-', 'border-color', '--feishu-border-', fontColors],
+    [
+      'feishu-callout--text-',
+      '--feishu-callout-text',
+      '--feishu-fg-',
+      fontColors,
+    ],
+  ];
+
+  for (const [classPrefix, property, variablePrefix, tokens] of mappingContracts) {
+    const selectorCount = [
+      ...source.matchAll(
+        new RegExp(`\\.prose \\.${classPrefix}[a-z-]+\\s*\\{`, 'g'),
+      ),
+    ].length;
+    assert.equal(
+      selectorCount,
+      tokens.length,
+      `${classPrefix} must define exactly ${tokens.length} enum selectors`,
+    );
+
+    for (const token of tokens) {
+      assert.match(
+        source,
+        new RegExp(
+          `\\.prose \\.${classPrefix}${token}\\s*\\{\\s*${property}:\\s*var\\(${variablePrefix}${token}\\);\\s*\\}`,
+        ),
+      );
+    }
+  }
+});
