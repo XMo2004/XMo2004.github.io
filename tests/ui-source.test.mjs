@@ -261,6 +261,124 @@ function effectiveCssDeclarations(rules, target, environment) {
   );
 }
 
+function exactSelectorDeclarationsAt(source, target, viewportWidth = 1440) {
+  const exactRules = parseCssCascade(source).filter(
+    (rule) => rule.selector === target,
+  );
+  return effectiveCssDeclarations(exactRules, target, {
+    viewportWidth,
+    reducedMotion: false,
+  });
+}
+
+function assertNoVisibleBorder(declarations, label) {
+  const edgeProperties = new Set([
+    'border',
+    'border-top',
+    'border-right',
+    'border-bottom',
+    'border-left',
+    'border-block',
+    'border-block-start',
+    'border-block-end',
+    'border-inline',
+    'border-inline-start',
+    'border-inline-end',
+  ]);
+  const edgePattern =
+    /(?:top|right|bottom|left|block|inline|block-start|block-end|inline-start|inline-end)/;
+  const isEdgeLonghand = (property, suffix) =>
+    new RegExp(`^border(?:-${edgePattern.source})?-${suffix}$`).test(property);
+  const everyValueTokenMatches = (value, pattern) =>
+    value
+      .trim()
+      .split(/\s+/)
+      .every((token) => pattern.test(token));
+  const hasVisibleBorderValue = (property, value) => {
+    if (edgeProperties.has(property)) {
+      return !/^(?:0(?:\s|$)|none\b)/i.test(value);
+    }
+    if (isEdgeLonghand(property, 'width')) {
+      return !everyValueTokenMatches(value, /^0(?:[a-z%]+)?$/i);
+    }
+    if (isEdgeLonghand(property, 'style')) {
+      return !everyValueTokenMatches(value, /^(?:none|hidden)$/i);
+    }
+    return false;
+  };
+  assert.ok(
+    Object.keys(declarations).length > 0,
+    `${label} must match at least one CSS declaration`,
+  );
+  for (const [property, value] of Object.entries(declarations)) {
+    assert.ok(
+      !hasVisibleBorderValue(property, value),
+      `${label} ${property} must not draw a visible border; received ${value}`,
+    );
+  }
+}
+
+test('borderless source contract rejects width and style resurrection', () => {
+  assert.doesNotThrow(() => assertNoVisibleBorder({ border: '0' }, 'reset'));
+  assert.doesNotThrow(() =>
+    assertNoVisibleBorder(
+      {
+        'border-width': '0 0px',
+        'border-style': 'none hidden',
+      },
+      'multi-value reset',
+    ),
+  );
+  assert.throws(
+    () => assertNoVisibleBorder({}, 'empty'),
+    /empty must match at least one CSS declaration/,
+  );
+  assert.throws(
+    () =>
+      assertNoVisibleBorder(
+        { 'border-width': '0 1px' },
+        'resurrected multi-value physical border',
+      ),
+    /resurrected multi-value physical border border-width must not draw a visible border/,
+  );
+  assert.throws(
+    () =>
+      assertNoVisibleBorder(
+        { 'border-block-width': '0 0.125rem' },
+        'resurrected multi-value logical border',
+      ),
+    /resurrected multi-value logical border border-block-width must not draw a visible border/,
+  );
+  assert.throws(
+    () =>
+      assertNoVisibleBorder(
+        { 'border-style': 'none solid' },
+        'resurrected multi-value border style',
+      ),
+    /resurrected multi-value border style border-style must not draw a visible border/,
+  );
+  assert.throws(
+    () =>
+      assertNoVisibleBorder(
+        {
+          border: '0',
+          'border-width': '1px',
+          'border-style': 'solid',
+        },
+        'resurrected physical border',
+      ),
+    /resurrected physical border border-width must not draw a visible border/,
+  );
+  assert.throws(
+    () =>
+      assertNoVisibleBorder(
+        { 'border-block-start-width': '0.125rem' },
+        'resurrected logical border',
+      ),
+    /resurrected logical border border-block-start-width must not draw a visible border/,
+  );
+});
+
 function assertMinimumCssLength(declarations, property, label) {
   const value = declarations[property];
   assert.ok(
@@ -1098,7 +1216,7 @@ test('global layout keeps dense editorial scanning without shrinking reading tex
     styles,
     /\.home-taxonomy\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);[^}]*\}/s,
   );
-  assert.match(styles, /\.home-section\s*\{[^}]*padding-block-start:\s*3rem;[^}]*\}/s);
+  assert.match(styles, /\.home-section\s*\{[^}]*padding:\s*var\(--space-6\);[^}]*\}/s);
   assert.match(styles, /\.section-heading\s*\{[^}]*margin-block-end:\s*1\.25rem;[^}]*\}/s);
   assert.match(styles, /\.post-card__cover\s*\{[^}]*min-height:\s*13\.5rem;[^}]*\}/s);
   assert.match(
@@ -1148,6 +1266,58 @@ test('global layout keeps dense editorial scanning without shrinking reading tex
   assert.doesNotMatch(styles, /\.article-meta\s*\{[^}]*flex-direction:\s*column;/s);
   assert.match(rowSource, /post-row__stretched-link/);
   assert.match(rowSource, /post-row__taxonomy-link/);
+});
+
+test('global shell and home sections use soft borderless surfaces', async () => {
+  const styles = await readSource('src/styles/global.css');
+
+  for (const target of [
+    '.site-header',
+    '.site-footer',
+    '.page-header',
+    '.home-hero',
+    '.home-taxonomy',
+    '.home-section',
+    '.section-heading',
+    '.home-taxonomy__list',
+    '.home-taxonomy__list a',
+  ]) {
+    assertNoVisibleBorder(exactSelectorDeclarationsAt(styles, target), target);
+  }
+
+  assert.equal(
+    exactSelectorDeclarationsAt(styles, '.site-header')['box-shadow'],
+    'var(--shadow-header)',
+  );
+
+  for (const target of [
+    '.page-header',
+    '.home-hero',
+    '.home-taxonomy',
+    '.home-section',
+  ]) {
+    const declarations = exactSelectorDeclarationsAt(styles, target);
+    assert.equal(declarations.background, 'var(--paper-soft)');
+    assert.ok(
+      declarations['box-shadow'] === undefined ||
+        declarations['box-shadow'] === 'none',
+      `${target} must not have a persistent shadow`,
+    );
+  }
+
+  assert.equal(
+    exactSelectorDeclarationsAt(styles, '.home-taxonomy__list a:hover').background,
+    'var(--paper-interactive)',
+  );
+
+  const currentNav = exactSelectorDeclarationsAt(
+    styles,
+    ".primary-nav a[aria-current='page']",
+  );
+  assert.equal(currentNav['text-decoration'], 'underline');
+  assert.equal(currentNav['text-decoration-thickness'], '0.1em');
+  assert.notEqual(currentNav['text-decoration-color'], 'transparent');
+  assert.notEqual(currentNav['text-decoration-style'], 'none');
 });
 
 test('reduced motion declares stable final brand, footer, and phase states', async () => {
