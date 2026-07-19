@@ -186,20 +186,72 @@ function mediaQueryMatches(query, environment) {
 }
 
 function cssSpecificity(selector) {
-  const ids = selector.match(/#[\w-]+/g)?.length ?? 0;
-  const withoutPseudoElements = selector.replace(/::[\w-]+/g, '');
-  const classes = withoutPseudoElements.match(/\.[\w-]+/g)?.length ?? 0;
-  const attributes = withoutPseudoElements.match(/\[[^\]]+\]/g)?.length ?? 0;
-  const pseudoClasses =
-    withoutPseudoElements.match(/:(?!:)[\w-]+(?:\([^)]*\))?/g)?.length ?? 0;
-  const elementSource = withoutPseudoElements
-    .replace(/#[\w-]+|\.[\w-]+|\[[^\]]+\]|:(?!:)[\w-]+(?:\([^)]*\))?/g, ' ')
-    .replace(/[>+~*]/g, ' ');
-  const elements = elementSource
-    .trim()
-    .split(/\s+/)
-    .filter((token) => /^[a-z][\w-]*$/i.test(token)).length;
-  return [ids, classes + attributes + pseudoClasses, elements];
+  const specificity = [0, 0, 0];
+  const legacyPseudoElements = new Set([
+    'before',
+    'after',
+    'first-line',
+    'first-letter',
+  ]);
+  const readIdentifier = (start) => {
+    let end = start;
+    while (/[\w-]/.test(selector[end] ?? '')) end += 1;
+    return end;
+  };
+  const add = (value) => {
+    specificity[0] += value[0];
+    specificity[1] += value[1];
+    specificity[2] += value[2];
+  };
+
+  for (let index = 0; index < selector.length; index += 1) {
+    const character = selector[index];
+    if (character === '#') {
+      specificity[0] += 1;
+      index = readIdentifier(index + 1) - 1;
+    } else if (character === '.') {
+      specificity[1] += 1;
+      index = readIdentifier(index + 1) - 1;
+    } else if (character === '[') {
+      specificity[1] += 1;
+      index = findMatchingSelectorDelimiter(selector, index, '[', ']');
+    } else if (character === ':') {
+      const pseudoElement = selector[index + 1] === ':';
+      const nameStart = index + (pseudoElement ? 2 : 1);
+      const nameEnd = readIdentifier(nameStart);
+      const name = selector.slice(nameStart, nameEnd).toLowerCase();
+      if (pseudoElement || legacyPseudoElements.has(name)) {
+        specificity[2] += 1;
+        index = nameEnd - 1;
+      } else if (selector[nameEnd] === '(') {
+        const closing = findMatchingSelectorDelimiter(selector, nameEnd, '(', ')');
+        if (name === 'is' || name === 'not' || name === 'has') {
+          const argumentSpecificity = splitCssTopLevel(
+            selector.slice(nameEnd + 1, closing),
+            ',',
+          ).map((argument) => cssSpecificity(argument));
+          add(argumentSpecificity.reduce(
+            (maximum, value) =>
+              compareSpecificity(value, maximum) > 0 ? value : maximum,
+            [0, 0, 0],
+          ));
+        } else if (name !== 'where') {
+          // The contract selectors do not use `of` clauses, so functional
+          // pseudo-classes outside :is/:not/:has count as one pseudo-class.
+          specificity[1] += 1;
+        }
+        index = closing;
+      } else {
+        specificity[1] += 1;
+        index = nameEnd - 1;
+      }
+    } else if (/[a-z_]/i.test(character)) {
+      specificity[2] += 1;
+      index = readIdentifier(index + 1) - 1;
+    }
+  }
+
+  return specificity;
 }
 
 function selectorAppliesToTarget(selector, target) {
@@ -269,6 +321,136 @@ function exactSelectorDeclarationsAt(source, target, viewportWidth = 1440) {
     viewportWidth,
     reducedMotion: false,
   });
+}
+
+function paddingPhysicalSides(property, value) {
+  const values = value.trim().split(/\s+/);
+  const [first, second = first, third = first, fourth = second] = values;
+  const shorthandSides = [
+    ['padding-top', first],
+    ['padding-right', second],
+    ['padding-bottom', third],
+    ['padding-left', fourth],
+  ];
+  const sideAliases = {
+    'padding-block': [
+      ['padding-top', first],
+      ['padding-bottom', second],
+    ],
+    'padding-inline': [
+      ['padding-left', first],
+      ['padding-right', second],
+    ],
+    'padding-block-start': [['padding-top', first]],
+    'padding-block-end': [['padding-bottom', first]],
+    'padding-inline-start': [['padding-left', first]],
+    'padding-inline-end': [['padding-right', first]],
+  };
+
+  if (property === 'padding') return shorthandSides;
+  if (sideAliases[property] !== undefined) return sideAliases[property];
+  if (/^padding-(?:top|right|bottom|left)$/.test(property)) {
+    return [[property, first]];
+  }
+  return [];
+}
+
+function effectiveNarrowSurfaceDeclarations(source, target) {
+  const winners = new Map();
+  const environment = { viewportWidth: 320, reducedMotion: false };
+  const setWinner = (property, value, declaration, rule, specificity) => {
+    const current = winners.get(property);
+    const wins =
+      current === undefined ||
+      Number(declaration.important) > Number(current.important) ||
+      (declaration.important === current.important &&
+        (compareSpecificity(specificity, current.specificity) > 0 ||
+          (compareSpecificity(specificity, current.specificity) === 0 &&
+            (rule.order > current.order ||
+              (rule.order === current.order &&
+                declaration.index >= current.declarationIndex)))));
+    if (wins) {
+      winners.set(property, {
+        value,
+        important: declaration.important,
+        specificity,
+        order: rule.order,
+        declarationIndex: declaration.index,
+      });
+    }
+  };
+
+  for (const rule of parseCssCascade(source)) {
+    if (
+      !selectorHasTargetToken(rule.selector, target) ||
+      !rule.mediaQueries.every((query) => mediaQueryMatches(query, environment))
+    ) {
+      continue;
+    }
+
+    const specificity = cssSpecificity(rule.selector);
+    for (const declaration of rule.declarations) {
+      if (declaration.property === 'background' || declaration.property === 'background-color') {
+        setWinner('background-color', declaration.value, declaration, rule, specificity);
+      }
+      for (const [side, value] of paddingPhysicalSides(
+        declaration.property,
+        declaration.value,
+      )) {
+        setWinner(side, value, declaration, rule, specificity);
+      }
+    }
+  }
+
+  return Object.fromEntries(
+    [...winners].map(([property, winner]) => [property, winner.value]),
+  );
+}
+
+function assertSoftBorderlessNarrowHierarchyAt(source) {
+  const borderlessSelectors = [
+    '.page-header',
+    '.home-hero',
+    '.home-taxonomy',
+    '.home-section',
+    '.post-card__cover',
+    '.post-header',
+    '.post-toc-compact',
+    '.post-pagination',
+    '.post-series-navigation',
+    '.related-post-list',
+  ];
+  const softSurfaceSelectors = [
+    '.page-header',
+    '.home-hero',
+    '.home-taxonomy',
+    '.home-section',
+    '.post-header',
+    '.post-toc-compact',
+  ];
+  const compactPaddingSelectors = softSurfaceSelectors.filter(
+    (selector) => selector !== '.post-toc-compact',
+  );
+
+  assertBorderlessSourceSelectorContract(source, borderlessSelectors);
+
+  for (const selector of softSurfaceSelectors) {
+    assert.equal(
+      effectiveNarrowSurfaceDeclarations(source, selector)['background-color'],
+      'var(--paper-soft)',
+      `${selector} should keep the soft paper surface at 320px`,
+    );
+  }
+  for (const selector of compactPaddingSelectors) {
+    const declarations = effectiveNarrowSurfaceDeclarations(source, selector);
+    for (const side of ['padding-top', 'padding-right', 'padding-bottom', 'padding-left']) {
+      assert.equal(
+        declarations[side],
+        'var(--space-4)',
+        `${selector} should keep ${side} at 320px`,
+      );
+    }
+  }
 }
 
 function assertNoVisibleBorder(declarations, label) {
@@ -830,6 +1012,31 @@ test('borderless source contract rejects width and style resurrection', () => {
         'resurrected logical border',
       ),
     /resurrected logical border border-block-start-width must not draw a visible border/,
+  );
+});
+
+test('narrow hierarchy specificity honors functional pseudo-classes', () => {
+  const whereFixture = `
+    :where(.site-main) .home-hero { background: var(--paper-soft); }
+    .home-hero { background: var(--surface); }
+  `;
+
+  assert.equal(
+    effectiveNarrowSurfaceDeclarations(whereFixture, '.home-hero')['background-color'],
+    'var(--surface)',
+    ':where() must not let an earlier rule outrank a later ordinary selector',
+  );
+  assert.deepEqual(cssSpecificity(':where(#priority) .home-hero'), [0, 1, 0]);
+  assert.deepEqual(cssSpecificity(':is(#priority, .site-main) .home-hero'), [1, 1, 0]);
+  assert.deepEqual(cssSpecificity(':not(#priority, .site-main) .home-hero'), [1, 1, 0]);
+  assert.deepEqual(cssSpecificity(':has(#priority, .site-main) .home-hero'), [1, 1, 0]);
+  assert.deepEqual(
+    cssSpecificity('article#entry.featured[data-state="ready"]:focus-visible::before'),
+    [1, 3, 2],
+  );
+  assert.deepEqual(
+    cssSpecificity('[data-selector="#id .class :is(.fake)"] .home-hero::before'),
+    [0, 2, 1],
   );
 });
 
@@ -1833,6 +2040,113 @@ test('cards, indexes, directories, and code use borderless hierarchy', async () 
     )['box-shadow'],
     /^0 0 0 0\.1875rem .*var\(--focus-ring\)/,
   );
+});
+
+test('soft borderless hierarchy survives narrow-screen overrides', async () => {
+  const styles = await readSource('src/styles/global.css');
+  const narrowBorderlessSelectors = [
+    '.page-header',
+    '.home-hero',
+    '.home-taxonomy',
+    '.home-section',
+    '.post-card__cover',
+    '.post-header',
+    '.post-toc-compact',
+    '.post-pagination',
+    '.post-series-navigation',
+    '.related-post-list',
+  ];
+
+  for (const selector of narrowBorderlessSelectors) {
+    assertNoVisibleBorder(
+      exactSelectorDeclarationsAt(styles, selector, 320),
+      `${selector} at 320px`,
+    );
+  }
+
+  assertNoVisibleBorder(
+    exactSelectorDeclarationsAt(
+      styles,
+      '.post-grid:not(.post-grid--featured) .post-card__cover',
+      800,
+    ),
+    '.post-grid:not(.post-grid--featured) .post-card__cover at 800px',
+  );
+
+  for (const selector of [
+    '.page-header',
+    '.home-hero',
+    '.home-taxonomy',
+    '.home-section',
+    '.post-header',
+    '.post-toc-compact',
+  ]) {
+    assert.equal(
+      exactSelectorDeclarationsAt(styles, selector, 320).background,
+      'var(--paper-soft)',
+      `${selector} should keep the soft paper surface at 320px`,
+    );
+  }
+
+  for (const selector of [
+    '.page-header',
+    '.home-hero',
+    '.home-taxonomy',
+    '.home-section',
+    '.post-header',
+  ]) {
+    const declarations = exactSelectorDeclarationsAt(styles, selector, 320);
+    assert.equal(
+      declarations.padding,
+      'var(--space-4)',
+      `${selector} should use compact shorthand padding at 320px`,
+    );
+    for (const property of ['padding-block', 'padding-block-start', 'padding-block-end']) {
+      assert.equal(
+        declarations[property],
+        undefined,
+        `${selector} should not retain ${property} at 320px`,
+      );
+    }
+  }
+
+  assert.doesNotThrow(() => assertSoftBorderlessNarrowHierarchyAt(styles));
+
+  const destructiveFixtures = [
+    [
+      'border',
+      `${styles}\n@media (max-width: 48rem) { .home-page .home-hero { border-bottom: 1px solid var(--line); } }`,
+    ],
+    [
+      'background',
+      `${styles}\n@media (max-width: 48rem) { .home-page .home-hero { background: var(--surface); } }`,
+    ],
+    [
+      'background color',
+      `${styles}\n@media (max-width: 48rem) { .home-page .home-hero { background-color: var(--surface); } }`,
+    ],
+    [
+      'logical padding',
+      `${styles}\n@media (max-width: 48rem) { .home-page .home-hero { padding-inline: 0; } }`,
+    ],
+    [
+      'physical padding',
+      `${styles}\n@media (max-width: 48rem) { .home-hero { padding-left: 0; } }`,
+    ],
+  ];
+
+  for (const [label, fixture] of destructiveFixtures) {
+    const exactDeclarations = exactSelectorDeclarationsAt(fixture, '.home-hero', 320);
+    assert.equal(exactDeclarations.background, 'var(--paper-soft)');
+    assert.equal(exactDeclarations.padding, 'var(--space-4)');
+    assert.doesNotThrow(() =>
+      assertNoVisibleBorder(exactDeclarations, `.home-hero exact ${label}`),
+    );
+    assert.throws(
+      () => assertSoftBorderlessNarrowHierarchyAt(fixture),
+      `${label} fixture must be rejected by the effective narrow-screen contract`,
+    );
+  }
 });
 
 test('global shell and home sections use soft borderless surfaces', async () => {
