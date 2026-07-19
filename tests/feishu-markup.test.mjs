@@ -507,6 +507,12 @@ test('does not treat an escaped backtick as a candidate-lookahead code boundary'
   );
 });
 
+test('does not stop candidate lookahead at code spans inside quoted attributes', () => {
+  assertInvalid(
+    '<span title="`code`" data-feishu-equation-source="eA"',
+  );
+});
+
 test('rejects repeated or nested roots and non-whitespace outside the root', () => {
   const root = controlled('<p>x</p>');
   assertInvalid(`${root}${root}`);

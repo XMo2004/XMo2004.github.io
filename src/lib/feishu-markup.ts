@@ -685,9 +685,6 @@ function findMalformedTagBoundary(
   let quote: '"' | "'" | undefined;
   const quotedLessThan: number[] = [];
   for (let index = start + 1; index < source.length; index += 1) {
-    if (codeRegionStarts.has(index)) {
-      return { end: index, quotedLessThan };
-    }
     const character = source[index];
     if (quote !== undefined) {
       if (character === quote) {
@@ -696,6 +693,9 @@ function findMalformedTagBoundary(
         quotedLessThan.push(index);
       }
       continue;
+    }
+    if (codeRegionStarts.has(index)) {
+      return { end: index, quotedLessThan };
     }
     if (character === '"' || character === "'") {
       quote = character;
