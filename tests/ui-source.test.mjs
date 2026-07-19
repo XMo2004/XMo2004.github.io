@@ -256,13 +256,29 @@ function cssSpecificity(selector) {
 
 function selectorAppliesToTarget(selector, target) {
   if (selector === target) return true;
-  if (selector === ':focus-visible') return target.endsWith(':focus-visible');
 
-  const targetWithoutState = target
-    .replace(/\[[^\]]+\]/g, '')
-    .replace(/:focus-visible\b/g, '')
-    .trim();
-  return selector === targetWithoutState;
+  const selectorSubject = splitTopLevelSelectorCompounds(selector).at(-1);
+  const targetSubject = splitTopLevelSelectorCompounds(target).at(-1);
+  if (selectorSubject === undefined || targetSubject === undefined) return false;
+
+  // Source contracts know the protected subject identity, not its complete DOM.
+  // Additional subject qualifiers and ancestors may apply; only the focus state
+  // used by these contracts is required when a rule explicitly selects it.
+  const selectorRequiresFocus = compoundHasDirectPseudoClass(
+    selectorSubject,
+    'focus-visible',
+  );
+  const targetHasFocus = compoundHasDirectPseudoClass(
+    targetSubject,
+    'focus-visible',
+  );
+  if (selectorRequiresFocus && !targetHasFocus) return false;
+  if (selectorSubject === ':focus-visible') return targetHasFocus;
+
+  return compoundMatchesTarget(
+    selectorSubject,
+    targetSubject.replace(/:focus-visible\b/g, ''),
+  );
 }
 
 function compareSpecificity(first, second) {
@@ -575,7 +591,46 @@ function splitTopLevelSelectorCompounds(selector) {
   return compounds;
 }
 
+function normalizeSupportedClassAttributes(compound) {
+  return compound.replace(
+    /\[\s*class\s*(~=|=)\s*(?:"([^"]*)"|'([^']*)'|([^\]\s]+))\s*\]/gi,
+    (attribute, operator, doubleQuoted, singleQuoted, unquoted) => {
+      const value = doubleQuoted ?? singleQuoted ?? unquoted;
+      const classNames = value.trim().split(/\s+/).filter(Boolean);
+      if (
+        classNames.length === 0 ||
+        classNames.some((className) => !/^[\w-]+$/.test(className)) ||
+        (operator === '~=' && classNames.length !== 1)
+      ) {
+        return attribute;
+      }
+      return classNames.map((className) => `.${className}`).join('');
+    },
+  );
+}
+
+function compoundHasDirectPseudoClass(compound, expectedName) {
+  for (let index = 0; index < compound.length; index += 1) {
+    if (compound[index] === '[') {
+      index = findMatchingSelectorDelimiter(compound, index, '[', ']');
+      continue;
+    }
+    if (compound[index] !== ':' || compound[index + 1] === ':') continue;
+
+    const nameMatch = /^[\w-]+/.exec(compound.slice(index + 1));
+    const name = nameMatch?.[0];
+    const opening = index + 1 + (name?.length ?? 0);
+    if (name !== undefined && compound[opening] === '(') {
+      index = findMatchingSelectorDelimiter(compound, opening, '(', ')');
+      continue;
+    }
+    if (name?.toLowerCase() === expectedName) return true;
+  }
+  return false;
+}
+
 function compoundMatchesTarget(subject, target) {
+  subject = normalizeSupportedClassAttributes(subject);
   let direct = '';
 
   for (let index = 0; index < subject.length; index += 1) {
@@ -600,9 +655,24 @@ function compoundMatchesTarget(subject, target) {
             subject.slice(openingIndex + 1, closingIndex),
             ',',
           );
-          if (options.some((option) => compoundMatchesTarget(option, target))) {
-            return true;
-          }
+          return options.some((option) =>
+            compoundMatchesTarget(
+              `${direct}${option}${subject.slice(closingIndex + 1)}`,
+              target,
+            ),
+          );
+        }
+        if (
+          name === 'not' &&
+          splitCssTopLevel(subject.slice(openingIndex + 1, closingIndex), ',')
+            .some((option) =>
+              compoundMatchesTarget(
+                option,
+                target.replace(/:focus-visible\b/g, ''),
+              ),
+            )
+        ) {
+          return false;
         }
         index = closingIndex;
         continue;
@@ -1038,6 +1108,140 @@ test('narrow hierarchy specificity honors functional pseudo-classes', () => {
     cssSpecificity('[data-selector="#id .class :is(.fake)"] .home-hero::before'),
     [0, 2, 1],
   );
+});
+
+test('effective search cascade rejects ancestor-qualified touch-target overrides', async () => {
+  const styles = await readSource('src/styles/global.css');
+  const fixture = `${styles}
+    @media (max-width: 48rem) {
+      .site-header button.search-toggle[data-search-open] {
+        min-width: 1rem;
+        min-height: 1rem;
+      }
+    }
+  `;
+
+  assert.throws(
+    () => assertEffectiveSearchStyleCascade(fixture),
+    /search-toggle min-width/,
+  );
+});
+
+test('effective search cascade rejects ancestor-qualified focus resets', async () => {
+  const styles = await readSource('src/styles/global.css');
+  const fixture = `${styles}
+    .search-dialog .search-dialog__input:focus-visible { outline: none; }
+  `;
+
+  assert.throws(
+    () => assertEffectiveSearchStyleCascade(fixture),
+    /focus-visible outline/,
+  );
+});
+
+test('protected semantic boundaries reject class-token attribute resets', async () => {
+  const [styles, feishuStyles] = await Promise.all([
+    readSource('src/styles/global.css'),
+    readSource('src/styles/feishu-content.css'),
+  ]);
+  const fixture = `${styles}
+    [class~='search-dialog__input'] { border: 0; }
+  `;
+
+  assert.throws(
+    () => assertArticleAndSearchBoundarySourceContract(fixture, feishuStyles),
+    /search-dialog__input source selector .* must preserve border width/,
+  );
+});
+
+test('narrow hierarchy rejects class-token attribute overrides', async () => {
+  const styles = await readSource('src/styles/global.css');
+  const fixture = `${styles}
+    @media (max-width: 48rem) {
+      [class~='home-hero'] { background: var(--surface); }
+    }
+  `;
+
+  assert.throws(
+    () => assertSoftBorderlessNarrowHierarchyAt(fixture),
+    /home-hero should keep the soft paper surface/,
+  );
+});
+
+test('selector applicability uses the known target subject without broad text matches', () => {
+  assert.equal(
+    selectorAppliesToTarget('.site-header .search-toggle', '.search-toggle'),
+    true,
+  );
+  assert.equal(
+    selectorAppliesToTarget('button.search-toggle', '.search-toggle'),
+    true,
+  );
+  assert.equal(
+    selectorAppliesToTarget(
+      '.search-toggle[data-search-open]',
+      '.search-toggle',
+    ),
+    true,
+  );
+  assert.equal(
+    selectorAppliesToTarget('#utility-search.search-toggle', '.search-toggle'),
+    true,
+  );
+  assert.equal(
+    selectorAppliesToTarget(
+      '.search-dialog .search-dialog__input',
+      '.search-dialog__input:focus-visible',
+    ),
+    true,
+  );
+  assert.equal(
+    selectorAppliesToTarget(
+      '.search-dialog .search-dialog__input:focus-visible',
+      '.search-dialog__input',
+    ),
+    false,
+  );
+  assert.equal(
+    selectorAppliesToTarget('.home-hero .home-hero__copy', '.home-hero'),
+    false,
+  );
+  assert.equal(
+    selectorAppliesToTarget(':not(.home-hero)', '.home-hero'),
+    false,
+  );
+  assert.equal(
+    selectorAppliesToTarget('.home-hero:not(.home-hero)', '.home-hero'),
+    false,
+  );
+  assert.equal(
+    selectorAppliesToTarget("[data-selector='.home-hero']", '.home-hero'),
+    false,
+  );
+  assert.equal(selectorAppliesToTarget('.home-hero__copy', '.home-hero'), false);
+});
+
+test('source selector matching supports only explicit class attribute forms', () => {
+  assert.equal(selectorHasTargetToken("[class~='home-hero']", '.home-hero'), true);
+  assert.equal(selectorHasTargetToken('[class="home-hero"]', '.home-hero'), true);
+  assert.equal(
+    selectorHasTargetToken('[class="home-hero featured"]', '.home-hero'),
+    true,
+  );
+  assert.equal(
+    selectorHasTargetToken('.home-hero .home-hero__copy', '.home-hero'),
+    false,
+  );
+  assert.equal(selectorHasTargetToken(':not(.home-hero)', '.home-hero'), false);
+  assert.equal(
+    selectorHasTargetToken('.home-hero:not(.home-hero)', '.home-hero'),
+    false,
+  );
+  assert.equal(
+    selectorHasTargetToken("[data-selector='.home-hero']", '.home-hero'),
+    false,
+  );
+  assert.equal(selectorHasTargetToken('.home-hero__copy', '.home-hero'), false);
 });
 
 test('protected border component mapping uses LTR physical and logical axes', () => {
