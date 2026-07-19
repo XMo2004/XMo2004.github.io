@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
@@ -43,6 +44,25 @@ function assertInvalid(source) {
     /Invalid controlled Feishu markup/u,
   );
 }
+
+test('shares one linear index for HTML tag and comment boundary lookups', () => {
+  const implementation = readFileSync(
+    new URL('../src/lib/feishu-markup.ts', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(implementation, /interface HtmlBoundaryIndex/u);
+  assert.equal(
+    implementation.match(/buildHtmlBoundaryIndex\(source\)/gu)?.length,
+    1,
+  );
+  assert.doesNotMatch(implementation, /function findTagEnd/u);
+  assert.doesNotMatch(implementation, /source\.indexOf\('-->'/u);
+  assert.doesNotMatch(
+    implementation,
+    /\bparseTag\(source,\s*[^,\n()]+\)/u,
+  );
+});
 
 test('decodes the existing six named and decimal or hexadecimal entities only', () => {
   assert.equal(

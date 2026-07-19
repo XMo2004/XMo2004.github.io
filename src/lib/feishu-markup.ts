@@ -65,6 +65,10 @@ interface HtmlCommentToken {
 
 type HtmlToken = HtmlTagToken | HtmlCommentToken;
 
+interface HtmlBoundaryIndex {
+  tokenEnds: Uint32Array;
+}
+
 interface Replacement {
   start: number;
   end: number;
@@ -129,37 +133,84 @@ export function decodeFeishuHtmlEntities(value: string): string {
   );
 }
 
-function findTagEnd(source: string, start: number): number {
-  let quote: '"' | "'" | undefined;
+function buildHtmlBoundaryIndex(source: string): HtmlBoundaryIndex {
+  const tokenEnds = new Uint32Array(source.length);
+  // Each suffix state is updated once, so every quote-aware tag end is indexed
+  // without rescanning the suffix from each less-than sign.
+  let unquotedEnd = -1;
+  let singleQuotedEnd = -1;
+  let doubleQuotedEnd = -1;
+  let commentCloseOne = -1;
+  let commentCloseTwo = -1;
+  let commentCloseThree = -1;
+  let commentCloseFour = -1;
 
-  for (let index = start + 1; index < source.length; index += 1) {
+  for (let index = source.length - 1; index >= 0; index -= 1) {
+    // At loop entry this is the nearest comment close at or after index + 4.
+    if (source[index] === '<') {
+      if (
+        source[index + 1] === '!' &&
+        source[index + 2] === '-' &&
+        source[index + 3] === '-'
+      ) {
+        if (commentCloseFour !== -1) {
+          tokenEnds[index] = commentCloseFour + 3;
+        }
+      } else if (unquotedEnd !== -1) {
+        tokenEnds[index] = unquotedEnd + 1;
+      }
+    }
+
     const character = source[index];
-    if (quote !== undefined) {
-      if (character === quote) quote = undefined;
-      continue;
-    }
-    if (character === '"' || character === "'") {
-      quote = character;
-    } else if (character === '>') {
-      return index;
-    }
+    const currentUnquotedEnd = character === '>'
+      ? index
+      : character === '"'
+        ? doubleQuotedEnd
+        : character === "'"
+          ? singleQuotedEnd
+          : unquotedEnd;
+    const currentSingleQuotedEnd = character === "'"
+      ? unquotedEnd
+      : singleQuotedEnd;
+    const currentDoubleQuotedEnd = character === '"'
+      ? unquotedEnd
+      : doubleQuotedEnd;
+    const currentCommentClose =
+      character === '-' && source[index + 1] === '-' && source[index + 2] === '>'
+        ? index
+        : commentCloseOne;
+
+    unquotedEnd = currentUnquotedEnd;
+    singleQuotedEnd = currentSingleQuotedEnd;
+    doubleQuotedEnd = currentDoubleQuotedEnd;
+    commentCloseFour = commentCloseThree;
+    commentCloseThree = commentCloseTwo;
+    commentCloseTwo = commentCloseOne;
+    commentCloseOne = currentCommentClose;
   }
 
-  return -1;
+  return { tokenEnds };
 }
 
-function parseTag(source: string, start: number): HtmlToken | undefined {
+function parseTag(
+  source: string,
+  start: number,
+  boundaries: HtmlBoundaryIndex,
+): HtmlToken | undefined {
   if (source[start] !== '<') return undefined;
+  const tokenEnd = boundaries.tokenEnds[start];
+  if (tokenEnd === 0) return undefined;
   if (source.startsWith('<!--', start)) {
-    const close = source.indexOf('-->', start + 4);
-    if (close === -1) return undefined;
-    const end = close + 3;
-    return { kind: 'comment', start, end, raw: source.slice(start, end) };
+    return {
+      kind: 'comment',
+      start,
+      end: tokenEnd,
+      raw: source.slice(start, tokenEnd),
+    };
   }
 
-  const tagEnd = findTagEnd(source, start);
-  if (tagEnd === -1) return undefined;
-  const raw = source.slice(start, tagEnd + 1);
+  const tagEnd = tokenEnd - 1;
+  const raw = source.slice(start, tokenEnd);
   let cursor = start + 1;
   let closing = false;
   if (source[cursor] === '/') {
@@ -284,6 +335,7 @@ function attribute(token: HtmlTagToken, name: string): string | undefined {
 
 function findElementRegion(
   source: string,
+  boundaries: HtmlBoundaryIndex,
   opening: HtmlTagToken,
   collectText: boolean,
 ): ElementRegion {
@@ -298,7 +350,7 @@ function findElementRegion(
     const nextTag = source.indexOf('<', index);
     if (nextTag === -1) invalidMarkup();
     if (collectText && nextTag > index) visible.push(source.slice(index, nextTag));
-    const token = parseTag(source, nextTag);
+    const token = parseTag(source, nextTag, boundaries);
     if (token === undefined) invalidMarkup();
     if (token.kind === 'comment') {
       index = token.end;
@@ -381,6 +433,7 @@ function protocolKind(token: HtmlTagToken): 'equation' | 'heading' | 'ui' | 'roo
 
 function processEquation(
   source: string,
+  boundaries: HtmlBoundaryIndex,
   token: HtmlTagToken,
   handlers: FeishuMarkupHandlers,
   replacements: Replacement[],
@@ -402,7 +455,7 @@ function processEquation(
   } catch (error) {
     invalidMarkup(error instanceof Error ? error.message : undefined);
   }
-  const region = findElementRegion(source, token, false);
+  const region = findElementRegion(source, boundaries, token, false);
   const equationRegion: FeishuEquationRegion = {
     raw: region.raw,
     source: decoded,
@@ -419,6 +472,7 @@ function processEquation(
 
 function processUi(
   source: string,
+  boundaries: HtmlBoundaryIndex,
   token: HtmlTagToken,
   handlers: FeishuMarkupHandlers,
   replacements: Replacement[],
@@ -431,7 +485,7 @@ function processUi(
   ) {
     invalidMarkup();
   }
-  const region = findElementRegion(source, token, false);
+  const region = findElementRegion(source, boundaries, token, false);
   applyReplacement(
     replacements,
     token.start,
@@ -443,11 +497,12 @@ function processUi(
 
 function processHtmlCode(
   source: string,
+  boundaries: HtmlBoundaryIndex,
   token: HtmlTagToken,
   handlers: FeishuMarkupHandlers,
   replacements: Replacement[],
 ): number {
-  const region = findElementRegion(source, token, true);
+  const region = findElementRegion(source, boundaries, token, true);
   const kind: FeishuCodeKind = token.name === 'pre' ? 'html-pre' : 'html-code';
   const codeRegion: FeishuCodeRegion = {
     kind,
@@ -582,6 +637,7 @@ interface MarkdownDiscoveryEntry {
 
 function collectMarkdownSoftRegions(
   source: string,
+  boundaries: HtmlBoundaryIndex,
   fenceRegions: readonly MarkdownDelimiterRegion[],
 ): readonly MarkdownDelimiterRegion[] {
   const discovered: MarkdownDelimiterRegion[] = [];
@@ -603,7 +659,7 @@ function collectMarkdownSoftRegions(
       index += 1;
       continue;
     }
-    const token = parseTag(source, index);
+    const token = parseTag(source, index, boundaries);
     if (token === undefined) {
       index += 1;
       continue;
@@ -666,9 +722,10 @@ function mergeMarkdownDelimiterRegions(
 
 function collectMarkdownDelimiterRegions(
   source: string,
+  boundaries: HtmlBoundaryIndex,
 ): readonly MarkdownDelimiterRegion[] {
   const fences = collectMarkdownFenceRegions(source);
-  const soft = collectMarkdownSoftRegions(source, fences);
+  const soft = collectMarkdownSoftRegions(source, boundaries, fences);
   return mergeMarkdownDelimiterRegions(fences, soft);
 }
 
@@ -793,10 +850,11 @@ function collectActualMarkdownCodeSpanStarts(
 
 function scanMarkdown(
   source: string,
+  boundaries: HtmlBoundaryIndex,
   handlers: FeishuMarkupHandlers,
 ): FeishuMarkupResult {
   const replacements: Replacement[] = [];
-  const delimiterRegions = collectMarkdownDelimiterRegions(source);
+  const delimiterRegions = collectMarkdownDelimiterRegions(source, boundaries);
   const codeSpanClosings = collectMarkdownCodeSpanClosings(source, delimiterRegions);
   const codeRegionStarts = new Set(collectActualMarkdownCodeSpanStarts(
     source,
@@ -850,7 +908,7 @@ function scanMarkdown(
       index += 1;
       continue;
     }
-    const token = parseTag(source, index);
+    const token = parseTag(source, index, boundaries);
     if (token === undefined) {
       if (!hasPlausibleMalformedTagPrefixAt(source, index)) {
         index += 1;
@@ -882,12 +940,12 @@ function scanMarkdown(
       continue;
     }
     if ((token.name === 'pre' || token.name === 'code') && protocolKind(token) === undefined) {
-      index = processHtmlCode(source, token, handlers, replacements);
+      index = processHtmlCode(source, boundaries, token, handlers, replacements);
       continue;
     }
     const kind = protocolKind(token);
     if (kind === 'equation') {
-      index = processEquation(source, token, handlers, replacements);
+      index = processEquation(source, boundaries, token, handlers, replacements);
       continue;
     }
     if (kind !== undefined) invalidMarkup();
@@ -903,6 +961,7 @@ function scanMarkdown(
 
 function scanControlled(
   source: string,
+  boundaries: HtmlBoundaryIndex,
   rootStart: number,
   handlers: FeishuMarkupHandlers,
 ): FeishuMarkupResult {
@@ -916,7 +975,7 @@ function scanControlled(
     const nextTag = source.indexOf('<', index);
     if (nextTag === -1) invalidMarkup();
     index = nextTag;
-    const token = parseTag(source, index);
+    const token = parseTag(source, index, boundaries);
     if (token === undefined) invalidMarkup();
     if (token.kind === 'comment') {
       index = token.end;
@@ -935,16 +994,16 @@ function scanControlled(
     }
 
     if ((token.name === 'pre' || token.name === 'code') && protocolKind(token) === undefined) {
-      index = processHtmlCode(source, token, handlers, replacements);
+      index = processHtmlCode(source, boundaries, token, handlers, replacements);
       continue;
     }
     const kind = protocolKind(token);
     if (kind === 'equation') {
-      index = processEquation(source, token, handlers, replacements);
+      index = processEquation(source, boundaries, token, handlers, replacements);
       continue;
     }
     if (kind === 'ui') {
-      index = processUi(source, token, handlers, replacements);
+      index = processUi(source, boundaries, token, handlers, replacements);
       continue;
     }
     if (kind === 'heading') {
@@ -969,12 +1028,13 @@ export function transformFeishuMarkup(
   source: string,
   handlers: FeishuMarkupHandlers = {},
 ): FeishuMarkupResult {
+  const boundaries = buildHtmlBoundaryIndex(source);
   const firstContent = source.search(/\S/u);
   if (
     firstContent !== -1 &&
     source.startsWith(CONTROLLED_ROOT, firstContent)
   ) {
-    return scanControlled(source, firstContent, handlers);
+    return scanControlled(source, boundaries, firstContent, handlers);
   }
-  return scanMarkdown(source, handlers);
+  return scanMarkdown(source, boundaries, handlers);
 }
