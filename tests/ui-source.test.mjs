@@ -1568,7 +1568,7 @@ test('PostLayout loads KaTeX before the Feishu content overrides', async () => {
   );
 });
 
-test('Feishu heading equations have a heading-only baseline correction', async () => {
+test('Feishu heading equations are center-aligned at desktop and mobile sizes', async () => {
   const source = await readSource('src/styles/feishu-content.css');
 
   assert.match(
@@ -1578,8 +1578,13 @@ test('Feishu heading equations have a heading-only baseline correction', async (
   );
   assert.match(
     source,
-    /\.prose :is\(h1, h2, h3, h4, h5, h6\) \.feishu-equation--inline\s*\{\s*vertical-align:\s*-0\.4em;\s*\}/,
-    'heading inline equations need the KaTeX/heading line-box correction',
+    /\.prose :is\(h1, h2, h3, h4, h5, h6\) \.feishu-equation--inline\s*\{\s*vertical-align:\s*-0\.407em;\s*\}/,
+    'desktop headings need the measured zero-delta KaTeX alignment',
+  );
+  assert.match(
+    source,
+    /@media \(max-width: 40rem\)\s*\{[\s\S]*?\.prose :is\(h1, h2, h3, h4, h5, h6\) \.feishu-equation--inline\s*\{\s*vertical-align:\s*-0\.404em;\s*\}/,
+    'mobile headings need their measured zero-delta KaTeX alignment',
   );
 });
 

@@ -145,7 +145,7 @@
 }
 
 .prose :is(h1, h2, h3, h4, h5, h6) .feishu-equation--inline {
-  vertical-align: -0.4em;
+  vertical-align: -0.407em;
 }
 
 .prose .feishu-equation--block {
@@ -225,6 +225,10 @@
 }
 
 @media (max-width: 40rem) {
+  .prose :is(h1, h2, h3, h4, h5, h6) .feishu-equation--inline {
+    vertical-align: -0.404em;
+  }
+
   .prose .feishu-callout,
   .prose .feishu-source-synced {
     padding: var(--space-3);
