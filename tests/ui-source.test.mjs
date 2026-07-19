@@ -1568,6 +1568,21 @@ test('PostLayout loads KaTeX before the Feishu content overrides', async () => {
   );
 });
 
+test('Feishu heading equations have a heading-only baseline correction', async () => {
+  const source = await readSource('src/styles/feishu-content.css');
+
+  assert.match(
+    source,
+    /\.prose \.feishu-equation--inline\s*\{[^}]*vertical-align:\s*-0\.15em;/s,
+    'body inline equations should keep their established baseline correction',
+  );
+  assert.match(
+    source,
+    /\.prose :is\(h1, h2, h3, h4, h5, h6\) \.feishu-equation--inline\s*\{\s*vertical-align:\s*-0\.4em;\s*\}/,
+    'heading inline equations need the KaTeX/heading line-box correction',
+  );
+});
+
 test('Feishu content styles expose every semantic enum and structural contract', async () => {
   const source = await readSource('src/styles/feishu-content.css').catch(() => '');
   const fontColors = [
