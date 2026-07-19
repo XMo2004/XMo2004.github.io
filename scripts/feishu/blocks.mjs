@@ -1,103 +1,15 @@
+import {
+  CODE_LANGUAGES,
+  PLAIN_TEXT_CODE_FALLBACKS,
+  TEXT_PROPERTY_BY_TYPE,
+  normalizeLinkUrl,
+} from './semantics.mjs';
+
 const SUPPORTED_BLOCK_TYPES = new Set([
   1, 2, 3, 4, 5, 6, 7, 8, 12, 13, 14, 15, 17, 22, 27, 31, 32,
 ]);
 
 const CONTAINER_BLOCK_TYPES = new Set([1, 12, 13, 17, 31, 32]);
-
-const TEXT_PROPERTY_BY_TYPE = new Map([
-  [2, 'text'],
-  [3, 'heading1'],
-  [4, 'heading2'],
-  [5, 'heading3'],
-  [6, 'heading4'],
-  [7, 'heading5'],
-  [8, 'heading6'],
-  [12, 'bullet'],
-  [13, 'ordered'],
-  [14, 'code'],
-  [15, 'quote'],
-  [17, 'todo'],
-]);
-
-const CODE_LANGUAGES = new Map([
-  [1, 'text'],
-  [2, 'abap'],
-  [3, 'ada'],
-  [4, 'apache'],
-  [5, 'apex'],
-  [6, 'asm'],
-  [7, 'bash'],
-  [8, 'csharp'],
-  [9, 'cpp'],
-  [10, 'c'],
-  [11, 'cobol'],
-  [12, 'css'],
-  [13, 'coffeescript'],
-  [14, 'd'],
-  [15, 'dart'],
-  [16, 'pascal'],
-  [17, 'jinja'],
-  [18, 'dockerfile'],
-  [19, 'erlang'],
-  [20, 'fortran-free-form'],
-  [21, 'text'],
-  [22, 'go'],
-  [23, 'groovy'],
-  [24, 'html'],
-  [25, 'handlebars'],
-  [26, 'http'],
-  [27, 'haskell'],
-  [28, 'json'],
-  [29, 'java'],
-  [30, 'javascript'],
-  [31, 'julia'],
-  [32, 'kotlin'],
-  [33, 'latex'],
-  [34, 'lisp'],
-  [35, 'logo'],
-  [36, 'lua'],
-  [37, 'matlab'],
-  [38, 'makefile'],
-  [39, 'markdown'],
-  [40, 'nginx'],
-  [41, 'objective-c'],
-  [42, 'text'],
-  [43, 'php'],
-  [44, 'perl'],
-  [45, 'text'],
-  [46, 'powershell'],
-  [47, 'prolog'],
-  [48, 'protobuf'],
-  [49, 'python'],
-  [50, 'r'],
-  [51, 'text'],
-  [52, 'ruby'],
-  [53, 'rust'],
-  [54, 'sas'],
-  [55, 'scss'],
-  [56, 'sql'],
-  [57, 'scala'],
-  [58, 'scheme'],
-  [59, 'text'],
-  [60, 'shell'],
-  [61, 'swift'],
-  [62, 'text'],
-  [63, 'typescript'],
-  [64, 'vb'],
-  [65, 'vb'],
-  [66, 'xml'],
-  [67, 'yaml'],
-  [68, 'cmake'],
-  [69, 'diff'],
-  [70, 'gherkin'],
-  [71, 'graphql'],
-  [72, 'glsl'],
-  [73, 'properties'],
-  [74, 'solidity'],
-  [75, 'toml'],
-]);
-
-const PLAIN_TEXT_CODE_FALLBACKS = new Set([21, 42, 45, 51, 59, 62]);
 
 const MEDIA_TOKEN = /^[A-Za-z0-9_-]+$/;
 const MEDIA_PLACEHOLDER_PREFIX = '\uE000feishu-media:';
@@ -145,35 +57,6 @@ function textDataFor(block) {
   return property === undefined ? undefined : block[property];
 }
 
-function normalizeLinkUrl(value) {
-  if (typeof value !== 'string' || value.length === 0) {
-    throw new Error('link URL is missing');
-  }
-
-  let decoded = value;
-  try {
-    decoded = decodeURIComponent(value);
-  } catch {
-    // A normal URL may contain a literal percent. URL parsing below remains final.
-  }
-
-  let url;
-  try {
-    url = new URL(decoded);
-  } catch {
-    throw new Error(`link URL "${value}" is invalid`);
-  }
-
-  if (!['http:', 'https:', 'mailto:'].includes(url.protocol)) {
-    throw new Error(`link protocol "${url.protocol}" is not allowed`);
-  }
-  if (url.username || url.password) {
-    throw new Error('link URL must not contain credentials');
-  }
-
-  return url.href.replace(/\(/g, '%28').replace(/\)/g, '%29');
-}
-
 function validateRichElements(block, elements, issues) {
   if (!Array.isArray(elements)) {
     issues.push(
@@ -198,10 +81,11 @@ function validateRichElements(block, elements, issues) {
       continue;
     }
 
-    const elementTypes = Object.keys(element).filter(
-      (key) => element[key] !== undefined && element[key] !== null,
-    );
-    if (elementTypes.length !== 1 || elementTypes[0] !== 'text_run') {
+    const elementTypes = Object.keys(element);
+    if (
+      elementTypes.length !== 1 ||
+      !['text_run', 'equation'].includes(elementTypes[0])
+    ) {
       const names = elementTypes.length > 0 ? elementTypes.join(', ') : '<empty>';
       for (const elementType of elementTypes.length > 0 ? elementTypes : ['<empty>']) {
         issues.push(
@@ -212,6 +96,56 @@ function validateRichElements(block, elements, issues) {
           ),
         );
       }
+      continue;
+    }
+
+    if (elementTypes[0] === 'equation') {
+      const equation = element.equation;
+      if (
+        equation === null ||
+        typeof equation !== 'object' ||
+        Array.isArray(equation) ||
+        typeof equation.content !== 'string' ||
+        /^\s*$/.test(equation.content)
+      ) {
+        issues.push(
+          issue(
+            'invalid_equation',
+            `Block "${block.block_id}" contains an invalid equation.`,
+            block.block_id,
+          ),
+        );
+        continue;
+      }
+
+      if (
+        equation.content.includes(MEDIA_PLACEHOLDER_PREFIX) ||
+        equation.content.includes(MEDIA_PLACEHOLDER_SUFFIX)
+      ) {
+        issues.push(
+          issue(
+            'reserved_media_placeholder',
+            `Block "${block.block_id}" contains reserved media placeholder characters.`,
+            block.block_id,
+          ),
+        );
+      }
+
+      if (equation.text_element_style?.inline_code === true) {
+        issues.push(
+          issue(
+            'invalid_text_style',
+            `Block "${block.block_id}" cannot apply inline code to an equation.`,
+            block.block_id,
+          ),
+        );
+      }
+      issues.push(
+        issue(
+          'unsupported_equation_renderer',
+          'The legacy Markdown renderer does not support equations.',
+        ),
+      );
       continue;
     }
 
