@@ -318,7 +318,461 @@ function assertNoVisibleBorder(declarations, label) {
   }
 }
 
+function isBorderDeclaration(property) {
+  return property === 'border' || /^border-(?!radius\b)/.test(property);
+}
+
+function findMatchingSelectorDelimiter(source, openingIndex, opening, closing) {
+  let depth = 1;
+  let quote;
+
+  for (let index = openingIndex + 1; index < source.length; index += 1) {
+    const character = source[index];
+    if (quote !== undefined) {
+      if (character === '\\') {
+        index += 1;
+      } else if (character === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      quote = character;
+    } else if (character === opening) {
+      depth += 1;
+    } else if (character === closing) {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+
+  return source.length;
+}
+
+function splitTopLevelSelectorCompounds(selector) {
+  const compounds = [];
+  let start = 0;
+  let parentheses = 0;
+  let brackets = 0;
+  let quote;
+
+  const push = (end) => {
+    const compound = selector.slice(start, end).trim();
+    if (compound !== '') compounds.push(compound);
+  };
+
+  for (let index = 0; index < selector.length; index += 1) {
+    const character = selector[index];
+    if (quote !== undefined) {
+      if (character === '\\') {
+        index += 1;
+      } else if (character === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      quote = character;
+    } else if (character === '(') {
+      parentheses += 1;
+    } else if (character === ')') {
+      parentheses -= 1;
+    } else if (character === '[') {
+      brackets += 1;
+    } else if (character === ']') {
+      brackets -= 1;
+    } else if (parentheses === 0 && brackets === 0 && /[>+~\s]/.test(character)) {
+      push(index);
+      while (index + 1 < selector.length && /\s/.test(selector[index + 1])) {
+        index += 1;
+      }
+      start = index + 1;
+    }
+  }
+  push(selector.length);
+  return compounds;
+}
+
+function compoundMatchesTarget(subject, target) {
+  let direct = '';
+
+  for (let index = 0; index < subject.length; index += 1) {
+    const character = subject[index];
+    if (character === '[') {
+      index = findMatchingSelectorDelimiter(subject, index, '[', ']');
+      continue;
+    }
+    if (character === ':') {
+      const nameMatch = /^[\w-]+/.exec(subject.slice(index + 1));
+      const name = nameMatch?.[0];
+      const openingIndex = index + 1 + (name?.length ?? 0);
+      if (name !== undefined && subject[openingIndex] === '(') {
+        const closingIndex = findMatchingSelectorDelimiter(
+          subject,
+          openingIndex,
+          '(',
+          ')',
+        );
+        if (name === 'is' || name === 'where') {
+          const options = splitCssTopLevel(
+            subject.slice(openingIndex + 1, closingIndex),
+            ',',
+          );
+          if (options.some((option) => compoundMatchesTarget(option, target))) {
+            return true;
+          }
+        }
+        index = closingIndex;
+        continue;
+      }
+    }
+    direct += character;
+  }
+
+  const targetClasses = [...target.matchAll(/\.([\w-]+)/g)].map(([, name]) => name);
+  for (const className of targetClasses) {
+    const escaped = className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (!new RegExp(`\\.${escaped}(?![\\w-])`).test(direct)) return false;
+  }
+  const targetElements = target
+    .replace(/#[\w-]+|\.[\w-]+|\[[^\]]+\]|:(?!:)[\w-]+(?:\([^)]*\))?/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter((token) => /^[a-z][\w-]*$/i.test(token));
+  for (const element of targetElements) {
+    const escaped = element.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (!new RegExp(`(^|[^\\w-])${escaped}(?![\\w-])`, 'i').test(direct)) {
+      return false;
+    }
+  }
+  if (target.includes(':focus-visible') && !/:focus-visible\b/.test(direct)) {
+    return false;
+  }
+  return targetClasses.length > 0 || targetElements.length > 0;
+}
+
+function selectorHasTargetToken(selector, target) {
+  const selectorCompounds = splitTopLevelSelectorCompounds(selector);
+  const targetCompounds = splitTopLevelSelectorCompounds(target);
+  const subject = selectorCompounds.at(-1);
+  const targetSubject = targetCompounds.at(-1);
+  if (subject === undefined || targetSubject === undefined) return false;
+  if (!compoundMatchesTarget(subject, targetSubject)) return false;
+
+  const selectorAncestors = selectorCompounds.slice(0, -1);
+  return targetCompounds.slice(0, -1).every((targetAncestor) =>
+    selectorAncestors.some((ancestor) =>
+      compoundMatchesTarget(ancestor, targetAncestor),
+    ),
+  );
+}
+
+function assertBorderlessSourceSelectorContract(source, targets) {
+  const rules = parseCssCascade(source);
+
+  for (const target of targets) {
+    for (const rule of rules) {
+      if (!selectorHasTargetToken(rule.selector, target)) continue;
+
+      const borderDeclarations = Object.fromEntries(
+        rule.declarations
+          .filter(({ property }) => isBorderDeclaration(property))
+          .map(({ property, value }) => [property, value]),
+      );
+      if (Object.keys(borderDeclarations).length > 0) {
+        assertNoVisibleBorder(
+          borderDeclarations,
+          `${target} source selector ${rule.selector}`,
+        );
+      }
+    }
+  }
+}
+
+function protectedBorderPropertyMatches(property, protectedProperty) {
+  if (protectedProperty === 'border') return isBorderDeclaration(property);
+  const resetsEveryBorderEdge = new Set([
+    'border',
+    'border-width',
+    'border-style',
+    'border-color',
+  ]);
+  if (resetsEveryBorderEdge.has(property)) return true;
+  const edgeAliases = {
+    'border-inline-start': ['border-inline', 'border-inline-start'],
+    'border-bottom': ['border-block', 'border-block-end', 'border-bottom'],
+    'border-top': ['border-block', 'border-block-start', 'border-top'],
+  };
+  return (edgeAliases[protectedProperty] ?? [protectedProperty]).some(
+    (edge) => property === edge || property.startsWith(`${edge}-`),
+  );
+}
+
+function protectedEdgeDirection(protectedProperty) {
+  if (protectedProperty === 'border-top') return 'top';
+  if (protectedProperty === 'border-bottom') return 'bottom';
+  if (protectedProperty === 'border-inline-start') return 'inline-start';
+  return 'all';
+}
+
+function directionalBorderToken(tokens, direction, logicalAxis) {
+  if (direction === 'all') return tokens;
+  if (logicalAxis === 'block') return tokens[direction === 'bottom' ? 1 : 0] ?? tokens[0];
+  if (logicalAxis === 'inline') return tokens[0];
+  const indexByCount = {
+    top: [0, 0, 0, 0],
+    bottom: [0, 0, 2, 2],
+    'inline-start': [0, 1, 1, 3],
+  };
+  return tokens[indexByCount[direction][Math.min(tokens.length, 4) - 1]] ?? tokens[0];
+}
+
+function protectedLonghandToken(property, protectedProperty, value) {
+  const tokens = value.trim().split(/\s+/);
+  const direction = protectedEdgeDirection(protectedProperty);
+  if (property.startsWith('border-block')) {
+    return directionalBorderToken(tokens, direction, 'block');
+  }
+  if (property.startsWith('border-inline')) {
+    return directionalBorderToken(tokens, direction, 'inline');
+  }
+  if (/^border(?:-(?:width|style|color))?$/.test(property)) {
+    return directionalBorderToken(tokens, direction, 'physical');
+  }
+  return tokens[0];
+}
+
+function borderComponentStatus(component, value) {
+  if (component === 'width') return /^0(?:[a-z%]+)?$/i.test(value) ? 'reset' : 'visible';
+  if (component === 'style') return /^(?:none|hidden)$/i.test(value) ? 'reset' : 'visible';
+  return /^transparent$/i.test(value) ? 'reset' : 'visible';
+}
+
+function protectedBorderComponentUpdates(property, protectedProperty, value) {
+  const isShorthand =
+    isBorderDeclaration(property) &&
+    !property.endsWith('width') &&
+    !property.endsWith('style') &&
+    !property.endsWith('color');
+  if (isShorthand) {
+    const tokens = value.trim().split(/\s+/);
+    const width = tokens.find((token) =>
+      /^(?:0(?:[a-z%]+)?|(?:\d+(?:\.\d+)?)(?:[a-z%]+)|thin|medium|thick)$/i.test(token),
+    );
+    const style = tokens.find((token) =>
+      /^(?:none|hidden|dotted|dashed|solid|double|groove|ridge|inset|outset)$/i.test(token),
+    );
+    const color = tokens.find((token) => token === 'transparent');
+    return [
+      ['width', borderComponentStatus('width', width ?? 'medium')],
+      ['style', borderComponentStatus('style', style ?? 'none')],
+      ['color', borderComponentStatus('color', color ?? 'currentcolor')],
+    ];
+  }
+
+  const component = property.endsWith('width') ? 'width'
+    : property.endsWith('style') ? 'style'
+      : property.endsWith('color') ? 'color'
+        : undefined;
+  if (component === undefined) return [];
+  const token = protectedLonghandToken(property, protectedProperty, value);
+  const values = Array.isArray(token) ? token : [token];
+  return [[
+    component,
+    values.some((entry) => borderComponentStatus(component, entry) === 'reset')
+      ? 'reset'
+      : 'visible',
+  ]];
+}
+
+function assertProtectedSemanticBoundarySourceContract(source, boundaries) {
+  const rules = parseCssCascade(source);
+
+  for (const { target, properties } of boundaries) {
+    for (const rule of rules) {
+      if (!selectorHasTargetToken(rule.selector, target)) continue;
+
+      for (const protectedProperty of properties) {
+        const components = new Map();
+        for (const { property, value } of rule.declarations) {
+          if (!protectedBorderPropertyMatches(property, protectedProperty)) {
+            continue;
+          }
+          const isSharedFeishuBase =
+            (target === '.feishu-callout' || target === '.feishu-source-synced') &&
+            rule.selector === `.prose ${target}` &&
+            property === 'border' &&
+            value === '1px solid transparent';
+          if (isSharedFeishuBase) continue;
+          for (const [component, status] of protectedBorderComponentUpdates(
+            property,
+            protectedProperty,
+            value,
+          )) {
+            components.set(component, status);
+          }
+        }
+        for (const [component, status] of components) {
+          if (status !== 'reset') continue;
+          assert.fail(
+            `${target} source selector ${rule.selector} must preserve ${protectedProperty} ${component}`,
+          );
+        }
+      }
+    }
+  }
+}
+
+function assertSearchResultFocusSourceContract(styles) {
+  assert.equal(
+    exactSelectorDeclarationsAt(
+      styles,
+      '.search-dialog__result a:focus-visible',
+    ).outline,
+    '0.1875rem solid var(--focus-ring)',
+    'search result focus should retain the full focus ring',
+  );
+  assert.equal(
+    exactSelectorDeclarationsAt(
+      styles,
+      ".search-dialog__result a[aria-current='true']",
+    ).outline,
+    '1px solid var(--accent-text)',
+    'current search result should retain its accent selection outline',
+  );
+  assert.equal(
+    exactSelectorDeclarationsAt(
+      styles,
+      ".search-dialog__result a[aria-current='true']:focus-visible",
+    )['box-shadow'],
+    'inset 0 0 0 1px var(--accent-text)',
+    'focused current search result should retain its selection indicator',
+  );
+  for (const rule of parseCssCascade(styles)) {
+    if (
+      !selectorHasTargetToken(
+        rule.selector,
+        '.search-dialog__result a:focus-visible',
+      )
+    ) {
+      continue;
+    }
+    for (const declaration of rule.declarations) {
+      if (declaration.property === 'outline') {
+        assert.equal(
+          declaration.value,
+          '0.1875rem solid var(--focus-ring)',
+          `search result focus source selector ${rule.selector} should retain the full focus ring`,
+        );
+      }
+    }
+  }
+}
+
+function assertArticleAndSearchBoundarySourceContract(styles, feishuStyles) {
+  const borderlessSelectors = [
+    '.post-header',
+    '.post-toc',
+    '.post-toc-compact',
+    '.post-pagination',
+    '.post-pagination a',
+    '.post-series-navigation',
+    '.post-series-navigation__link',
+    '.related-post-list',
+    '.related-post',
+    '.search-dialog__header',
+    '.search-dialog__result',
+  ];
+
+  for (const selector of borderlessSelectors) {
+    assertNoVisibleBorder(
+      exactSelectorDeclarationsAt(styles, selector),
+      selector,
+    );
+  }
+  assertBorderlessSourceSelectorContract(styles, borderlessSelectors);
+
+  for (const selector of ['.post-header', '.post-toc', '.post-toc-compact']) {
+    assert.equal(
+      exactSelectorDeclarationsAt(styles, selector).background,
+      'var(--paper-soft)',
+      `${selector} should use the soft paper surface`,
+    );
+  }
+  for (const selector of ['.post-pagination a', '.post-series-navigation__link']) {
+    assert.equal(
+      exactSelectorDeclarationsAt(styles, selector).background,
+      'var(--paper-soft)',
+      `${selector} should use the soft paper surface`,
+    );
+  }
+  for (const selector of [
+    '.search-dialog__result a:hover',
+    ".search-dialog__result a[aria-current='true']",
+    '.post-pagination a:hover',
+    '.post-series-navigation__link:hover',
+    '.related-post:hover',
+    '.related-post:focus-within',
+  ]) {
+    assert.equal(
+      exactSelectorDeclarationsAt(styles, selector).background,
+      'var(--paper-interactive)',
+      `${selector} should use the interactive paper surface`,
+    );
+  }
+
+  assert.equal(
+    exactSelectorDeclarationsAt(styles, '.search-dialog').border,
+    '1px solid var(--line)',
+  );
+  assert.equal(
+    exactSelectorDeclarationsAt(styles, '.search-dialog__input').border,
+    '1px solid var(--line)',
+  );
+  assert.equal(
+    exactSelectorDeclarationsAt(styles, 'blockquote')['border-inline-start'],
+    '0.1875rem solid var(--moss)',
+  );
+  assert.equal(
+    exactSelectorDeclarationsAt(styles, 'th')['border-bottom'],
+    '1px solid var(--line)',
+  );
+  assert.equal(
+    exactSelectorDeclarationsAt(styles, 'td')['border-bottom'],
+    '1px solid var(--line)',
+  );
+  assert.equal(
+    exactSelectorDeclarationsAt(styles, 'hr')['border-top'],
+    '1px solid var(--line)',
+  );
+  assert.match(
+    feishuStyles,
+    /\.prose \.feishu-callout,\s*\.prose \.feishu-source-synced\s*\{[^}]*border:\s*1px\s+solid\s+transparent;/s,
+  );
+  assert.match(
+    feishuStyles,
+    /\.prose \.feishu-source-synced\s*\{[^}]*border-color:\s*var\(--line\);/s,
+  );
+  assertProtectedSemanticBoundarySourceContract(styles, [
+    { target: '.search-dialog', properties: ['border'] },
+    { target: '.search-dialog__input', properties: ['border'] },
+    { target: 'blockquote', properties: ['border-inline-start'] },
+    { target: 'th', properties: ['border-bottom'] },
+    { target: 'td', properties: ['border-bottom'] },
+    { target: 'hr', properties: ['border-top'] },
+  ]);
+  assertProtectedSemanticBoundarySourceContract(feishuStyles, [
+    { target: '.feishu-callout', properties: ['border'] },
+    { target: '.feishu-source-synced', properties: ['border', 'border-color'] },
+  ]);
+}
+
 test('borderless source contract rejects width and style resurrection', () => {
+  assert.equal(
+    selectorHasTargetToken('.post-header__category', '.post-header'),
+    false,
+  );
+  assert.equal(selectorHasTargetToken('.post-article .post-header', '.post-header'), true);
   assert.doesNotThrow(() => assertNoVisibleBorder({ border: '0' }, 'reset'));
   assert.doesNotThrow(() =>
     assertNoVisibleBorder(
@@ -376,6 +830,29 @@ test('borderless source contract rejects width and style resurrection', () => {
         'resurrected logical border',
       ),
     /resurrected logical border border-block-start-width must not draw a visible border/,
+  );
+});
+
+test('protected border component mapping uses LTR physical and logical axes', () => {
+  assert.equal(
+    protectedLonghandToken('border-width', 'border-bottom', '1px 2px 3px 4px'),
+    '3px',
+  );
+  assert.equal(
+    protectedLonghandToken('border-width', 'border-inline-start', '1px 2px'),
+    '2px',
+  );
+  assert.equal(
+    protectedLonghandToken('border-width', 'border-bottom', '1px 2px 3px'),
+    '3px',
+  );
+  assert.equal(
+    protectedLonghandToken('border-block-width', 'border-bottom', '1px 2px'),
+    '2px',
+  );
+  assert.equal(
+    protectedLonghandToken('border-inline-width', 'border-inline-start', '1px 2px'),
+    '1px',
   );
 });
 
@@ -814,11 +1291,33 @@ test('search responsive states expose focus, selection, and archive recovery', a
 
   assert.match(
     styles,
-    /\.search-toggle:focus-visible,\s*\.search-dialog__close:focus-visible,\s*\.search-dialog__input:focus-visible,\s*\.search-dialog__result\s+a:focus-visible\s*\{/s,
+    /\.search-toggle:focus-visible,\s*\.search-dialog__close:focus-visible,\s*\.search-dialog__input:focus-visible\s*\{/s,
+  );
+  assertSearchResultFocusSourceContract(styles);
+  assert.throws(
+    () =>
+      assertSearchResultFocusSourceContract(`${styles}
+        .search-dialog__result a:focus-visible { outline: 1px solid var(--focus-ring); }
+      `),
+    /search result focus should retain the full focus ring/,
+  );
+  assert.throws(
+    () =>
+      assertSearchResultFocusSourceContract(`${styles}
+        .search-dialog__result a[aria-current='true']:focus-visible { box-shadow: none; }
+      `),
+    /focused current search result should retain its selection indicator/,
+  );
+  assert.throws(
+    () =>
+      assertSearchResultFocusSourceContract(`${styles}
+        .search-dialog__result a.special:focus-visible { outline: 1px solid var(--focus-ring); }
+      `),
+    /search result focus source selector .*special.*retain the full focus ring/,
   );
   assert.match(
     styles,
-    /\.search-dialog__result\s+a\[aria-current=["']true["']\]\s*\{(?=[^}]*background:\s*var\(--paper\);)(?=[^}]*outline:[^;}]*var\(--accent-text\);)[^}]*\}/s,
+    /\.search-dialog__result\s+a\[aria-current=["']true["']\]\s*\{(?=[^}]*background:\s*var\(--paper-interactive\);)(?=[^}]*outline:\s*1px\s+solid\s+var\(--accent-text\);)[^}]*\}/s,
   );
   assert.match(
     styles,
@@ -1609,7 +2108,7 @@ test('PostLayout discovery styles stay dense, accessible, and responsive', async
 
   assert.match(
     styles,
-    /\.post-series-navigation\s*\{(?=[^}]*border-top:\s*1px\s+solid\s+var\(--line\);)(?=[^}]*color:\s*var\(--ink\);)[^}]*\}/s,
+    /\.post-series-navigation\s*\{(?=[^}]*border-top:\s*0;)(?=[^}]*color:\s*var\(--ink\);)[^}]*\}/s,
   );
   assert.match(
     styles,
@@ -1621,11 +2120,11 @@ test('PostLayout discovery styles stay dense, accessible, and responsive', async
   );
   assert.match(
     styles,
-    /\.post-series-navigation__link\s*\{(?=[^}]*min-width:\s*0;)(?=[^}]*min-height:\s*2\.75rem;)(?=[^}]*background:\s*var\(--surface\);)[^}]*\}/s,
+    /\.post-series-navigation__link\s*\{(?=[^}]*min-width:\s*0;)(?=[^}]*min-height:\s*2\.75rem;)(?=[^}]*border:\s*0;)(?=[^}]*background:\s*var\(--paper-soft\);)[^}]*\}/s,
   );
   assert.match(
     styles,
-    /\.related-post-list\s*\{[^}]*border-top:\s*1px\s+solid\s+var\(--line\);[^}]*\}/s,
+    /\.related-post-list\s*\{[^}]*border-top:\s*0;[^}]*\}/s,
   );
   assert.match(
     styles,
@@ -1652,6 +2151,83 @@ test('PostLayout discovery styles stay dense, accessible, and responsive', async
     discoveryBlocks,
     /white-space:\s*nowrap|-webkit-line-clamp|(?<!-webkit-)line-clamp/,
   );
+});
+
+test('article and search surfaces remove decoration without losing semantic boundaries', async () => {
+  const [styles, feishuStyles] = await Promise.all([
+    readSource('src/styles/global.css'),
+    readSource('src/styles/feishu-content.css'),
+  ]);
+  assertArticleAndSearchBoundarySourceContract(styles, feishuStyles);
+});
+
+test('article and search source boundary contract rejects specific selector overrides', async () => {
+  const [styles, feishuStyles] = await Promise.all([
+    readSource('src/styles/global.css'),
+    readSource('src/styles/feishu-content.css'),
+  ]);
+  const rejectedOverrides = [
+    [
+      `${styles}\n.post-article .post-header { border: 1px solid var(--line); }`,
+      feishuStyles,
+      /post-header/,
+    ],
+    [
+      `${styles}\n.prose blockquote { border-inline-start: 0; }`,
+      feishuStyles,
+      /blockquote/,
+    ],
+    [`${styles}\n.prose td { border-bottom: 0; }`, feishuStyles, /td/],
+    [`${styles}\n.prose blockquote { border: 0; }`, feishuStyles, /blockquote/],
+    [`${styles}\n.prose td { border: 0; }`, feishuStyles, /td/],
+    [
+      `${styles}\n.prose td { border-bottom: 1px solid var(--line); border: 0; }`,
+      feishuStyles,
+      /td/,
+    ],
+    [
+      `${styles}\n.prose td { border-bottom-width: 0; border-bottom-color: var(--line); }`,
+      feishuStyles,
+      /td/,
+    ],
+    [
+      `${styles}\n.prose td { border: 0; border-bottom-color: var(--line); }`,
+      feishuStyles,
+      /td/,
+    ],
+    [
+      styles,
+      `${feishuStyles}\n.prose article .feishu-source-synced { border-color: transparent; }`,
+      /feishu-source-synced/,
+    ],
+  ];
+
+  for (const [candidateStyles, candidateFeishuStyles, message] of rejectedOverrides) {
+    assert.throws(
+      () => assertArticleAndSearchBoundarySourceContract(candidateStyles, candidateFeishuStyles),
+      message,
+    );
+  }
+});
+
+test('article and search source boundary contract ignores non-subject selector tokens', async () => {
+  const [styles, feishuStyles] = await Promise.all([
+    readSource('src/styles/global.css'),
+    readSource('src/styles/feishu-content.css'),
+  ]);
+  const allowedOverrides = [
+    `${styles}\n.post-header .taxonomy-pill { border: 1px solid var(--line); }`,
+    `${styles}\n.search-dialog:not(.search-dialog__header) { border: 1px solid var(--line); }`,
+    `${styles}\n[data-boundary='.post-header'] .taxonomy-pill { border: 1px solid var(--line); }`,
+    `${styles}\n.prose td { border: 0; border-bottom: 1px solid var(--line); }`,
+    `${styles}\n.prose td { border: 0; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: var(--line); }`,
+  ];
+
+  for (const candidateStyles of allowedOverrides) {
+    assert.doesNotThrow(() =>
+      assertArticleAndSearchBoundarySourceContract(candidateStyles, feishuStyles),
+    );
+  }
 });
 
 test('PostLayout renders linked article taxonomy without nesting links', async () => {
