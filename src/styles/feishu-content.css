@@ -141,6 +141,7 @@
 
 .prose .feishu-equation--inline {
   display: inline-block;
+  white-space: nowrap;
   vertical-align: -0.15em;
 }
 

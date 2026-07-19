@@ -1588,6 +1588,16 @@ test('Feishu heading equations are center-aligned at desktop and mobile sizes', 
   );
 });
 
+test('long inline Feishu equations stay on one scrollable line', async () => {
+  const source = await readSource('src/styles/feishu-content.css');
+
+  assert.match(
+    source,
+    /\.prose \.feishu-equation--inline\s*\{[^}]*display:\s*inline-block;[^}]*white-space:\s*nowrap;[^}]*\}/s,
+    'the inline wrapper must own horizontal overflow instead of letting KaTeX bases wrap',
+  );
+});
+
 test('Feishu content styles expose every semantic enum and structural contract', async () => {
   const source = await readSource('src/styles/feishu-content.css').catch(() => '');
   const fontColors = [
