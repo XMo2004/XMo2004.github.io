@@ -22,6 +22,13 @@ const legacyFixture = JSON.parse(
   ),
 );
 
+const referenceSyncedFixture = JSON.parse(
+  await readFile(
+    new URL('./fixtures/feishu-reference-synced.json', import.meta.url),
+    'utf8',
+  ),
+);
+
 function textBlock(id, parentId, content = id) {
   return {
     block_id: id,
@@ -162,6 +169,117 @@ test('aggregates unsupported block types before rendering', () => {
     },
   );
 });
+
+test('rejects reference synced blocks with a dedicated issue', () => {
+  const items = structuredClone(referenceSyncedFixture.items);
+  assert.throws(() => blocksToMarkdown(items), (error) => {
+    assert.ok(error instanceof FeishuConversionError);
+    assert.equal(
+      error.issues.find(({ code }) => code === 'unsupported_reference_synced')
+        ?.code,
+      'unsupported_reference_synced',
+    );
+    assert.deepEqual(error.issues.map(({ code }) => code), [
+      'unsupported_reference_synced',
+    ]);
+    assert.doesNotMatch(error.message, /document_private|block_private/);
+    return true;
+  });
+});
+
+test('reference synced rejection short-circuits descendants and graph validation', () => {
+  const reference = {
+    block_id: 'reference',
+    block_type: 50,
+    parent_id: 'page',
+    children: ['secret-child-id'],
+    reference_synced: {
+      source_document_id: 'secret-document-id',
+      source_block_id: 'secret-source-block-id',
+    },
+  };
+  const malformedChild = textBlock(
+    'secret-child-id',
+    'wrong-private-parent',
+    'secret-descendant-content',
+  );
+  malformedChild.text.elements[0].text_run.text_element_style.link = {
+    url: 'javascript:secret-descendant-link',
+  };
+  const duplicateChild = textBlock(
+    'secret-child-id',
+    'reference',
+    'ordinary-duplicate-content',
+  );
+
+  assert.throws(
+    () =>
+      blocksToMarkdown(
+        pageWith(['reference'], [reference, malformedChild, duplicateChild]),
+      ),
+    (error) => {
+      assert.ok(error instanceof FeishuConversionError);
+      assert.deepEqual(error.issues.map(({ code }) => code), [
+        'unsupported_reference_synced',
+      ]);
+      assert.doesNotMatch(
+        error.message,
+        /secret-child-id|secret-document-id|secret-source-block-id|secret-descendant|ordinary-duplicate/,
+      );
+      return true;
+    },
+  );
+});
+
+for (const [label, container, child, privateValues] of [
+  [
+    'callout',
+    {
+      block_id: 'callout-private',
+      block_type: 19,
+      parent_id: 'page',
+      children: ['callout-child'],
+      callout: { emoji_id: 'gift' },
+    },
+    textBlock('callout-child', 'callout-private', 'private-callout-body'),
+    /callout-private|private-callout-body/,
+  ],
+  [
+    'source synced',
+    {
+      block_id: 'source-private',
+      block_type: 49,
+      parent_id: 'page',
+      children: ['source-child'],
+      source_synced: {
+        elements: [
+          {
+            text_run: {
+              content: 'private-source-title',
+              text_element_style: {},
+            },
+          },
+        ],
+      },
+    },
+    textBlock('source-child', 'source-private', 'private-source-body'),
+    /source-private|private-source-title|private-source-body/,
+  ],
+]) {
+  test(`legacy renderer rejects a ${label} instead of dropping visible content`, () => {
+    assert.throws(
+      () => blocksToMarkdown(pageWith([container.block_id], [container, child])),
+      (error) => {
+        assert.ok(error instanceof FeishuConversionError);
+        assert.deepEqual(error.issues.map(({ code }) => code), [
+          'unsupported_rich_container_renderer',
+        ]);
+        assert.doesNotMatch(error.message, privateValues);
+        return true;
+      },
+    );
+  });
+}
 
 test('aggregates unsupported rich-text element types', () => {
   const block = textBlock('rich', 'page');

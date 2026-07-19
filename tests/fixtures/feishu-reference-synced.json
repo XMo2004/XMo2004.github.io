@@ -1,0 +1,6 @@
+{
+  "items": [
+    {"block_id":"page","block_type":1,"children":["reference"],"page":{"elements":[]}},
+    {"block_id":"reference","block_type":50,"parent_id":"page","reference_synced":{"source_document_id":"document_private","source_block_id":"block_private"}}
+  ]
+}

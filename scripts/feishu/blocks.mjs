@@ -6,10 +6,10 @@ import {
 } from './semantics.mjs';
 
 const SUPPORTED_BLOCK_TYPES = new Set([
-  1, 2, 3, 4, 5, 6, 7, 8, 12, 13, 14, 15, 17, 22, 27, 31, 32,
+  1, 2, 3, 4, 5, 6, 7, 8, 12, 13, 14, 15, 17, 19, 22, 27, 31, 32, 49,
 ]);
 
-const CONTAINER_BLOCK_TYPES = new Set([1, 12, 13, 17, 31, 32]);
+const CONTAINER_BLOCK_TYPES = new Set([1, 12, 13, 17, 19, 31, 32, 49]);
 
 const MEDIA_TOKEN = /^[A-Za-z0-9_-]+$/;
 const MEDIA_PLACEHOLDER_PREFIX = '\uE000feishu-media:';
@@ -203,6 +203,27 @@ function validateBlocks(items) {
     throw new FeishuConversionError([
       issue('invalid_input', 'Block list must be an array.'),
     ]);
+  }
+
+  const referenceSyncedIssues = items
+    .filter(
+      (block) =>
+        block !== null &&
+        typeof block === 'object' &&
+        !Array.isArray(block) &&
+        block.block_type === 50,
+    )
+    .map((block) =>
+      issue(
+        'unsupported_reference_synced',
+        'Block is a reference synced block; only source synced blocks are supported.',
+        typeof block.block_id === 'string' && block.block_id.length > 0
+          ? block.block_id
+          : undefined,
+      ),
+    );
+  if (referenceSyncedIssues.length > 0) {
+    throw new FeishuConversionError(referenceSyncedIssues);
   }
 
   for (const block of items) {
@@ -764,6 +785,14 @@ export function blocksToMarkdown(items) {
             .join('\n'),
           indentation,
         );
+      case 19:
+      case 49:
+        throw new FeishuConversionError([
+          issue(
+            'unsupported_rich_container_renderer',
+            'The legacy Markdown renderer does not support rich content containers.',
+          ),
+        ]);
       case 22:
         return indentBlock('---', indentation);
       case 27: {

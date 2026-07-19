@@ -1,3 +1,5 @@
+import { CALLOUT_EMOJI_BY_ID } from './callout-emojis.mjs';
+
 export const FONT_COLOR_BY_ENUM = Object.freeze({
   1: 'red',
   2: 'orange',
@@ -163,6 +165,11 @@ const BOOLEAN_STYLE_KEYS = [
 ];
 const MEDIA_PLACEHOLDER_PREFIX = '\uE000feishu-media:';
 const MEDIA_PLACEHOLDER_SUFFIX = '\uE001';
+const SOURCE_SYNCED_ALIGN_BY_ENUM = Object.freeze({
+  1: 'left',
+  2: 'center',
+  3: 'right',
+});
 
 function issue(code, message, blockId) {
   return { code, message, ...(blockId ? { blockId } : {}) };
@@ -470,6 +477,132 @@ function normalizeChildren(block, blocks, issues, warnings) {
     .filter((node) => node !== null);
 }
 
+function isRecord(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function ownContainerValue(data, key) {
+  return Object.hasOwn(data, key) ? data[key] : undefined;
+}
+
+function normalizeCallout(block, blocks, issues, warnings) {
+  const children = normalizeChildren(block, blocks, issues, warnings);
+  const data = block.callout;
+  if (!isRecord(data)) {
+    issues.push(
+      issue(
+        'invalid_callout',
+        'Callout data must be an object.',
+        block.block_id,
+      ),
+    );
+    return null;
+  }
+
+  const rawEmojiId = ownContainerValue(data, 'emoji_id');
+  const emojiId = rawEmojiId === undefined ? 'gift' : rawEmojiId;
+  let emoji;
+  if (
+    typeof emojiId !== 'string' ||
+    emojiId.length === 0 ||
+    !Object.hasOwn(CALLOUT_EMOJI_BY_ID, emojiId)
+  ) {
+    issues.push(
+      issue(
+        'unsupported_callout_emoji',
+        'Callout emoji is unsupported.',
+        block.block_id,
+      ),
+    );
+  } else {
+    emoji = CALLOUT_EMOJI_BY_ID[emojiId];
+  }
+
+  return {
+    kind: 'callout',
+    blockId: block.block_id,
+    background: optionalEnum(
+      ownContainerValue(data, 'background_color'),
+      CALLOUT_BACKGROUND_BY_ENUM,
+      issues,
+      block,
+    ),
+    border: optionalEnum(
+      ownContainerValue(data, 'border_color'),
+      CALLOUT_BORDER_BY_ENUM,
+      issues,
+      block,
+    ),
+    textColor: optionalEnum(
+      ownContainerValue(data, 'text_color'),
+      FONT_COLOR_BY_ENUM,
+      issues,
+      block,
+    ),
+    emoji: emoji ?? '',
+    children,
+  };
+}
+
+function normalizeSourceSynced(block, blocks, issues, warnings) {
+  const children = normalizeChildren(block, blocks, issues, warnings);
+  const data = block.source_synced;
+  if (!isRecord(data)) {
+    issues.push(
+      issue(
+        'invalid_source_synced',
+        'Source synced data must be an object.',
+        block.block_id,
+      ),
+    );
+    return null;
+  }
+
+  const elements = ownContainerValue(data, 'elements');
+  let title = [];
+  if (elements !== undefined) {
+    if (!Array.isArray(elements)) {
+      issues.push(
+        issue(
+          'invalid_source_synced',
+          'Source synced title elements must be an array.',
+          block.block_id,
+        ),
+      );
+    } else {
+      title = normalizeRichElements(block, elements, issues, {
+        forceInlineEquation: true,
+      });
+    }
+  }
+
+  const rawAlign = ownContainerValue(data, 'align');
+  const alignEnum = rawAlign === undefined ? 1 : rawAlign;
+  let align = 'left';
+  if (
+    !Number.isInteger(alignEnum) ||
+    !Object.hasOwn(SOURCE_SYNCED_ALIGN_BY_ENUM, alignEnum)
+  ) {
+    issues.push(
+      issue(
+        'invalid_source_synced_align',
+        'Source synced alignment is invalid.',
+        block.block_id,
+      ),
+    );
+  } else {
+    align = SOURCE_SYNCED_ALIGN_BY_ENUM[alignEnum];
+  }
+
+  return {
+    kind: 'sourceSynced',
+    blockId: block.block_id,
+    title,
+    align,
+    children,
+  };
+}
+
 function normalizeTable(block, blocks, issues) {
   const rowSize = block.table?.property?.row_size ?? 0;
   const columnSize = block.table?.property?.column_size ?? 0;
@@ -538,6 +671,8 @@ function normalizeBlock(block, blocks, issues, warnings) {
         }),
         children: normalizeChildren(block, blocks, issues, warnings),
       };
+    case 19:
+      return normalizeCallout(block, blocks, issues, warnings);
     case 14: {
       normalizeRichElements(block, elements, issues, {
         forceInlineEquation: true,
@@ -582,6 +717,8 @@ function normalizeBlock(block, blocks, issues, warnings) {
       };
     case 31:
       return normalizeTable(block, blocks, issues);
+    case 49:
+      return normalizeSourceSynced(block, blocks, issues, warnings);
     default:
       return null;
   }
