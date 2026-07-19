@@ -12,7 +12,7 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, sep } from 'node:path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { after, before, test } from 'node:test';
 
@@ -548,28 +548,250 @@ async function readOutput(relativePath) {
   return readFile(new URL(relativePath, distRoot), 'utf8');
 }
 
-function readEquationSources(html) {
-  const sources = [];
+function readClassTokens(openingTag) {
+  return openingTag.match(/\bclass="([^"]*)"/)?.[1].split(/\s+/) ?? [];
+}
 
-  for (const [openingTag] of html.matchAll(/<span\b[^>]*>/g)) {
-    const classValue = openingTag.match(/\bclass="([^"]*)"/)?.[1];
+function readEquationElements(html) {
+  const equations = [];
 
-    if (
-      classValue === undefined ||
-      !classValue.split(/\s+/).includes('feishu-equation')
-    ) {
+  for (const openingMatch of html.matchAll(/<span\b[^>]*>/g)) {
+    const openingTag = openingMatch[0];
+    const classTokens = readClassTokens(openingTag);
+
+    if (!classTokens.includes('feishu-equation')) {
       continue;
     }
 
     const encodedSource = openingTag.match(
       /\bdata-feishu-equation-source="([A-Za-z0-9_-]+)"/,
     )?.[1];
+    const displayClass = classTokens.find((className) =>
+      /^feishu-equation--(?:inline|block)$/u.test(className));
 
-    assert.ok(encodedSource, 'each rendered Feishu equation should keep its source');
-    sources.push(Buffer.from(encodedSource, 'base64url').toString('utf8'));
+    assert.ok(
+      encodedSource,
+      'each rendered Feishu equation should keep its source',
+    );
+    assert.ok(
+      displayClass,
+      'each rendered Feishu equation should keep its display mode',
+    );
+
+    const spanTags = /<\/?span\b[^>]*>/g;
+    spanTags.lastIndex = openingMatch.index;
+    let depth = 0;
+    let equationEnd = -1;
+
+    for (
+      let spanMatch = spanTags.exec(html);
+      spanMatch !== null;
+      spanMatch = spanTags.exec(html)
+    ) {
+      if (spanMatch[0].startsWith('</')) {
+        depth -= 1;
+      } else if (!spanMatch[0].endsWith('/>')) {
+        depth += 1;
+      }
+
+      assert.ok(depth >= 0, 'Feishu equation span nesting should be valid');
+      if (depth === 0) {
+        equationEnd = spanTags.lastIndex;
+        break;
+      }
+    }
+
+    assert.notEqual(
+      equationEnd,
+      -1,
+      'each rendered Feishu equation should have a closing span',
+    );
+    equations.push({
+      display: displayClass.endsWith('block') ? 'block' : 'inline',
+      raw: html.slice(openingMatch.index, equationEnd),
+      source: Buffer.from(encodedSource, 'base64url').toString('utf8'),
+    });
   }
 
-  return sources;
+  return equations;
+}
+
+function assertRenderedEquationContract(html, expectedSources) {
+  const equations = readEquationElements(html);
+
+  assert.equal(equations.length, expectedSources.length);
+  assert.deepEqual(
+    equations.map(({ source }) => source).toSorted(),
+    expectedSources.toSorted(),
+  );
+
+  for (const { display, raw, source } of equations) {
+    const body = raw
+      .slice(raw.indexOf('>') + 1, -'</span>'.length)
+      .trim();
+    const renderedSpans = [...body.matchAll(/<span\b[^>]*>/g)];
+    const countClass = (className) =>
+      renderedSpans.filter(([openingTag]) =>
+        readClassTokens(openingTag).includes(className)).length;
+
+    assert.equal(
+      countClass('katex'),
+      1,
+      'equation should contain one KaTeX root: ' + source,
+    );
+    assert.equal(
+      countClass('katex-html'),
+      1,
+      'equation should contain one KaTeX HTML tree: ' + source,
+    );
+    assert.equal(
+      (body.match(/<math\b[^>]*>/g) ?? []).length,
+      1,
+      'equation should contain one MathML tree: ' + source,
+    );
+    if (display === 'inline') {
+      assert.match(
+        body,
+        /^<span class="katex"(?:\s[^>]*)?>/,
+        'inline equation should have a top-level KaTeX root: ' + source,
+      );
+    } else {
+      assert.match(
+        body,
+        /^<span class="katex-display"(?:\s[^>]*)?>\s*<span class="katex"(?:\s[^>]*)?>/,
+        'block equation should have a top-level KaTeX display root: ' + source,
+      );
+    }
+  }
+}
+
+function readTagAttributes(openingTag) {
+  const attributes = new Map();
+
+  for (const match of openingTag.matchAll(
+    /\s+([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>\x60]+)))?/g,
+  )) {
+    attributes.set(
+      match[1].toLocaleLowerCase('en-US'),
+      decodeFeishuHtmlEntities(match[2] ?? match[3] ?? match[4] ?? ''),
+    );
+  }
+
+  return attributes;
+}
+
+function resolveOutputAssetPath(href) {
+  assert.ok(distRoot, 'clean build should initialize its output directory');
+  const pathOnly = href.split(/[?#]/u, 1)[0];
+
+  assert.match(
+    pathOnly,
+    /^\/(?!\/)/u,
+    'linked build assets must use a root-relative path',
+  );
+  const decodedSegments = pathOnly.slice(1).split('/').map((segment) => {
+    let decodedSegment;
+
+    try {
+      decodedSegment = decodeURIComponent(segment);
+    } catch {
+      assert.fail('linked build asset path must use valid percent encoding');
+    }
+    assert.notEqual(decodedSegment, '.');
+    assert.notEqual(decodedSegment, '..');
+    assert.doesNotMatch(
+      decodedSegment,
+      /(?:%[0-9a-f]{2}|[\\/\0:])/iu,
+      'linked build asset path must not contain nested or separator encoding',
+    );
+    return decodedSegment;
+  });
+  const outputRoot = resolve(fileURLToPath(distRoot));
+  const assetPath = resolve(outputRoot, ...decodedSegments);
+  const relativePath = relative(outputRoot, assetPath);
+
+  assert.ok(relativePath.length > 0, 'linked build asset must resolve to a file');
+  assert.ok(
+    relativePath !== '..' &&
+      !relativePath.startsWith('..' + sep) &&
+      !isAbsolute(relativePath),
+    'linked build asset must remain inside the production output',
+  );
+  return assetPath;
+}
+
+async function readLinkedStylesheets(html) {
+  const stylesheetHrefs = [...html.matchAll(/<link\b[^>]*>/giu)]
+    .map(([openingTag]) => readTagAttributes(openingTag))
+    .filter((attributes) =>
+      (attributes.get('rel') ?? '')
+        .toLocaleLowerCase('en-US')
+        .split(/\s+/)
+        .includes('stylesheet'))
+    .map((attributes) => {
+      const href = attributes.get('href');
+
+      assert.ok(href, 'each stylesheet link should include an href');
+      return href;
+    });
+
+  assert.ok(
+    stylesheetHrefs.length > 0,
+    'the rendered article should link at least one stylesheet',
+  );
+  return (
+    await Promise.all(
+      stylesheetHrefs.map((href) =>
+        readFile(resolveOutputAssetPath(href), 'utf8')),
+    )
+  ).join('\n');
+}
+
+const executableScriptTypes = new Set([
+  '',
+  'module',
+  'text/javascript',
+  'application/javascript',
+  'text/ecmascript',
+  'application/ecmascript',
+  'application/x-javascript',
+]);
+const nonExecutableDataScriptTypes = new Set([
+  'application/json',
+  'application/ld+json',
+  'application/manifest+json',
+  'importmap',
+  'speculationrules',
+]);
+
+function readExecutableInlineScripts(html) {
+  const scripts = [];
+
+  for (const match of html.matchAll(
+    /<script\b([^>]*)>([\s\S]*?)<\/script>/giu,
+  )) {
+    const attributes = readTagAttributes('<script' + match[1] + '>');
+
+    if (attributes.has('src')) {
+      continue;
+    }
+
+    const type = (attributes.get('type') ?? '')
+      .split(';', 1)[0]
+      .trim()
+      .toLocaleLowerCase('en-US');
+    if (executableScriptTypes.has(type)) {
+      scripts.push(match[2]);
+      continue;
+    }
+
+    assert.ok(
+      nonExecutableDataScriptTypes.has(type),
+      'inline script type must be explicitly classified: ' + type,
+    );
+  }
+
+  return scripts;
 }
 
 function readSection(html, id) {
@@ -1052,10 +1274,7 @@ test('build renders the complete controlled Feishu document', async () => {
     /\uE000feishu-media:|\x60{3}|\*\*&lt;组合样式&gt;\*\*|~~&lt;组合样式&gt;~~|\[仅背景链接\]\(https:\/\/example\.com\/background-only\)/,
   );
 
-  assert.deepEqual(
-    readEquationSources(html).toSorted(),
-    expectedRichEquationSources.toSorted(),
-  );
+  assertRenderedEquationContract(html, expectedRichEquationSources);
 
   const headingIds = [...html.matchAll(
     /<h[1-6]\b[^>]*\bid="(feishu-heading-\d+)"/g,
@@ -1196,9 +1415,9 @@ test('build renders the complete controlled Feishu document', async () => {
       .replace(/\r\n?/g, '\n'),
     '表格 | *字* `码`\n下一行',
   );
-  assert.deepEqual(
-    readEquationSources(protocolHtml).toSorted(),
-    [markdownPunctuationFormula, 'm | n\n% 表格注释\n+ r'].toSorted(),
+  assertRenderedEquationContract(
+    protocolHtml,
+    [markdownPunctuationFormula, 'm | n\n% 表格注释\n+ r'],
   );
 
   assert.equal(
@@ -1373,7 +1592,31 @@ test('build indexes Feishu formulas once without visual or UI noise', async () =
   const html = await readOutput(
     'posts/build-output-feishu-rich-content/index.html',
   );
-  assert.match(html, /<link\b[^>]*href="[^"]+\.css"/);
+  for (const unsafeHref of [
+    '//example.com/theme.css',
+    '/../theme.css',
+    '/%2e%2e/theme.css',
+    '/%252e%252e/theme.css',
+    '/_astro/%2ftheme.css',
+    '/_astro/%ZZ.css',
+  ]) {
+    assert.throws(
+      () => resolveOutputAssetPath(unsafeHref),
+      { name: 'AssertionError' },
+    );
+  }
+  const linkedStylesheets = await readLinkedStylesheets(html);
+
+  assert.match(
+    linkedStylesheets,
+    /(?:^|[},])\.katex(?=[\s,.#:\[>{+~])/mu,
+    'the article stylesheet should contain the KaTeX root selector',
+  );
+  assert.match(
+    linkedStylesheets,
+    /@font-face\s*\{[^}]*font-family:\s*["']?KaTeX_[^}]*\burl\((?:"|')?[^)"']*KaTeX_[^)"']+\.(?:woff2?|ttf)(?:"|')?\)[^}]*\}/iu,
+    'the article stylesheet should reference an emitted KaTeX font',
+  );
   assert.doesNotMatch(html, /<script\b[^>]*src="[^"]*katex/i);
   const outputFiles = await readdir(fileURLToPath(distRoot), {
     recursive: true,
@@ -1382,18 +1625,39 @@ test('build indexes Feishu formulas once without visual or UI noise', async () =
     outputFiles.some((path) => /KaTeX_[^/]+\.(?:woff2?|ttf)$/i.test(path)),
     'the production build should emit KaTeX fonts',
   );
-  const browserJavaScript = (
-    await Promise.all(
+  const [browserJavaScript, outputHtml] = await Promise.all([
+    Promise.all(
       outputFiles
         .filter((path) => path.endsWith('.js'))
         .map((path) =>
           readFile(join(fileURLToPath(distRoot), path), 'utf8')),
-    )
-  ).join('\n');
-  assert.doesNotMatch(browserJavaScript, /node:buffer|\bBuffer\.from\b/);
+    ),
+    Promise.all(
+      outputFiles
+        .filter((path) => path.endsWith('.html'))
+        .map((path) =>
+          readFile(join(fileURLToPath(distRoot), path), 'utf8')),
+    ),
+  ]);
+  const inlineExecutableScripts = outputHtml.flatMap(
+    readExecutableInlineScripts,
+  );
+
+  assert.ok(
+    browserJavaScript.length > 0,
+    'the production output should include browser JavaScript assets',
+  );
+  assert.ok(
+    inlineExecutableScripts.length > 0,
+    'the production output should include executable inline scripts',
+  );
+  const browserExecutableSource = [
+    ...browserJavaScript,
+    ...inlineExecutableScripts,
+  ].join('\n');
   assert.doesNotMatch(
-    browserJavaScript,
-    /KaTeX parse error|katex-error|\brenderToString\b/i,
+    browserExecutableSource,
+    /node:buffer|\bBuffer\.from\b|\brenderToString\b|katex-error|KaTeX parse error/i,
   );
 });
 
