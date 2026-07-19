@@ -157,6 +157,21 @@ test('prefers a Markdown code span that contains an incomplete or complete HTML 
   }
 });
 
+test('keeps nested and consecutive soft regions ordered without exposing internal ticks', () => {
+  const first = '<code>outer ` <code>nested ` tick</code></code>';
+  const second =
+    equation('ordered equation', 'inline', '<span>` tick</span>') +
+    '<code>tail ` tick</code>';
+  const source = `\`${first}\` between \`${second}\``;
+  const { codes, equations } = collect(source);
+
+  assert.deepEqual(codes.map(({ kind, raw }) => [kind, raw]), [
+    ['markdown-code-span', `\`${first}\``],
+    ['markdown-code-span', `\`${second}\``],
+  ]);
+  assert.deepEqual(equations, []);
+});
+
 test('scans controlled HTML code, pre/code once, void tags, quoted greater-than, formula, UI, and headings', () => {
   const source = controlled([
     '<p title="1 > 0">before<img src="x"><hr></p>',
@@ -399,6 +414,12 @@ test('rejects whitespace immediately after an opening or closing angle bracket',
 test('rejects a multiline unterminated protocol candidate in Markdown prose', () => {
   assertInvalid(
     '<span\n class="feishu-equation feishu-equation--inline"\n data-feishu-equation-source="eA"',
+  );
+});
+
+test('rejects an unterminated multiline protocol after a quoted less-than sign', () => {
+  assertInvalid(
+    '<span title="<"\n class="feishu-equation feishu-equation--inline"\n data-feishu-equation-source="eA"',
   );
 });
 

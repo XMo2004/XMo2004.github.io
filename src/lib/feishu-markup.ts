@@ -271,8 +271,11 @@ function decodeBase64Url(
 
 function hasExactAttributes(token: HtmlTagToken, names: readonly string[]): boolean {
   if (token.attributes.length !== names.length) return false;
-  const actual = token.attributes.map(({ name }) => name).sort();
-  return actual.every((name, index) => name === [...names].sort()[index]);
+  const remaining = new Set(names);
+  for (const { name } of token.attributes) {
+    if (!remaining.delete(name)) return false;
+  }
+  return remaining.size === 0;
 }
 
 function attribute(token: HtmlTagToken, name: string): string | undefined {
@@ -574,6 +577,7 @@ interface MarkdownDiscoveryEntry {
   name: string;
   start: number;
   soft: boolean;
+  softRoot: boolean;
 }
 
 function collectMarkdownSoftRegions(
@@ -583,12 +587,14 @@ function collectMarkdownSoftRegions(
   const discovered: MarkdownDelimiterRegion[] = [];
   const stack: MarkdownDiscoveryEntry[] = [];
   let fenceIndex = 0;
+  let softDepth = 0;
   let index = 0;
 
   while (index < source.length) {
     const fence = fenceRegions[fenceIndex];
     if (fence !== undefined && index === fence.start) {
       stack.length = 0;
+      softDepth = 0;
       index = fence.end;
       fenceIndex += 1;
       continue;
@@ -610,42 +616,87 @@ function collectMarkdownSoftRegions(
       const entry = stack.at(-1);
       if (entry?.name === token.name) {
         stack.pop();
-        if (entry.soft) {
+        if (entry.soft) softDepth -= 1;
+        if (entry.softRoot) {
           discovered.push({ start: entry.start, end: token.end, hard: false });
         }
       } else {
         stack.length = 0;
+        softDepth = 0;
       }
     } else if (!token.selfClosing && !VOID_TAGS.has(token.name)) {
+      const soft =
+        token.name === 'pre' || token.name === 'code' ||
+        protocolKind(token) !== undefined;
       stack.push({
         name: token.name,
         start: token.start,
-        soft:
-          token.name === 'pre' || token.name === 'code' ||
-          protocolKind(token) !== undefined,
+        soft,
+        softRoot: soft && softDepth === 0,
       });
+      if (soft) softDepth += 1;
     }
     index = token.end;
   }
 
-  discovered.sort((left, right) =>
-    left.start - right.start || right.end - left.end);
-  const outermost: MarkdownDelimiterRegion[] = [];
-  for (const region of discovered) {
-    const previous = outermost.at(-1);
-    if (
-      previous !== undefined && region.start >= previous.start &&
-      region.end <= previous.end
-    ) continue;
-    outermost.push(region);
-  }
-  return outermost;
+  // Outermost soft roots cannot overlap, so their closing order is source order.
+  return discovered;
 }
 
-function collectMarkdownDelimiterRegions(source: string): readonly MarkdownDelimiterRegion[] {
+function mergeMarkdownDelimiterRegions(
+  fences: readonly MarkdownDelimiterRegion[],
+  soft: readonly MarkdownDelimiterRegion[],
+): readonly MarkdownDelimiterRegion[] {
+  const merged: MarkdownDelimiterRegion[] = [];
+  let fenceIndex = 0;
+  let softIndex = 0;
+  while (fenceIndex < fences.length || softIndex < soft.length) {
+    const fence = fences[fenceIndex];
+    const softRegion = soft[softIndex];
+    if (softRegion === undefined || (fence !== undefined && fence.start < softRegion.start)) {
+      merged.push(fence);
+      fenceIndex += 1;
+    } else {
+      merged.push(softRegion);
+      softIndex += 1;
+    }
+  }
+  return merged;
+}
+
+function collectMarkdownDelimiterRegions(
+  source: string,
+): readonly MarkdownDelimiterRegion[] {
   const fences = collectMarkdownFenceRegions(source);
   const soft = collectMarkdownSoftRegions(source, fences);
-  return [...fences, ...soft].sort((left, right) => left.start - right.start);
+  return mergeMarkdownDelimiterRegions(fences, soft);
+}
+
+interface MalformedTagBoundary {
+  end: number;
+  resume: number;
+}
+
+function findMalformedTagBoundary(
+  source: string,
+  start: number,
+): MalformedTagBoundary {
+  let quote: '"' | "'" | undefined;
+  for (let index = start + 1; index < source.length; index += 1) {
+    const character = source[index];
+    if (quote !== undefined) {
+      if (character === quote) quote = undefined;
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      quote = character;
+    } else if (character === '<') {
+      return { end: index, resume: index };
+    } else if (character === '>') {
+      return { end: index + 1, resume: index + 1 };
+    }
+  }
+  return { end: source.length, resume: source.length };
 }
 
 function collectMarkdownCodeSpanClosings(
@@ -728,13 +779,13 @@ function scanMarkdown(
     }
     const token = parseTag(source, index);
     if (token === undefined) {
-      const nextAngle = source.indexOf('<', index + 1);
-      const suspect = source.slice(index, nextAngle === -1 ? source.length : nextAngle);
+      const boundary = findMalformedTagBoundary(source, index);
+      const suspect = source.slice(index, boundary.end);
       if (
         MALFORMED_TAG_PREFIX.test(suspect) &&
         MALFORMED_PROTOCOL_ATTRIBUTE_TRACE.test(suspect)
       ) invalidMarkup();
-      index += 1;
+      index = boundary.resume;
       continue;
     }
     if (token.kind === 'comment') {
