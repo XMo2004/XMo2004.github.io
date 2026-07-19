@@ -593,13 +593,30 @@ function splitTopLevelSelectorCompounds(selector) {
 }
 
 function classAttributeSelectors(compound) {
-  return [...compound.matchAll(
-    /\[\s*class\s*(?:(\^=|\$=|\*=|~=|\|=|=)\s*(?:"([^"]*)"|'([^']*)'|([^\]\s]+))(?:\s+([is]))?)?\s*\]/gi,
-  )].map((match) => ({
-    flag: match[5]?.toLowerCase(),
-    operator: match[1],
-    value: match[2] ?? match[3] ?? match[4],
-  }));
+  const selectors = [];
+  const classAttributePattern =
+    /^\[\s*class\s*(?:(\^=|\$=|\*=|~=|\|=|=)\s*(?:"([^"]*)"|'([^']*)'|([^\]\s]+))(?:\s+([is]))?)?\s*\]$/i;
+
+  for (let index = 0; index < compound.length; index += 1) {
+    if (compound[index] === '(') {
+      index = findMatchingSelectorDelimiter(compound, index, '(', ')');
+      continue;
+    }
+    if (compound[index] !== '[') continue;
+
+    const closing = findMatchingSelectorDelimiter(compound, index, '[', ']');
+    const match = classAttributePattern.exec(compound.slice(index, closing + 1));
+    if (match !== null) {
+      selectors.push({
+        flag: match[5]?.toLowerCase(),
+        operator: match[1],
+        value: match[2] ?? match[3] ?? match[4],
+      });
+    }
+    index = closing;
+  }
+
+  return selectors;
 }
 
 function classAttributeSelectorMatchesTarget(selector, targetClass) {
@@ -1359,6 +1376,32 @@ test('source selector matching models class attribute operators and flags', () =
     false,
   );
   assert.equal(selectorHasTargetToken('.home-hero__copy', '.home-hero'), false);
+});
+
+test('class attribute parsing ignores selector text inside other attribute values', () => {
+  assert.deepEqual(
+    classAttributeSelectors("[data-selector='[class]']"),
+    [],
+  );
+  assert.deepEqual(
+    classAttributeSelectors('[data-selector="[class*=\'home\']"]'),
+    [],
+  );
+});
+
+test('quoted class-selector text cannot trigger complete boundary contracts', async () => {
+  const [styles, feishuStyles] = await Promise.all([
+    readSource('src/styles/global.css'),
+    readSource('src/styles/feishu-content.css'),
+  ]);
+  const fixture = `${styles}
+    [data-selector='[class]'] { border: 0; }
+    [data-selector="[class*='home']"] { border: 0; }
+  `;
+
+  assert.doesNotThrow(() =>
+    assertArticleAndSearchBoundarySourceContract(fixture, feishuStyles),
+  );
 });
 
 test('host selector matching excludes modern and legacy pseudo-elements', () => {
