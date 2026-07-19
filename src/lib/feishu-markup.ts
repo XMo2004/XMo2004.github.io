@@ -674,29 +674,38 @@ function collectMarkdownDelimiterRegions(
 
 interface MalformedTagBoundary {
   end: number;
-  resume: number;
+  quotedLessThan: readonly number[];
 }
 
 function findMalformedTagBoundary(
   source: string,
   start: number,
+  codeRegionStarts: ReadonlySet<number>,
 ): MalformedTagBoundary {
   let quote: '"' | "'" | undefined;
+  const quotedLessThan: number[] = [];
   for (let index = start + 1; index < source.length; index += 1) {
+    if (codeRegionStarts.has(index)) {
+      return { end: index, quotedLessThan };
+    }
     const character = source[index];
     if (quote !== undefined) {
-      if (character === quote) quote = undefined;
+      if (character === quote) {
+        quote = undefined;
+      } else if (character === '<') {
+        quotedLessThan.push(index);
+      }
       continue;
     }
     if (character === '"' || character === "'") {
       quote = character;
     } else if (character === '<') {
-      return { end: index, resume: index };
+      return { end: index, quotedLessThan };
     } else if (character === '>') {
-      return { end: index + 1, resume: index + 1 };
+      return { end: index + 1, quotedLessThan };
     }
   }
-  return { end: source.length, resume: source.length };
+  return { end: source.length, quotedLessThan };
 }
 
 function collectMarkdownCodeSpanClosings(
@@ -738,6 +747,11 @@ function scanMarkdown(
   const replacements: Replacement[] = [];
   const delimiterRegions = collectMarkdownDelimiterRegions(source);
   const codeSpanClosings = collectMarkdownCodeSpanClosings(source, delimiterRegions);
+  const codeRegionStarts = new Set<number>(codeSpanClosings.keys());
+  for (const region of delimiterRegions) {
+    if (region.hard) codeRegionStarts.add(region.start);
+  }
+  const ignoredQuotedLessThan = new Set<number>();
   let index = 0;
 
   while (index < source.length) {
@@ -777,15 +791,26 @@ function scanMarkdown(
       index += 1;
       continue;
     }
+    if (ignoredQuotedLessThan.has(index)) {
+      index += 1;
+      continue;
+    }
     const token = parseTag(source, index);
     if (token === undefined) {
-      const boundary = findMalformedTagBoundary(source, index);
+      const boundary = findMalformedTagBoundary(
+        source,
+        index,
+        codeRegionStarts,
+      );
       const suspect = source.slice(index, boundary.end);
       if (
         MALFORMED_TAG_PREFIX.test(suspect) &&
         MALFORMED_PROTOCOL_ATTRIBUTE_TRACE.test(suspect)
       ) invalidMarkup();
-      index = boundary.resume;
+      for (const quotedIndex of boundary.quotedLessThan) {
+        ignoredQuotedLessThan.add(quotedIndex);
+      }
+      index += 1;
       continue;
     }
     if (token.kind === 'comment') {

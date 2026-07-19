@@ -436,6 +436,61 @@ test('keeps protocol words in ordinary less-than prose literal', () => {
   }
 });
 
+test('continues scanning Markdown regions after ordinary less-than prose', () => {
+  const cases = [
+    {
+      source: '1 < 2 and `code`',
+      codeKind: 'markdown-code-span',
+      equationSource: undefined,
+    },
+    {
+      source: '1 < 2\n```\ncode\n```',
+      codeKind: 'markdown-fence',
+      equationSource: undefined,
+    },
+    {
+      source: `1 < 2 and ${equation('after less-than')}`,
+      codeKind: undefined,
+      equationSource: 'after less-than',
+    },
+  ];
+
+  for (const { source, codeKind, equationSource } of cases) {
+    const { codes, equations } = collect(source);
+    assert.deepEqual(codes.map(({ kind }) => kind),
+      codeKind === undefined ? [] : [codeKind]);
+    assert.deepEqual(equations.map(({ source: value }) => value),
+      equationSource === undefined ? [] : [equationSource]);
+  }
+});
+
+test('stops malformed-candidate lookahead before known Markdown code regions', () => {
+  const fencedProtocol = [
+    '1 < 2',
+    '```',
+    '<span data-feishu-equation-source="QQ">x</span>',
+    '```',
+  ].join('\n');
+  const inlineMarker = '<span prose `data-feishu-equation-source="eA"`';
+  const fencedMarker = [
+    '<span prose',
+    '```',
+    'data-feishu-equation-source="eA"',
+    '```',
+  ].join('\n');
+
+  for (const [source, kind] of [
+    [fencedProtocol, 'markdown-fence'],
+    [inlineMarker, 'markdown-code-span'],
+    [fencedMarker, 'markdown-fence'],
+  ]) {
+    const { codes, equations, interfaces } = collect(source);
+    assert.deepEqual(codes.map(({ kind: codeKind }) => codeKind), [kind]);
+    assert.deepEqual(equations, []);
+    assert.deepEqual(interfaces, []);
+  }
+});
+
 test('rejects repeated or nested roots and non-whitespace outside the root', () => {
   const root = controlled('<p>x</p>');
   assertInvalid(`${root}${root}`);
