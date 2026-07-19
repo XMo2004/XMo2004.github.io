@@ -453,6 +453,16 @@ test('continues scanning Markdown regions after ordinary less-than prose', () =>
       codeKind: undefined,
       equationSource: 'after less-than',
     },
+    {
+      source: `1 < ' prose ${equation('after single quote')}`,
+      codeKind: undefined,
+      equationSource: 'after single quote',
+    },
+    {
+      source: `1 < " prose ${equation('after double quote')}`,
+      codeKind: undefined,
+      equationSource: 'after double quote',
+    },
   ];
 
   for (const { source, codeKind, equationSource } of cases) {
@@ -489,6 +499,12 @@ test('stops malformed-candidate lookahead before known Markdown code regions', (
     assert.deepEqual(equations, []);
     assert.deepEqual(interfaces, []);
   }
+});
+
+test('does not treat an escaped backtick as a candidate-lookahead code boundary', () => {
+  assertInvalid(
+    '<span prose \\` data-feishu-equation-source="eA" `',
+  );
 });
 
 test('rejects repeated or nested roots and non-whitespace outside the root', () => {

@@ -708,6 +708,23 @@ function findMalformedTagBoundary(
   return { end: source.length, quotedLessThan };
 }
 
+function hasPlausibleMalformedTagPrefixAt(
+  source: string,
+  start: number,
+): boolean {
+  let index = start + 1;
+  while (/\s/u.test(source[index] ?? '')) index += 1;
+  if (source[index] === '/') {
+    index += 1;
+    while (/\s/u.test(source[index] ?? '')) index += 1;
+  }
+  if (!/[a-z]/iu.test(source[index] ?? '')) return false;
+  index += 1;
+  while (/[a-z0-9:-]/iu.test(source[index] ?? '')) index += 1;
+  const boundary = source[index];
+  return boundary === undefined || /\s/u.test(boundary) || boundary === '/' || boundary === '>';
+}
+
 function collectMarkdownCodeSpanClosings(
   source: string,
   regions: readonly MarkdownDelimiterRegion[],
@@ -740,6 +757,40 @@ function collectMarkdownCodeSpanClosings(
   return closingByOpening;
 }
 
+function collectActualMarkdownCodeSpanStarts(
+  source: string,
+  closingByOpening: ReadonlyMap<number, number>,
+  delimiterRegions: readonly MarkdownDelimiterRegion[],
+): ReadonlySet<number> {
+  const starts = new Set<number>();
+  let regionIndex = 0;
+  let index = 0;
+  while (index < source.length) {
+    while (
+      delimiterRegions[regionIndex] !== undefined &&
+      delimiterRegions[regionIndex].end <= index
+    ) regionIndex += 1;
+    const region = delimiterRegions[regionIndex];
+    if (region !== undefined && region.start === index) {
+      index = region.end;
+      regionIndex += 1;
+      continue;
+    }
+    if (source[index] !== '`') {
+      index += 1;
+      continue;
+    }
+    const codeSpan = markdownCodeSpanAt(source, index, closingByOpening);
+    if (codeSpan !== undefined) {
+      starts.add(index);
+      index = codeSpan.end;
+      continue;
+    }
+    while (source[index] === '`') index += 1;
+  }
+  return starts;
+}
+
 function scanMarkdown(
   source: string,
   handlers: FeishuMarkupHandlers,
@@ -747,7 +798,11 @@ function scanMarkdown(
   const replacements: Replacement[] = [];
   const delimiterRegions = collectMarkdownDelimiterRegions(source);
   const codeSpanClosings = collectMarkdownCodeSpanClosings(source, delimiterRegions);
-  const codeRegionStarts = new Set<number>(codeSpanClosings.keys());
+  const codeRegionStarts = new Set(collectActualMarkdownCodeSpanStarts(
+    source,
+    codeSpanClosings,
+    delimiterRegions,
+  ));
   for (const region of delimiterRegions) {
     if (region.hard) codeRegionStarts.add(region.start);
   }
@@ -797,6 +852,10 @@ function scanMarkdown(
     }
     const token = parseTag(source, index);
     if (token === undefined) {
+      if (!hasPlausibleMalformedTagPrefixAt(source, index)) {
+        index += 1;
+        continue;
+      }
       const boundary = findMalformedTagBoundary(
         source,
         index,
