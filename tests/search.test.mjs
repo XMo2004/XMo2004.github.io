@@ -132,18 +132,27 @@ test('keeps controlled visible punctuation while removing its URLs', () => {
 });
 
 test('treats protocol-looking text in all four code kinds as code while finding the following equation', () => {
-  const pseudoMarkup = [
-    '<span data-feishu-equation-source="QQ">x</span>',
-    '<h2 id="feishu-heading-9" data-feishu-heading-text="@@">x</h2>',
-    '<span data-feishu-search-ui>同步内容</span>',
+  const exactEquation = '<span class="feishu-equation feishu-equation--inline" data-feishu-equation-source="QQ"><span class="katex">rendered</span></span>';
+  const exactHeading = '<h2 id="feishu-heading-1" data-feishu-heading-text="5qCH6aKY">标题</h2>';
+  const exactSearchUi = '<span class="feishu-source-synced__label" data-feishu-search-ui>同步内容</span>';
+  const nearEquation = '<span data-feishu-equation-source="Qg">x</span>';
+  const nearHeading = '<h2 id="feishu-heading-9" data-feishu-heading-text="@@">x</h2>';
+  const nearSearchUi = '<span data-feishu-search-ui>近似同步内容</span>';
+  const codeMarkup = [
+    exactEquation,
+    exactHeading,
+    exactSearchUi,
+    nearEquation,
+    nearHeading,
+    nearSearchUi,
     'https://private.example/path',
   ].join(' ');
-  const encoded = encodeHtmlCode(pseudoMarkup);
+  const encoded = encodeHtmlCode(codeMarkup);
   const markdown = [
     '````html',
-    pseudoMarkup,
+    codeMarkup,
     '````',
-    `\`${pseudoMarkup}\``,
+    `\`${codeMarkup}\``,
     `<pre><code>${encoded}</code></pre>`,
     `<code>${encoded}</code>`,
     equation('real + equation'),
@@ -151,10 +160,20 @@ test('treats protocol-looking text in all four code kinds as code while finding 
 
   const text = markdownToSearchText(markdown);
 
-  assert.equal(
-    text.match(/data-feishu-equation-source="QQ"/g)?.length,
-    4,
-  );
+  for (const visibleCodeFragment of [
+    exactEquation,
+    exactHeading,
+    exactSearchUi,
+    nearEquation,
+    nearHeading,
+    nearSearchUi,
+  ]) {
+    assert.equal(
+      text.split(visibleCodeFragment).length - 1,
+      4,
+      visibleCodeFragment,
+    );
+  }
   assert.equal(text.match(/real \+ equation/g)?.length, 1);
   assert.doesNotMatch(text, /https?|private\.example|\/path/);
 });
