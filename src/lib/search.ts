@@ -19,9 +19,13 @@ const URL_TERMINATORS = new Set([
   '；',
   '：',
   '、',
-  '\uE000',
-  '\uE001',
 ]);
+
+const PRESERVATION_MARKER_RANGES = [
+  [0xe000, 0xf8ff],
+  [0xf0000, 0xffffd],
+  [0x100000, 0x10fffd],
+] as const;
 
 const SEARCH_WEIGHTS = {
   titleExact: 120,
@@ -80,6 +84,7 @@ function findBareUrlEnd(
   value: string,
   start: number,
   schemeLength: number,
+  preservationMarker: string,
 ): number {
   let parenthesisDepth = 0;
   let index = start + schemeLength;
@@ -87,7 +92,11 @@ function findBareUrlEnd(
   while (index < value.length) {
     const character = value[index];
 
-    if (/\s/u.test(character) || URL_TERMINATORS.has(character)) {
+    if (
+      /\s/u.test(character) ||
+      URL_TERMINATORS.has(character) ||
+      isPreservationTokenAt(value, index, preservationMarker)
+    ) {
       break;
     }
 
@@ -107,7 +116,19 @@ function findBareUrlEnd(
   return index;
 }
 
-function removeUrls(value: string): string {
+function isPreservationTokenAt(
+  value: string,
+  start: number,
+  marker: string,
+): boolean {
+  if (!value.startsWith(marker, start)) return false;
+  let index = start + marker.length;
+  const digitsStart = index;
+  while (/[0-9]/u.test(value[index] ?? '')) index += 1;
+  return index > digitsStart && value.startsWith(marker, index);
+}
+
+function removeUrls(value: string, preservationMarker: string): string {
   let result = '';
   let index = 0;
 
@@ -116,7 +137,12 @@ function removeUrls(value: string): string {
       const schemeLength = getUrlSchemeLength(value, index + 1);
 
       if (schemeLength > 0) {
-        const urlEnd = findBareUrlEnd(value, index + 1, schemeLength);
+        const urlEnd = findBareUrlEnd(
+          value,
+          index + 1,
+          schemeLength,
+          preservationMarker,
+        );
 
         if (value[urlEnd] === '>') {
           result += ' ';
@@ -131,7 +157,12 @@ function removeUrls(value: string): string {
 
     if (schemeLength > 0 && !/[a-z0-9_]/iu.test(previousCharacter)) {
       result += ' ';
-      index = findBareUrlEnd(value, index, schemeLength);
+      index = findBareUrlEnd(
+        value,
+        index,
+        schemeLength,
+        preservationMarker,
+      );
       continue;
     }
 
@@ -437,27 +468,52 @@ function normalizeMarkdownCodeSpanContent(content: string): string {
     : singleLineCode;
 }
 
+function selectPreservationMarker(normalized: string): string {
+  const usedCodePoints = new Set<number>();
+  const authorDerivedValues = [
+    normalized,
+    decodeFeishuHtmlEntities(normalized),
+    decodeFeishuHtmlEntities(removeHtmlMarkup(normalized)),
+  ];
+
+  for (const value of authorDerivedValues) {
+    for (const character of value) {
+      const codePoint = character.codePointAt(0);
+      if (codePoint !== undefined) usedCodePoints.add(codePoint);
+    }
+  }
+
+  for (const [start, end] of PRESERVATION_MARKER_RANGES) {
+    for (let codePoint = start; codePoint <= end; codePoint += 1) {
+      if (!usedCodePoints.has(codePoint)) return String.fromCodePoint(codePoint);
+    }
+  }
+
+  throw new Error('Search preservation token marker space exhausted.');
+}
+
 export function markdownToSearchText(markdown: string): string {
   const preservedSegments: Array<{
     value: string;
     phase: PreservedPhase;
   }> = [];
+  const normalized = markdown.normalize('NFKC').replace(/\r\n?/gu, '\n');
+  const preservationMarker = selectPreservationMarker(normalized);
   const preserve: PreserveText = (
     value,
     { padded = true, phase = 'final' } = {},
   ) => {
-    const token = `\uE000${preservedSegments.length}\uE001`;
+    const token = `${preservationMarker}${preservedSegments.length}${preservationMarker}`;
     preservedSegments.push({ value, phase });
     return padded ? ` ${token} ` : token;
   };
 
-  const normalized = markdown.normalize('NFKC').replace(/\r\n?/gu, '\n');
   const transformed = transformFeishuMarkup(normalized, {
     code: ({ kind, content }) => {
       const visibleCode = kind === 'markdown-code-span'
         ? normalizeMarkdownCodeSpanContent(content)
         : content;
-      return preserve(removeUrls(visibleCode));
+      return preserve(removeUrls(visibleCode, preservationMarker));
     },
     equation: ({ source }) => preserve(source.normalize('NFKC')),
     searchUi: () => ' ',
@@ -467,7 +523,7 @@ export function markdownToSearchText(markdown: string): string {
     /\\([\\`*{}[\]()#+\-.!_>~|])/gu,
     (_match, character: string) => preserve(character),
   );
-  text = removeUrls(text);
+  text = removeUrls(text, preservationMarker);
 
   text = removeReferenceDefinitions(text);
   text = replaceInlineLinkTargets(text);
@@ -499,8 +555,8 @@ export function markdownToSearchText(markdown: string): string {
   text = text.replace(/[\[\]|]/gu, ' ');
 
   const restorePhase = (value: string, phase: PreservedPhase): string =>
-    value.replace(
-      /\uE000(\d+)\uE001/gu,
+    value.replaceAll(
+      new RegExp(`${preservationMarker}(\\d+)${preservationMarker}`, 'gu'),
       (token, segmentIndex: string) => {
         const segment = preservedSegments[Number.parseInt(segmentIndex, 10)];
         return segment?.phase === phase ? segment.value : token;
@@ -508,7 +564,7 @@ export function markdownToSearchText(markdown: string): string {
     );
 
   text = restorePhase(text, 'literal');
-  text = removeUrls(text);
+  text = removeUrls(text, preservationMarker);
   text = restorePhase(text, 'final');
 
   return text.replace(/\s+/gu, ' ').trim().slice(0, MAX_SEARCH_TEXT_LENGTH);

@@ -237,6 +237,48 @@ test('preserves legacy Markdown inline-code whitespace normalization', () => {
   );
 });
 
+test('keeps author token-shaped private-use text distinct from preserved code', () => {
+  const authorToken = '\uE0000\uE001';
+
+  assert.equal(
+    markdownToSearchText(`${authorToken} \`SAFE\``),
+    `${authorToken} SAFE`,
+  );
+});
+
+test('does not let author token-shaped private-use text terminate URL removal', () => {
+  const authorToken = '\uE0000\uE001';
+
+  assert.equal(
+    markdownToSearchText(`https://${authorToken}private.example/path \`SAFE\``),
+    'SAFE',
+  );
+});
+
+test('does not treat an unknown private-use token index as a URL terminator', () => {
+  const unknownToken = '\uE000999\uE001';
+
+  assert.equal(
+    markdownToSearchText(`https://${unknownToken}private.example/path \`SAFE\``),
+    'SAFE',
+  );
+});
+
+test('avoids token markers reconstructed through entities and empty comments', () => {
+  const occupiedBmpMarkers = Array.from(
+    { length: 0xf8ff - 0xe000 + 1 },
+    (_value, index) => String.fromCodePoint(0xe000 + index),
+  ).join('');
+  const supplementaryMarker = String.fromCodePoint(0xf0000);
+  const encodedMarker = '&#xDB80;<!---->&#xDC00;';
+  const encodedToken = `${encodedMarker}0${encodedMarker}`;
+
+  assert.equal(
+    markdownToSearchText(`${occupiedBmpMarkers}${encodedToken} \`SAFE\``),
+    `${occupiedBmpMarkers}${supplementaryMarker}0${supplementaryMarker} SAFE`,
+  );
+});
+
 test('markdownToSearchText removes balanced-parenthesis bare URLs and autolinks completely', () => {
   const markdown = `
 前 https://internal.example/docs_(bare_secret)/view?token=top_secret 后
