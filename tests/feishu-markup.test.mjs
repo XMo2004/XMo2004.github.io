@@ -113,6 +113,50 @@ test('does not pair an unmatched code-span opener with a tick inside HTML code',
   assert.deepEqual(equations.map(({ source: value }) => value), ['after HTML code']);
 });
 
+test('does not pair an unmatched code-span opener with a tick inside an equation subtree', () => {
+  const formula = equation(
+    'soft opaque equation',
+    'inline',
+    '<span class="katex">body ` tick</span>',
+  );
+  const source = `\` ordinary opener ${formula}`;
+  const { result, codes, equations } = collect(source);
+
+  assert.match(result.value, /^` ordinary opener \[equation/u);
+  assert.deepEqual(codes, []);
+  assert.deepEqual(equations.map(({ source: value }) => value), ['soft opaque equation']);
+});
+
+test('keeps a complete equation literal when a real code span encloses it', () => {
+  const formula = equation(
+    'literal equation',
+    'inline',
+    '<span class="katex">body ` tick</span>',
+  );
+  const { result, codes, equations } = collect(`\`${formula}\``);
+
+  assert.equal(result.mode, 'markdown');
+  assert.deepEqual(codes.map(({ kind, raw }) => [kind, raw]), [
+    ['markdown-code-span', `\`${formula}\``],
+  ]);
+  assert.deepEqual(equations, []);
+});
+
+test('prefers a Markdown code span that contains an incomplete or complete HTML code tag', () => {
+  const cases = [
+    '`<code>`',
+    '`<code>x</code>`',
+    '`<code>x ` internal tick</code>`',
+  ];
+  for (const source of cases) {
+    const { codes, equations } = collect(source);
+    assert.deepEqual(codes.map(({ kind, raw }) => [kind, raw]), [
+      ['markdown-code-span', source],
+    ]);
+    assert.deepEqual(equations, []);
+  }
+});
+
 test('scans controlled HTML code, pre/code once, void tags, quoted greater-than, formula, UI, and headings', () => {
   const source = controlled([
     '<p title="1 > 0">before<img src="x"><hr></p>',
@@ -356,6 +400,19 @@ test('rejects a multiline unterminated protocol candidate in Markdown prose', ()
   assertInvalid(
     '<span\n class="feishu-equation feishu-equation--inline"\n data-feishu-equation-source="eA"',
   );
+});
+
+test('keeps protocol words in ordinary less-than prose literal', () => {
+  for (const source of [
+    '1 < 2 and feishu-equation is prose',
+    '<not-a-tag\nplain feishu-document prose',
+  ]) {
+    assert.deepEqual(transformFeishuMarkup(source), {
+      value: source,
+      mode: 'markdown',
+      headings: undefined,
+    });
+  }
 });
 
 test('rejects repeated or nested roots and non-whitespace outside the root', () => {

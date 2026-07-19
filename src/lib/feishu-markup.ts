@@ -84,7 +84,8 @@ const VOID_TAGS = new Set([
   'link', 'meta', 'param', 'source', 'track', 'wbr',
 ]);
 
-const MALFORMED_PROTOCOL_TRACE = /(?:data-feishu-(?:equation|heading|search)|feishu-(?:document|equation|heading|source-synced__label))/iu;
+const MALFORMED_TAG_PREFIX = /^<\s*\/?\s*[a-z][a-z0-9:-]*(?:\s|\/?>|$)/iu;
+const MALFORMED_PROTOCOL_ATTRIBUTE_TRACE = /(?:\bdata-feishu-(?:equation|heading|search)[a-z0-9_-]*\b|\b(?:class|id)\s*=\s*(?:"[^"]*feishu-(?:document|equation|heading|source-synced__label)[^"]*"|'[^']*feishu-(?:document|equation|heading|source-synced__label)[^']*'|[^\s>]*feishu-(?:document|equation|heading|source-synced__label)))/iu;
 
 function invalidMarkup(detail?: string): never {
   const suffix = detail === undefined ? '' : ` ${detail}`;
@@ -548,45 +549,108 @@ function markdownCodeSpanAt(
   };
 }
 
-interface OpaqueMarkdownRegion {
+interface MarkdownDelimiterRegion {
   start: number;
   end: number;
+  hard: boolean;
 }
 
-function collectOpaqueMarkdownRegions(source: string): readonly OpaqueMarkdownRegion[] {
-  const regions: OpaqueMarkdownRegion[] = [];
+function collectMarkdownFenceRegions(source: string): readonly MarkdownDelimiterRegion[] {
+  const regions: MarkdownDelimiterRegion[] = [];
   let index = 0;
   while (index < source.length) {
     const fence = markdownFenceAt(source, index);
     if (fence !== undefined) {
-      regions.push({ start: index, end: fence.end });
+      regions.push({ start: index, end: fence.end, hard: true });
       index = fence.end;
       continue;
     }
+    index += 1;
+  }
+  return regions;
+}
 
+interface MarkdownDiscoveryEntry {
+  name: string;
+  start: number;
+  soft: boolean;
+}
+
+function collectMarkdownSoftRegions(
+  source: string,
+  fenceRegions: readonly MarkdownDelimiterRegion[],
+): readonly MarkdownDelimiterRegion[] {
+  const discovered: MarkdownDelimiterRegion[] = [];
+  const stack: MarkdownDiscoveryEntry[] = [];
+  let fenceIndex = 0;
+  let index = 0;
+
+  while (index < source.length) {
+    const fence = fenceRegions[fenceIndex];
+    if (fence !== undefined && index === fence.start) {
+      stack.length = 0;
+      index = fence.end;
+      fenceIndex += 1;
+      continue;
+    }
     if (source[index] !== '<') {
       index += 1;
       continue;
     }
     const token = parseTag(source, index);
-    if (
-      token !== undefined && token.kind === 'open' &&
-      (token.name === 'pre' || token.name === 'code') &&
-      protocolKind(token) === undefined
-    ) {
-      const region = findElementRegion(source, token, false);
-      regions.push({ start: index, end: region.end });
-      index = region.end;
+    if (token === undefined) {
+      index += 1;
       continue;
     }
-    index = token?.end ?? index + 1;
+    if (token.kind === 'comment') {
+      index = token.end;
+      continue;
+    }
+    if (token.kind === 'close') {
+      const entry = stack.at(-1);
+      if (entry?.name === token.name) {
+        stack.pop();
+        if (entry.soft) {
+          discovered.push({ start: entry.start, end: token.end, hard: false });
+        }
+      } else {
+        stack.length = 0;
+      }
+    } else if (!token.selfClosing && !VOID_TAGS.has(token.name)) {
+      stack.push({
+        name: token.name,
+        start: token.start,
+        soft:
+          token.name === 'pre' || token.name === 'code' ||
+          protocolKind(token) !== undefined,
+      });
+    }
+    index = token.end;
   }
-  return regions;
+
+  discovered.sort((left, right) =>
+    left.start - right.start || right.end - left.end);
+  const outermost: MarkdownDelimiterRegion[] = [];
+  for (const region of discovered) {
+    const previous = outermost.at(-1);
+    if (
+      previous !== undefined && region.start >= previous.start &&
+      region.end <= previous.end
+    ) continue;
+    outermost.push(region);
+  }
+  return outermost;
+}
+
+function collectMarkdownDelimiterRegions(source: string): readonly MarkdownDelimiterRegion[] {
+  const fences = collectMarkdownFenceRegions(source);
+  const soft = collectMarkdownSoftRegions(source, fences);
+  return [...fences, ...soft].sort((left, right) => left.start - right.start);
 }
 
 function collectMarkdownCodeSpanClosings(
   source: string,
-  opaqueRegions: readonly OpaqueMarkdownRegion[],
+  regions: readonly MarkdownDelimiterRegion[],
 ): ReadonlyMap<number, number> {
   const closingByOpening = new Map<number, number>();
   const previousByLength = new Map<number, number>();
@@ -594,9 +658,9 @@ function collectMarkdownCodeSpanClosings(
   let index = 0;
 
   while (index < source.length) {
-    const region = opaqueRegions[regionIndex];
+    const region = regions[regionIndex];
     if (region !== undefined && index === region.start) {
-      previousByLength.clear();
+      if (region.hard) previousByLength.clear();
       index = region.end;
       regionIndex += 1;
       continue;
@@ -621,8 +685,8 @@ function scanMarkdown(
   handlers: FeishuMarkupHandlers,
 ): FeishuMarkupResult {
   const replacements: Replacement[] = [];
-  const opaqueRegions = collectOpaqueMarkdownRegions(source);
-  const codeSpanClosings = collectMarkdownCodeSpanClosings(source, opaqueRegions);
+  const delimiterRegions = collectMarkdownDelimiterRegions(source);
+  const codeSpanClosings = collectMarkdownCodeSpanClosings(source, delimiterRegions);
   let index = 0;
 
   while (index < source.length) {
@@ -666,7 +730,10 @@ function scanMarkdown(
     if (token === undefined) {
       const nextAngle = source.indexOf('<', index + 1);
       const suspect = source.slice(index, nextAngle === -1 ? source.length : nextAngle);
-      if (MALFORMED_PROTOCOL_TRACE.test(suspect)) invalidMarkup();
+      if (
+        MALFORMED_TAG_PREFIX.test(suspect) &&
+        MALFORMED_PROTOCOL_ATTRIBUTE_TRACE.test(suspect)
+      ) invalidMarkup();
       index += 1;
       continue;
     }
