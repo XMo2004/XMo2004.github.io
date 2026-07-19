@@ -24,7 +24,12 @@ const classes = [
   <ul class:list={classes} aria-label="文章标签">
     {tags.map((tag) => (
       <li>
-        <a href={`/tags/${normalizeTag(tag)}/`}>{tag}</a>
+        <a
+          class="taxonomy-pill taxonomy-pill--tag"
+          href={`/tags/${normalizeTag(tag)}/`}
+        >
+          {tag}
+        </a>
       </li>
     ))}
   </ul>
