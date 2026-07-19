@@ -205,7 +205,7 @@ pre {
 
 code {
   padding: 0.1em 0.3em;
-  border: 1px solid var(--line);
+  border: 0;
   border-radius: var(--radius-sm);
   background: var(--surface);
   font-size: 0.9em;
@@ -216,7 +216,7 @@ pre {
   margin-block: var(--space-6);
   padding: var(--space-5);
   overflow-x: auto;
-  border: 1px solid var(--line);
+  border: 0;
   border-radius: var(--radius-md);
   background: var(--surface);
   line-height: 1.6;
@@ -973,18 +973,15 @@ button {
 .card,
 .post-card {
   padding: var(--space-6);
-  border: 1px solid var(--line);
+  border: 0;
   border-radius: var(--radius-md);
   background: var(--surface);
   box-shadow: var(--shadow-soft);
-  transition:
-    border-color var(--duration-fast) var(--ease-standard),
-    transform var(--duration-fast) var(--ease-standard);
+  transition: transform var(--duration-fast) var(--ease-standard);
 }
 
 .card:hover,
 .post-card:hover {
-  border-color: var(--moss);
   transform: translateY(-2px);
 }
 
@@ -1012,8 +1009,9 @@ button {
   min-height: var(--taxonomy-pill-height);
   display: inline-flex;
   align-items: center;
-  border: 1px solid var(--line);
+  border: 0;
   border-radius: 999px;
+  background: var(--paper-interactive);
   text-decoration: none;
 }
 
@@ -1043,7 +1041,6 @@ button {
 }
 
 .tag-list a:hover {
-  border-color: var(--moss);
   background: var(--paper);
   color: var(--ink);
 }
@@ -1363,7 +1360,7 @@ button {
 .post-card__cover {
   min-width: 0;
   min-height: 13.5rem;
-  border-inline-end: 1px solid var(--line);
+  border-inline-end: 0;
   background: var(--paper);
 }
 
@@ -1444,7 +1441,6 @@ button {
 }
 
 .post-card:has(.post-card__title:focus-visible) {
-  border-color: var(--focus-ring);
   box-shadow: 0 0 0 0.1875rem color-mix(in srgb, var(--focus-ring) 28%, transparent);
 }
 
@@ -1452,7 +1448,8 @@ button {
   margin: 0;
   padding: 0;
   display: grid;
-  border-top: 1px solid var(--line);
+  gap: var(--space-1);
+  border-top: 0;
   list-style: none;
 }
 
@@ -1463,15 +1460,16 @@ button {
 
 .post-row {
   min-width: 0;
-  padding: var(--space-4) 0 var(--space-4) var(--space-3);
+  padding: var(--space-4) var(--space-3);
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   align-items: center;
   gap: var(--space-5);
-  border-bottom: 1px solid var(--line);
-  border-inline-start: 0.125rem solid transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
   transition:
-    border-color var(--duration-fast) var(--ease-standard),
+    background-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard),
     transform var(--duration-fast) var(--ease-standard);
 }
 
@@ -1480,12 +1478,12 @@ button {
 }
 
 .post-row:hover {
-  border-inline-start-color: var(--terracotta);
+  background: var(--paper-interactive);
   transform: translate3d(0.125rem, 0, 0);
 }
 
 .post-row:focus-within {
-  border-inline-start-color: var(--focus-ring);
+  background: var(--paper-interactive);
 }
 
 .post-row__cover {
@@ -1587,9 +1585,9 @@ button {
 .empty-state {
   margin: 0;
   padding: var(--space-8);
-  border: 1px dashed var(--line);
+  border: 0;
   border-radius: var(--radius-md);
-  background: var(--surface);
+  background: var(--paper-soft);
   color: var(--muted);
   text-align: center;
 }
@@ -1638,13 +1636,15 @@ button {
   grid-template-columns: minmax(0, 1fr) auto;
   align-content: center;
   gap: var(--space-1) var(--space-4);
-  border: 1px solid var(--line);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--paper-soft);
   color: var(--ink);
   text-decoration: none;
 }
 
 .taxonomy-directory__link:hover {
-  border-color: var(--moss);
+  background: var(--paper-interactive);
   color: var(--accent-hover);
 }
 
@@ -1695,9 +1695,9 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
-  border: 1px solid var(--line);
+  border: 0;
   border-radius: var(--radius-sm);
-  background: var(--surface);
+  background: var(--paper-soft);
   color: var(--ink);
   font-family: var(--font-serif);
   font-size: 1.15rem;
@@ -1706,7 +1706,7 @@ button {
 }
 
 .tag-directory__link:hover {
-  border-color: var(--moss);
+  background: var(--paper-interactive);
   color: var(--accent-hover);
 }
 
@@ -1756,7 +1756,7 @@ button {
 
 .about-page__grid section {
   padding-block-start: var(--space-4);
-  border-top: 1px solid var(--line);
+  border-top: 0;
 }
 
 .about-page__grid p:last-child {
@@ -1773,10 +1773,10 @@ button {
 .about-page__principle {
   margin-block-start: var(--space-8);
   padding: clamp(var(--space-5), 4vw, var(--space-8));
-  border: 1px solid var(--line);
+  border: 0;
   border-radius: var(--radius-md);
-  background: var(--surface);
-  box-shadow: var(--shadow-soft);
+  background: var(--paper-soft);
+  box-shadow: none;
 }
 
 .about-page__principle h2 {

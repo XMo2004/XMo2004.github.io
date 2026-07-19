@@ -1221,7 +1221,7 @@ test('global layout keeps dense editorial scanning without shrinking reading tex
   assert.match(styles, /\.post-card__cover\s*\{[^}]*min-height:\s*13\.5rem;[^}]*\}/s);
   assert.match(
     styles,
-    /\.post-row\s*\{(?=[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);)(?=[^}]*border-bottom:\s*1px\s+solid\s+var\(--line\);)[^}]*\}/s,
+    /\.post-row\s*\{(?=[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\);)(?=[^}]*border:\s*0;)(?=[^}]*border-radius:\s*var\(--radius-sm\);)[^}]*\}/s,
   );
   assert.match(
     styles,
@@ -1266,6 +1266,74 @@ test('global layout keeps dense editorial scanning without shrinking reading tex
   assert.doesNotMatch(styles, /\.article-meta\s*\{[^}]*flex-direction:\s*column;/s);
   assert.match(rowSource, /post-row__stretched-link/);
   assert.match(rowSource, /post-row__taxonomy-link/);
+});
+
+test('cards, indexes, directories, and code use borderless hierarchy', async () => {
+  const styles = await readSource('src/styles/global.css');
+
+  for (const target of [
+    '.post-card',
+    '.post-card__cover',
+    '.post-row-list',
+    '.post-row',
+    '.empty-state',
+    '.taxonomy-pill',
+    '.taxonomy-directory__link',
+    '.tag-directory__link',
+    '.about-page__grid section',
+    '.about-page__principle',
+    'code',
+    'pre',
+  ]) {
+    assertNoVisibleBorder(exactSelectorDeclarationsAt(styles, target), target);
+  }
+
+  const postCard = exactSelectorDeclarationsAt(styles, '.post-card');
+  assert.equal(postCard.background, 'var(--surface)');
+  assert.equal(postCard['box-shadow'], 'var(--shadow-soft)');
+  assert.equal(
+    exactSelectorDeclarationsAt(styles, '.empty-state').background,
+    'var(--paper-soft)',
+  );
+  assert.equal(
+    exactSelectorDeclarationsAt(styles, '.taxonomy-pill').background,
+    'var(--paper-interactive)',
+  );
+
+  for (const target of [
+    '.taxonomy-directory__link',
+    '.tag-directory__link',
+    '.about-page__principle',
+  ]) {
+    assert.equal(
+      exactSelectorDeclarationsAt(styles, target).background,
+      'var(--paper-soft)',
+    );
+  }
+  assert.equal(
+    exactSelectorDeclarationsAt(styles, '.about-page__principle')['box-shadow'],
+    'none',
+  );
+
+  for (const target of [
+    '.post-row:hover',
+    '.post-row:focus-within',
+    '.taxonomy-directory__link:hover',
+    '.tag-directory__link:hover',
+  ]) {
+    assert.equal(
+      exactSelectorDeclarationsAt(styles, target).background,
+      'var(--paper-interactive)',
+    );
+  }
+
+  assert.match(
+    exactSelectorDeclarationsAt(
+      styles,
+      '.post-card:has(.post-card__title:focus-visible)',
+    )['box-shadow'],
+    /^0 0 0 0\.1875rem .*var\(--focus-ring\)/,
+  );
 });
 
 test('global shell and home sections use soft borderless surfaces', async () => {
