@@ -1522,3 +1522,36 @@ test('article routes never expose an internal Feishu source URL', async () => {
 
   assert.doesNotMatch(`${routeSource}\n${schemaSource}`, /sourceUrl|feishuRecordId/);
 });
+
+test('article routes use shared controlled headings without adding a client runtime', async () => {
+  const [routeSource, layoutSource, feishuMarkupSource] = await Promise.all([
+    readSource('src/pages/posts/[...id].astro'),
+    readSource('src/layouts/PostLayout.astro'),
+    readSource('src/lib/feishu-markup.ts'),
+  ]);
+
+  assert.match(routeSource, /import\s+\{\s*extractFeishuHeadings\s*\}\s+from\s+['"]\.\.\/\.\.\/lib\/feishu-headings(?:\.ts)?['"]/);
+  assert.match(
+    routeSource,
+    /const\s+controlledHeadings\s*=\s*extractFeishuHeadings\(post\.body\);/,
+  );
+  assert.match(
+    routeSource,
+    /const\s+articleHeadings\s*=\s*controlledHeadings\s*\?\?\s*headings;/,
+  );
+  assert.match(routeSource, /headings=\{articleHeadings\}/);
+
+  assert.match(
+    layoutSource,
+    /import\s+type\s+\{\s*ArticleHeading\s*\}\s+from\s+['"]\.\.\/lib\/feishu-headings(?:\.ts)?['"]/,
+  );
+  assert.doesNotMatch(layoutSource, /interface\s+ArticleHeading\s*\{/);
+
+  assert.doesNotMatch(`${routeSource}\n${layoutSource}`, /<script\b|\bclient:|renderMathInElement|katex\.render/);
+  assert.doesNotMatch(feishuMarkupSource, /from\s+['"]node:|\bBuffer\b/);
+  assert.match(feishuMarkupSource, /\batob\(/);
+  assert.match(
+    feishuMarkupSource,
+    /new TextDecoder\(['"]utf-8['"],\s*\{\s*fatal:\s*true/,
+  );
+});

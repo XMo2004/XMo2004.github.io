@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { Buffer } from 'node:buffer';
 import test from 'node:test';
 
 import {
@@ -21,6 +22,36 @@ function makeEntry(overrides = {}) {
     searchText: '',
     ...overrides,
   };
+}
+
+function encodeBase64Url(value) {
+  return Buffer.from(value, 'utf8').toString('base64url');
+}
+
+function equation(source, body = '<span class="katex">rendered KaTeX</span>') {
+  return `<span class="feishu-equation feishu-equation--inline" data-feishu-equation-source="${encodeBase64Url(source)}">${body}</span>`;
+}
+
+function controlledDocumentWithEquation(source) {
+  return [
+    '<div class="feishu-document">',
+    '<p>公式 ',
+    equation(
+      source,
+      `<span class="katex"><span class="katex-mathml"><math><semantics><annotation>${source}</annotation></semantics></math></span><span class="katex-html">${source}</span></span>`,
+    ),
+    ' 完成</p>',
+    '<span class="feishu-source-synced__label" data-feishu-search-ui>同步内容</span>',
+    '</div>',
+  ].join('');
+}
+
+function encodeHtmlCode(value) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
 }
 
 test('markdownToSearchText keeps visible text while removing Markdown, HTML, and URL targets', () => {
@@ -71,6 +102,119 @@ const retry = 3;
   assert.doesNotMatch(
     text,
     /https?:|internal\.example|hidden-(?:bare|inline|block)|token|(?:bare|inline|block)-secret/,
+  );
+});
+
+test('indexes each Feishu equation source once and removes container UI', () => {
+  const markdown = controlledDocumentWithEquation('x + y');
+  const text = markdownToSearchText(markdown);
+
+  assert.equal(text.match(/x \+ y/g)?.length, 1);
+  assert.doesNotMatch(text, /katex|MathML|同步内容|feishu-/i);
+});
+
+test('keeps an equation source protected from generic URL cleanup', () => {
+  const source = String.raw`\text{https://formula.example/path}`;
+  const text = markdownToSearchText(controlledDocumentWithEquation(source));
+
+  assert.equal(
+    (text.match(/\\text\{https:\/\/formula\.example\/path\}/g) ?? []).length,
+    1,
+  );
+});
+
+test('keeps controlled visible punctuation while removing its URLs', () => {
+  const markdown = '<u class="feishu-underline">字面 &#42;x&#42; &#95;y&#95; &#96;z&#96; &#91;标签&#93; &#124; https&#58;&#47;&#47;private&#46;example&#47;path 尾</u>';
+  const text = markdownToSearchText(markdown);
+
+  assert.match(text, /字面 \*x\* _y_ `z` \[标签\] \| 尾/);
+  assert.doesNotMatch(text, /https?|private|example|path/);
+});
+
+test('treats protocol-looking text in all four code kinds as code while finding the following equation', () => {
+  const pseudoMarkup = [
+    '<span data-feishu-equation-source="QQ">x</span>',
+    '<h2 id="feishu-heading-9" data-feishu-heading-text="@@">x</h2>',
+    '<span data-feishu-search-ui>同步内容</span>',
+    'https://private.example/path',
+  ].join(' ');
+  const encoded = encodeHtmlCode(pseudoMarkup);
+  const markdown = [
+    '````html',
+    pseudoMarkup,
+    '````',
+    `\`${pseudoMarkup}\``,
+    `<pre><code>${encoded}</code></pre>`,
+    `<code>${encoded}</code>`,
+    equation('real + equation'),
+  ].join('\n');
+
+  const text = markdownToSearchText(markdown);
+
+  assert.equal(
+    text.match(/data-feishu-equation-source="QQ"/g)?.length,
+    4,
+  );
+  assert.equal(text.match(/real \+ equation/g)?.length, 1);
+  assert.doesNotMatch(text, /https?|private\.example|\/path/);
+});
+
+test('rejects malformed Feishu protocols outside code', () => {
+  assert.throws(
+    () => markdownToSearchText(
+      '<span class="feishu-equation feishu-equation--inline" data-feishu-equation-source="@@">x</span>',
+    ),
+    /Invalid controlled Feishu markup/,
+  );
+});
+
+test('keeps equation and code boundaries searchable without separating adjacent styled text', () => {
+  const markdown = [
+    `<p>前文${equation('x + y')}后文</p>`,
+    '<p><u>飞</u><strong>书</strong></p>',
+    '<p>前文`code`后文</p>',
+  ].join('\n');
+
+  assert.equal(
+    markdownToSearchText(markdown),
+    '前文 x + y 后文 飞书 前文 code 后文',
+  );
+});
+
+test('removes URLs reconstructed by entities, comments, and phrasing wrappers', () => {
+  const formulaSource = String.raw`\text{https://formula.example/path}`;
+  const markdown = [
+    '<div class="feishu-document">',
+    '<p>实体 https&#58;&#47;&#47;private&#46;example&#47;entity 尾</p>',
+    '<p>注释 https<!---->://private.example/comment 尾</p>',
+    '<p>样式 <span>https</span><u>://private.example/wrapper</u> 尾</p>',
+    `<p>公式 ${equation(formulaSource)} 完成</p>`,
+    '</div>',
+  ].join('');
+
+  const text = markdownToSearchText(markdown);
+
+  assert.doesNotMatch(text, /private|entity|comment|wrapper/);
+  assert.equal(
+    (text.match(/\\text\{https:\/\/formula\.example\/path\}/g) ?? []).length,
+    1,
+  );
+});
+
+test('removes raw HTML subtrees and keeps block boundaries visible', () => {
+  const markdown = [
+    '<p>前</p><script>https://private.example/script secretScript</script><p>后</p>',
+    '<style>.private { color: red }</style>',
+    '<template>secretTemplate</template>',
+  ].join('');
+
+  assert.equal(markdownToSearchText(markdown), '前 后');
+});
+
+test('preserves legacy Markdown inline-code whitespace normalization', () => {
+  assert.equal(
+    markdownToSearchText('前``  code\n value  ``后'),
+    '前 code value 后',
   );
 });
 

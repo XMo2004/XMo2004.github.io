@@ -3,6 +3,7 @@ import PostSeriesNavigation from '../components/PostSeriesNavigation.astro';
 import RelatedPostList from '../components/RelatedPostList.astro';
 import TagList from '../components/TagList.astro';
 import { SITE } from '../config/site';
+import type { ArticleHeading } from '../lib/feishu-headings';
 import {
   getCategoryHref,
   getColumnHref,
@@ -11,12 +12,6 @@ import {
   type SeriesNavigation,
 } from '../lib/posts';
 import BaseLayout from './BaseLayout.astro';
-
-interface ArticleHeading {
-  depth: number;
-  slug: string;
-  text: string;
-}
 
 interface Props {
   title: string;

@@ -1,4 +1,8 @@
 import { estimateReadingMinutes, getPostHref } from './posts.ts';
+import {
+  decodeFeishuHtmlEntities,
+  transformFeishuMarkup,
+} from './feishu-markup.ts';
 
 const MAX_SEARCH_TEXT_LENGTH = 12_000;
 const URL_SCHEMES = ['https://', 'http://', 'mailto:'] as const;
@@ -15,6 +19,8 @@ const URL_TERMINATORS = new Set([
   '；',
   '：',
   '、',
+  '\uE000',
+  '\uE001',
 ]);
 
 const SEARCH_WEIGHTS = {
@@ -186,6 +192,11 @@ function findClosingRawElement(
 
 function removeHtmlMarkup(value: string): string {
   const rawElementNames = new Set(['script', 'style', 'template']);
+  const phrasingElementNames = new Set([
+    'a', 'abbr', 'b', 'bdi', 'bdo', 'cite', 'data', 'del', 'dfn', 'em', 'i',
+    'kbd', 'mark', 'q', 'rp', 'rt', 'ruby', 's', 'samp', 'small', 'span',
+    'strong', 'sub', 'sup', 'time', 'u', 'var', 'wbr',
+  ]);
   const lowerCaseValue = value.toLowerCase();
   let result = '';
   let index = 0;
@@ -193,8 +204,15 @@ function removeHtmlMarkup(value: string): string {
   while (index < value.length) {
     if (value.startsWith('<!--', index)) {
       const commentEnd = value.indexOf('-->', index + 4);
-      index = commentEnd === -1 ? value.length : commentEnd + 3;
-      result += ' ';
+      if (commentEnd === -1) {
+        result += ' ';
+        index = value.length;
+        continue;
+      }
+
+      const comment = value.slice(index, commentEnd + 3);
+      if (comment !== '<!---->') result += ' ';
+      index = commentEnd + 3;
       continue;
     }
 
@@ -249,7 +267,9 @@ function removeHtmlMarkup(value: string): string {
       continue;
     }
 
-    result += ' ';
+    if (tagName === undefined || !phrasingElementNames.has(tagName)) {
+      result += ' ';
+    }
     index = tagEnd + 1;
   }
 
@@ -375,74 +395,85 @@ function findClosingDelimiter(
   return -1;
 }
 
-function decodeHtmlEntities(value: string): string {
-  const namedEntities: Readonly<Record<string, string>> = {
-    amp: '&',
-    apos: "'",
-    gt: '>',
-    lt: '<',
-    nbsp: ' ',
-    quot: '"',
-  };
+type PreservedPhase = 'literal' | 'final';
 
+interface PreserveOptions {
+  padded?: boolean;
+  phase?: PreservedPhase;
+}
+
+type PreserveText = (value: string, options?: PreserveOptions) => string;
+
+function isAsciiPunctuation(value: string): boolean {
+  if (value.length !== 1) return false;
+  const codePoint = value.codePointAt(0) ?? -1;
+  return (
+    (codePoint >= 0x21 && codePoint <= 0x2f) ||
+    (codePoint >= 0x3a && codePoint <= 0x40) ||
+    (codePoint >= 0x5b && codePoint <= 0x60) ||
+    (codePoint >= 0x7b && codePoint <= 0x7e)
+  );
+}
+
+function protectLiteralHtmlEntities(
+  value: string,
+  preserve: PreserveText,
+): string {
   return value.replace(
-    /&(?:#(\d+)|#x([\da-f]+)|([a-z]+));/giu,
-    (entity, decimal: string | undefined, hexadecimal: string | undefined, name: string | undefined) => {
-      const codePoint = decimal === undefined
-        ? hexadecimal === undefined
-          ? undefined
-          : Number.parseInt(hexadecimal, 16)
-        : Number.parseInt(decimal, 10);
-
-      if (codePoint !== undefined) {
-        try {
-          return String.fromCodePoint(codePoint);
-        } catch {
-          return entity;
-        }
-      }
-
-      return namedEntities[name?.toLocaleLowerCase('en-US') ?? ''] ?? entity;
+    /&(?:#\d+|#x[\da-f]+|[a-z]+);/giu,
+    (entity) => {
+      const decoded = decodeFeishuHtmlEntities(entity);
+      return decoded !== entity && isAsciiPunctuation(decoded)
+        ? preserve(decoded, { padded: false, phase: 'literal' })
+        : entity;
     },
   );
 }
 
+function normalizeMarkdownCodeSpanContent(content: string): string {
+  const singleLineCode = content.replace(/\s*\n\s*/gu, ' ');
+  return /^\s[\s\S]*\s$/u.test(singleLineCode) && /\S/u.test(singleLineCode)
+    ? singleLineCode.slice(1, -1)
+    : singleLineCode;
+}
+
 export function markdownToSearchText(markdown: string): string {
-  const preservedSegments: string[] = [];
-  const preserve = (segment: string): string => {
+  const preservedSegments: Array<{
+    value: string;
+    phase: PreservedPhase;
+  }> = [];
+  const preserve: PreserveText = (
+    value,
+    { padded = true, phase = 'final' } = {},
+  ) => {
     const token = `\uE000${preservedSegments.length}\uE001`;
-    preservedSegments.push(segment);
-    return ` ${token} `;
+    preservedSegments.push({ value, phase });
+    return padded ? ` ${token} ` : token;
   };
 
-  let text = markdown
-    .normalize('NFKC')
-    .replace(/\r\n?/gu, '\n');
-  text = removeUrls(text);
-
-  text = text.replace(
-    /^[ \t]{0,3}(`{3,}|~{3,})[^\n]*\n([\s\S]*?)^[ \t]{0,3}\1[ \t]*(?=\n|$)/gmu,
-    (_match, _fence: string, code: string) => preserve(code),
-  );
-  text = text.replace(/^[ \t]{0,3}(?:`{3,}|~{3,})[^\n]*(?=\n|$)/gmu, ' ');
-  text = text.replace(/(`+)([\s\S]*?)\1/gu, (_match, _ticks: string, code: string) => {
-    const singleLineCode = code.replace(/\s*\n\s*/gu, ' ');
-    const visibleCode =
-      /^\s[\s\S]*\s$/u.test(singleLineCode) && /\S/u.test(singleLineCode)
-        ? singleLineCode.slice(1, -1)
-        : singleLineCode;
-
-    return preserve(visibleCode);
+  const normalized = markdown.normalize('NFKC').replace(/\r\n?/gu, '\n');
+  const transformed = transformFeishuMarkup(normalized, {
+    code: ({ kind, content }) => {
+      const visibleCode = kind === 'markdown-code-span'
+        ? normalizeMarkdownCodeSpanContent(content)
+        : content;
+      return preserve(removeUrls(visibleCode));
+    },
+    equation: ({ source }) => preserve(source.normalize('NFKC')),
+    searchUi: () => ' ',
   });
+  let text = transformed.value;
   text = text.replace(
     /\\([\\`*{}[\]()#+\-.!_>~|])/gu,
     (_match, character: string) => preserve(character),
   );
+  text = removeUrls(text);
 
   text = removeReferenceDefinitions(text);
   text = replaceInlineLinkTargets(text);
   text = removeHtmlMarkup(text);
-  text = decodeHtmlEntities(text);
+  text = protectLiteralHtmlEntities(text, preserve);
+  text = decodeFeishuHtmlEntities(text);
 
   text = text.replace(/^[ \t]{0,3}(?:[-*_][ \t]*){3,}$/gmu, ' ');
   text = text.replace(/^[ \t]{0,3}(?:=+|-+)[ \t]*$/gmu, ' ');
@@ -467,9 +498,18 @@ export function markdownToSearchText(markdown: string): string {
   );
   text = text.replace(/[\[\]|]/gu, ' ');
 
-  text = text.replace(/\uE000(\d+)\uE001/gu, (_match, segmentIndex: string) => {
-    return preservedSegments[Number.parseInt(segmentIndex, 10)] ?? '';
-  });
+  const restorePhase = (value: string, phase: PreservedPhase): string =>
+    value.replace(
+      /\uE000(\d+)\uE001/gu,
+      (token, segmentIndex: string) => {
+        const segment = preservedSegments[Number.parseInt(segmentIndex, 10)];
+        return segment?.phase === phase ? segment.value : token;
+      },
+    );
+
+  text = restorePhase(text, 'literal');
+  text = removeUrls(text);
+  text = restorePhase(text, 'final');
 
   return text.replace(/\s+/gu, ' ').trim().slice(0, MAX_SEARCH_TEXT_LENGTH);
 }
