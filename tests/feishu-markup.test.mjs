@@ -89,6 +89,30 @@ test('leaves an unmatched Markdown code-span opener as ordinary text', () => {
   assert.match(result.value, /^ordinary ` opener \[equation/u);
 });
 
+test('does not pair an unmatched code-span opener with a tick inside a fenced block', () => {
+  const source = [
+    '` ordinary opener',
+    '```txt',
+    'fenced ` delimiter',
+    '```',
+    equation('after fence'),
+  ].join('\n');
+  const { result, codes, equations } = collect(source);
+
+  assert.match(result.value, /^` ordinary opener\n/u);
+  assert.deepEqual(codes.map(({ kind }) => kind), ['markdown-fence']);
+  assert.deepEqual(equations.map(({ source: value }) => value), ['after fence']);
+});
+
+test('does not pair an unmatched code-span opener with a tick inside HTML code', () => {
+  const source = `\` ordinary opener <code>HTML \` delimiter</code>${equation('after HTML code')}`;
+  const { result, codes, equations } = collect(source);
+
+  assert.match(result.value, /^` ordinary opener /u);
+  assert.deepEqual(codes.map(({ kind }) => kind), ['html-code']);
+  assert.deepEqual(equations.map(({ source: value }) => value), ['after HTML code']);
+});
+
 test('scans controlled HTML code, pre/code once, void tags, quoted greater-than, formula, UI, and headings', () => {
   const source = controlled([
     '<p title="1 > 0">before<img src="x"><hr></p>',
@@ -144,6 +168,20 @@ test('uses empty handler replacements rather than retaining raw regions', () => 
     code: () => '',
   });
   assert.equal(result.value, '');
+});
+
+test('lets an HTML code handler delete a reconstructed private URL completely', () => {
+  const source = controlled(
+    '<code>before https<!---->&#58;&#47;&#47;private.example/path after</code>',
+  );
+  const result = transformFeishuMarkup(source, {
+    code: ({ content }) => content.replace('https://private.example/path', ''),
+  });
+  assert.equal(
+    result.value,
+    controlled('before  after'),
+  );
+  assert.doesNotMatch(result.value, /https|private|example|path/u);
 });
 
 test('ignores all protocol-shaped tags inside each of the four code region kinds', () => {
@@ -236,7 +274,10 @@ test('rejects partial and near-protocol tags outside code in both modes', () => 
 });
 
 test('allows every near-protocol sample as literal content inside all four code kinds', () => {
-  const invalid = [
+  const protocolSamples = [
+    equation('exact equation'),
+    heading(1, 2, 'exact heading'),
+    ui('exact UI'),
     '<div data-feishu-equation-source="eA">x</div>',
     '<span class="feishu-equation" data-feishu-equation-source="eA">x</span>',
     '<span class="feishu-equation feishu-equation--wide" data-feishu-equation-source="eA">x</span>',
@@ -250,15 +291,28 @@ test('allows every near-protocol sample as literal content inside all four code 
     '<span class="feishu-source-synced__label" data-feishu-search-ui title="x">同步内容</span>',
   ].join('');
   const cases = [
-    `\`\`\`\n${invalid}\n\`\`\``,
-    `\`${invalid}\``,
-    controlled(`<pre><code>${invalid}</code></pre>`),
-    controlled(`<code>${invalid}</code>`),
+    `\`\`\`\n${protocolSamples}\n\`\`\``,
+    `\`${protocolSamples}\``,
+    controlled(`<pre><code>${protocolSamples}</code></pre>`),
+    controlled(`<code>${protocolSamples}</code>`),
   ];
   for (const source of cases) {
-    const { codes } = collect(source);
+    const { result, codes, equations, interfaces } = collect(source);
     assert.equal(codes.length, 1, source);
+    assert.match(codes[0].raw, /feishu-equation--inline/u, source);
+    assert.match(codes[0].raw, /feishu-heading-1/u, source);
+    assert.match(codes[0].raw, /data-feishu-search-ui/u, source);
+    assert.deepEqual(equations, [], source);
+    assert.deepEqual(interfaces, [], source);
+    assert.deepEqual(result.headings, result.mode === 'markdown' ? undefined : [], source);
   }
+});
+
+test('keeps a multiline unterminated protocol candidate literal inside code', () => {
+  const malformed = '<span\n class="feishu-equation feishu-equation--inline"\n data-feishu-equation-source="eA"';
+  const { codes } = collect(`\`\`\`\n${malformed}\n\`\`\``);
+  assert.equal(codes.length, 1);
+  assert.match(codes[0].content, /data-feishu-equation-source/u);
 });
 
 test('rejects heading sequence, duplication, tag-depth mismatch, and malformed Base64URL', () => {
@@ -277,6 +331,31 @@ test('rejects heading sequence, duplication, tag-depth mismatch, and malformed B
 
 test('rejects valid heading protocol outside controlled-document mode', () => {
   assertInvalid(heading(1, 2, '标题'));
+});
+
+test('rejects whitespace immediately after an opening or closing angle bracket', () => {
+  const spacedOpeners = [
+    '< span class="feishu-equation feishu-equation--inline" data-feishu-equation-source="eA">x</span>',
+    '< span class="feishu-source-synced__label" data-feishu-search-ui>x</span>',
+    '< h2 id="feishu-heading-1" data-feishu-heading-text="eA">x</h2>',
+  ];
+  for (const markup of spacedOpeners) {
+    assertInvalid(markup);
+    assertInvalid(controlled(markup));
+  }
+
+  for (const markup of [
+    equation('x').replace('</span>', '</ span>'),
+    ui().replace('</span>', '</ span>'),
+    heading(1, 2, 'x').replace('</h2>', '</ h2>'),
+    '<div class="feishu-document"><p>x</p></ div>',
+  ]) assertInvalid(markup.startsWith('<div class="feishu-document">') ? markup : controlled(markup));
+});
+
+test('rejects a multiline unterminated protocol candidate in Markdown prose', () => {
+  assertInvalid(
+    '<span\n class="feishu-equation feishu-equation--inline"\n data-feishu-equation-source="eA"',
+  );
 });
 
 test('rejects repeated or nested roots and non-whitespace outside the root', () => {

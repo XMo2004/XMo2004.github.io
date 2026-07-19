@@ -84,7 +84,7 @@ const VOID_TAGS = new Set([
   'link', 'meta', 'param', 'source', 'track', 'wbr',
 ]);
 
-const MALFORMED_PROTOCOL_TRACE = /(?:data-feishu-(?:equation|heading|search)|(?:class|id)\s*=\s*["']?[^>\n]*feishu-(?:document|equation|heading|source-synced__label))/iu;
+const MALFORMED_PROTOCOL_TRACE = /(?:data-feishu-(?:equation|heading|search)|feishu-(?:document|equation|heading|source-synced__label))/iu;
 
 function invalidMarkup(detail?: string): never {
   const suffix = detail === undefined ? '' : ` ${detail}`;
@@ -165,7 +165,6 @@ function parseTag(source: string, start: number): HtmlToken | undefined {
     closing = true;
     cursor += 1;
   }
-  while (/\s/u.test(source[cursor] ?? '')) cursor += 1;
 
   const nameStart = cursor;
   if (!/[a-z]/iu.test(source[cursor] ?? '')) return undefined;
@@ -535,30 +534,73 @@ function markdownFenceAt(
 function markdownCodeSpanAt(
   source: string,
   start: number,
-  runsByLength: ReadonlyMap<number, readonly number[]>,
-  runPointers: Map<number, number>,
+  closingByOpening: ReadonlyMap<number, number>,
 ): { end: number; content: string } | undefined {
   if (source[start] !== '`' || isEscaped(source, start)) return undefined;
   let openerEnd = start;
   while (source[openerEnd] === '`') openerEnd += 1;
   const length = openerEnd - start;
-  const runs = runsByLength.get(length);
-  if (runs === undefined) return undefined;
-  let pointer = runPointers.get(length) ?? 0;
-  while (runs[pointer] !== undefined && runs[pointer] < start) pointer += 1;
-  runPointers.set(length, pointer);
-  if (runs[pointer] !== start || runs[pointer + 1] === undefined) return undefined;
-  const closingStart = runs[pointer + 1];
+  const closingStart = closingByOpening.get(start);
+  if (closingStart === undefined) return undefined;
   return {
     end: closingStart + length,
     content: source.slice(openerEnd, closingStart),
   };
 }
 
-function collectBacktickRuns(source: string): ReadonlyMap<number, readonly number[]> {
-  const runs = new Map<number, number[]>();
+interface OpaqueMarkdownRegion {
+  start: number;
+  end: number;
+}
+
+function collectOpaqueMarkdownRegions(source: string): readonly OpaqueMarkdownRegion[] {
+  const regions: OpaqueMarkdownRegion[] = [];
   let index = 0;
   while (index < source.length) {
+    const fence = markdownFenceAt(source, index);
+    if (fence !== undefined) {
+      regions.push({ start: index, end: fence.end });
+      index = fence.end;
+      continue;
+    }
+
+    if (source[index] !== '<') {
+      index += 1;
+      continue;
+    }
+    const token = parseTag(source, index);
+    if (
+      token !== undefined && token.kind === 'open' &&
+      (token.name === 'pre' || token.name === 'code') &&
+      protocolKind(token) === undefined
+    ) {
+      const region = findElementRegion(source, token, false);
+      regions.push({ start: index, end: region.end });
+      index = region.end;
+      continue;
+    }
+    index = token?.end ?? index + 1;
+  }
+  return regions;
+}
+
+function collectMarkdownCodeSpanClosings(
+  source: string,
+  opaqueRegions: readonly OpaqueMarkdownRegion[],
+): ReadonlyMap<number, number> {
+  const closingByOpening = new Map<number, number>();
+  const previousByLength = new Map<number, number>();
+  let regionIndex = 0;
+  let index = 0;
+
+  while (index < source.length) {
+    const region = opaqueRegions[regionIndex];
+    if (region !== undefined && index === region.start) {
+      previousByLength.clear();
+      index = region.end;
+      regionIndex += 1;
+      continue;
+    }
     if (source[index] !== '`') {
       index += 1;
       continue;
@@ -566,11 +608,12 @@ function collectBacktickRuns(source: string): ReadonlyMap<number, readonly numbe
     const start = index;
     while (source[index] === '`') index += 1;
     const length = index - start;
-    const positions = runs.get(length) ?? [];
-    positions.push(start);
-    runs.set(length, positions);
+    const previous = previousByLength.get(length);
+    if (previous !== undefined) closingByOpening.set(previous, start);
+    previousByLength.set(length, start);
   }
-  return runs;
+
+  return closingByOpening;
 }
 
 function scanMarkdown(
@@ -578,8 +621,8 @@ function scanMarkdown(
   handlers: FeishuMarkupHandlers,
 ): FeishuMarkupResult {
   const replacements: Replacement[] = [];
-  const backtickRuns = collectBacktickRuns(source);
-  const backtickRunPointers = new Map<number, number>();
+  const opaqueRegions = collectOpaqueMarkdownRegions(source);
+  const codeSpanClosings = collectMarkdownCodeSpanClosings(source, opaqueRegions);
   let index = 0;
 
   while (index < source.length) {
@@ -599,8 +642,7 @@ function scanMarkdown(
       const codeSpan = markdownCodeSpanAt(
         source,
         index,
-        backtickRuns,
-        backtickRunPointers,
+        codeSpanClosings,
       );
       if (codeSpan !== undefined) {
         const region: FeishuCodeRegion = {
@@ -622,8 +664,8 @@ function scanMarkdown(
     }
     const token = parseTag(source, index);
     if (token === undefined) {
-      const boundary = source.indexOf('\n', index);
-      const suspect = source.slice(index, boundary === -1 ? source.length : boundary);
+      const nextAngle = source.indexOf('<', index + 1);
+      const suspect = source.slice(index, nextAngle === -1 ? source.length : nextAngle);
       if (MALFORMED_PROTOCOL_TRACE.test(suspect)) invalidMarkup();
       index += 1;
       continue;
