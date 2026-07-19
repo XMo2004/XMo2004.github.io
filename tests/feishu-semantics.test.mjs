@@ -700,30 +700,21 @@ test('keeps a sole equation inline through a real table and cell parent chain', 
   assert.equal(result.document.children[0].rows[0][0][0][0].display, 'inline');
 });
 
-test('legacy Markdown rendering rejects equations with a redacted structured issue', () => {
+test('public rendering accepts equations through the safe renderer', () => {
   const privateBlockId = 'block_private_equation';
   const privateEquation = 'private_formula = secret';
   const block = textBlock(privateBlockId, 'page', {
     elements: [equation(privateEquation)],
   });
 
-  assert.throws(
-    () =>
-      blocksToMarkdown([
-        ...blockDocument([privateBlockId], [block]).blocks.values(),
-      ]),
-    (error) => {
-      assert.ok(error instanceof FeishuConversionError);
-      assert.deepEqual(error.issues, [
-        {
-          code: 'unsupported_equation_renderer',
-          message: 'The legacy Markdown renderer does not support equations.',
-        },
-      ]);
-      assert.doesNotMatch(error.message, /block_private_equation|private_formula|secret/);
-      return true;
-    },
+  const result = blocksToMarkdown([
+    ...blockDocument([privateBlockId], [block]).blocks.values(),
+  ]);
+  assert.match(
+    result.markdown,
+    /class="feishu-equation feishu-equation--block"/,
   );
+  assert.match(result.markdown, /data-feishu-equation-source="[A-Za-z0-9_-]+"/);
 });
 
 test('requires exactly one raw rich-element key in public and semantic inputs', () => {

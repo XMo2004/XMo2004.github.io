@@ -115,7 +115,7 @@ function addEmailBreaks(value, breaks) {
   }
 }
 
-function encodeMarkdownEmbeddedText(value) {
+function encodeMarkdownEmbeddedText(value, { htmlText = false } = {}) {
   if (!PUNCTUATION_OR_LINE_BREAK.test(value)) return value;
   const breaks = new Set();
   if (value.includes(':')) addProtocolBreaks(value, breaks);
@@ -127,7 +127,15 @@ function encodeMarkdownEmbeddedText(value) {
     const codePoint = value.codePointAt(index);
     const character = String.fromCodePoint(codePoint);
     if (breaks.has(index)) encoded += '<!---->';
-    if (character === '\r') {
+    if (htmlText && character === '&') {
+      encoded += '&amp;';
+    } else if (htmlText && character === '<') {
+      encoded += '&lt;';
+    } else if (htmlText && character === '>') {
+      encoded += '&gt;';
+    } else if (htmlText && character === '"') {
+      encoded += '&quot;';
+    } else if (character === '\r') {
       encoded += '&#13;';
     } else if (character === '\n') {
       encoded += '&#10;';
@@ -291,19 +299,63 @@ function encodeKatexForMarkdown(html) {
   return encoded;
 }
 
+function unsupportedKind(kind) {
+  throw new Error(`Unsupported Feishu semantic kind: ${String(kind)}`);
+}
+
 function collectEquations(document) {
   if (document.kind !== 'document') unsupportedKind(document.kind);
   const equations = [];
-  for (const block of document.children) {
-    if (block.kind !== 'paragraph') unsupportedKind(block.kind);
-    for (const inline of block.inlines) {
+
+  const visitInlines = (inlines) => {
+    for (const inline of inlines) {
       if (inline.kind === 'equation') {
         equations.push(inline);
       } else if (inline.kind !== 'text') {
         unsupportedKind(inline.kind);
       }
     }
-  }
+  };
+
+  const visitBlocks = (blocks) => {
+    for (const block of blocks) {
+      switch (block.kind) {
+        case 'paragraph':
+        case 'heading':
+        case 'quote':
+          visitInlines(block.inlines);
+          break;
+        case 'listItem':
+          visitInlines(block.inlines);
+          visitBlocks(block.children);
+          break;
+        case 'callout':
+          visitBlocks(block.children);
+          break;
+        case 'sourceSynced':
+          visitInlines(block.title);
+          visitBlocks(block.children);
+          break;
+        case 'table':
+          for (const row of block.rows) {
+            for (const cell of row) {
+              for (const cellBlockInlines of cell) {
+                visitInlines(cellBlockInlines);
+              }
+            }
+          }
+          break;
+        case 'code':
+        case 'divider':
+        case 'image':
+          break;
+        default:
+          unsupportedKind(block.kind);
+      }
+    }
+  };
+
+  visitBlocks(document.children);
   return equations;
 }
 
@@ -364,7 +416,10 @@ function preRenderEquations(document, katexRender, issues) {
       ) {
         totalExceededAt = equation.node.blockId;
       }
-      renderedEquations.set(equation.node, renderedHtml);
+      renderedEquations.set(equation.node, {
+        source: equation.source,
+        html: renderedHtml,
+      });
       if (containsForbiddenTexCommand(equation.source)) {
         issues.push(issue(
           'invalid_equation',
@@ -390,40 +445,393 @@ function preRenderEquations(document, katexRender, issues) {
   return renderedEquations;
 }
 
-function equationHtml(node, renderedHtml) {
-  const source = Buffer.from(node.source.normalize('NFKC'), 'utf8')
+function equationHtml(node, renderedEquation) {
+  const source = Buffer.from(renderedEquation.source, 'utf8')
     .toString('base64url');
   const display = node.display === 'block' ? 'block' : 'inline';
-  return `<span class="feishu-equation feishu-equation--${display}" data-feishu-equation-source="${source}">${encodeKatexForMarkdown(renderedHtml)}</span>`;
+  return `<span class="feishu-equation feishu-equation--${display}" data-feishu-equation-source="${source}">${encodeKatexForMarkdown(renderedEquation.html)}</span>`;
 }
 
-function unsupportedKind(kind) {
-  throw new Error(
-    `Task 6 partial serializer does not support semantic kind: ${String(kind)}`,
+function escapeControlledMarkdownText(value) {
+  return encodeMarkdownEmbeddedText(value, { htmlText: true });
+}
+
+function escapeHtmlText(value) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function escapeHtmlAttribute(value) {
+  return escapeHtmlText(value)
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function escapeControlledHref(value, { markdownTableCell = false } = {}) {
+  let escaped = escapeHtmlAttribute(value);
+  if (markdownTableCell) {
+    escaped = escaped
+      .replace(/\|/g, '&#124;')
+      .replace(/\r/g, '&#13;')
+      .replace(/\n/g, '&#10;');
+  }
+  return escaped;
+}
+
+function requiresControlledInline(node, forceControlled) {
+  return (
+    forceControlled ||
+    node.kind === 'equation' ||
+    node.style.underline ||
+    node.style.textColor !== null ||
+    node.style.backgroundColor !== null
   );
 }
 
-function serializeInline(node, renderedEquations) {
-  if (node.kind === 'text') return node.value;
-  if (node.kind === 'equation') {
-    return equationHtml(node, renderedEquations.get(node));
+function serializeControlledInline(
+  node,
+  renderedEquations,
+  context,
+) {
+  if (node.kind === 'text' && /^\s*$/.test(node.value)) return node.value;
+  if (!['text', 'equation'].includes(node.kind)) unsupportedKind(node.kind);
+
+  const style = node.style;
+  let value = node.kind === 'equation'
+    ? equationHtml(node, renderedEquations.get(node))
+    : escapeControlledMarkdownText(node.value);
+  if (style.inlineCode) value = `<code>${value}</code>`;
+  if (style.bold) value = `<strong>${value}</strong>`;
+  if (style.italic) value = `<em>${value}</em>`;
+  if (style.strikethrough) value = `<del>${value}</del>`;
+  if (style.underline) value = `<u class="feishu-underline">${value}</u>`;
+  const colorClasses = [
+    style.textColor && `feishu-text-color--${style.textColor}`,
+    style.backgroundColor &&
+      `feishu-text-background--${style.backgroundColor}`,
+  ].filter(Boolean).join(' ');
+  if (colorClasses) value = `<span class="${colorClasses}">${value}</span>`;
+  if (style.href) {
+    value = `<a class="feishu-link" href="${escapeControlledHref(style.href, context)}">${value}</a>`;
   }
-  return unsupportedKind(node.kind);
+  return value;
 }
 
-function serializeBlock(node, renderedEquations) {
-  if (node.kind !== 'paragraph') return unsupportedKind(node.kind);
-  return node.inlines.map((inline) =>
-    serializeInline(inline, renderedEquations)).join('');
+function escapeMarkdown(value) {
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/([!"#$%&'()*+,\-./:;<=>?@\[\]^_`{|}~])/g, '\\$1');
+}
+
+function maxBacktickRun(value) {
+  return Math.max(0, ...(value.match(/`+/g) ?? []).map((run) => run.length));
+}
+
+function inlineCode(value) {
+  if (value.length === 0 || /^\s+$/.test(value)) return value;
+  const fence = '`'.repeat(Math.max(1, maxBacktickRun(value) + 1));
+  const padding = /^\s|\s$|^`|`$/.test(value) ? ' ' : '';
+  return `${fence}${padding}${value}${padding}${fence}`;
+}
+
+function tableInlineCode(value) {
+  const escaped = value
+    .replace(/&/g, '&amp;')
+    .replace(/\\/g, '&#92;')
+    .replace(/\|/g, '&#124;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  return `<code>${escaped}</code>`;
+}
+
+function protectLeadingIndentation(value) {
+  return value.replace(/^[ \t]+/gm, (indentation) => {
+    if (!indentation.includes('\t') && indentation.length < 4) {
+      return indentation;
+    }
+    return [...indentation]
+      .map((character) => character === '\t' ? '&nbsp;'.repeat(4) : '&nbsp;')
+      .join('');
+  });
+}
+
+function escapeTablePipes(value) {
+  let escaped = '';
+  let precedingBackslashes = 0;
+  for (const character of value) {
+    if (character === '\\') {
+      escaped += character;
+      precedingBackslashes += 1;
+      continue;
+    }
+    if (character === '|' && precedingBackslashes % 2 === 0) escaped += '\\';
+    escaped += character;
+    precedingBackslashes = 0;
+  }
+  return escaped;
+}
+
+function codeFence(value) {
+  return '`'.repeat(Math.max(3, maxBacktickRun(value) + 1));
+}
+
+function indentBlock(value, indentation) {
+  return indentation.length === 0
+    ? value
+    : value.split('\n').map((line) => `${indentation}${line}`).join('\n');
+}
+
+function serializeMarkdownInline(node, renderedEquations, context) {
+  if (requiresControlledInline(node, false)) {
+    return serializeControlledInline(node, renderedEquations, context);
+  }
+  if (node.kind !== 'text') unsupportedKind(node.kind);
+  if (/^\s*$/.test(node.value)) return node.value;
+
+  const style = node.style;
+  let value = style.inlineCode
+    ? context.markdownTableCell
+      ? tableInlineCode(node.value)
+      : inlineCode(node.value)
+    : escapeMarkdown(node.value);
+  if (style.bold) value = `**${value}**`;
+  if (style.italic) value = `*${value}*`;
+  if (style.strikethrough) value = `~~${value}~~`;
+  if (style.href) value = `[${value}](${style.href})`;
+  return value;
+}
+
+function serializeInlines(
+  inlines,
+  renderedEquations,
+  { forceControlled = false, markdownTableCell = false } = {},
+) {
+  const context = { markdownTableCell };
+  const value = inlines.map((inline) =>
+    forceControlled || requiresControlledInline(inline, false)
+      ? serializeControlledInline(inline, renderedEquations, context)
+      : serializeMarkdownInline(inline, renderedEquations, context)).join('');
+  return forceControlled ? value : protectLeadingIndentation(value);
+}
+
+function createMediaRegistry() {
+  const mediaTokens = [];
+  const mediaReferences = [];
+  const seen = new Set();
+  const register = (token) => {
+    const placeholder = `\uE000feishu-media:${token}\uE001`;
+    if (!seen.has(token)) {
+      seen.add(token);
+      mediaTokens.push(token);
+      mediaReferences.push({ token, placeholder });
+    }
+    return placeholder;
+  };
+  return { mediaTokens, mediaReferences, register };
+}
+
+function serializeMarkdownDocument(document, renderedEquations, media) {
+  const renderBlock = (block, indentation = '') => {
+    if (block.kind === 'heading') {
+      return indentBlock(
+        `${'#'.repeat(block.depth)} ${serializeInlines(block.inlines, renderedEquations)}`,
+        indentation,
+      );
+    }
+    switch (block.kind) {
+      case 'paragraph':
+        return indentBlock(
+          serializeInlines(block.inlines, renderedEquations),
+          indentation,
+        );
+      case 'listItem': {
+        const marker = block.listKind === 'bullet'
+          ? '-'
+          : block.listKind === 'ordered'
+            ? '1.'
+            : block.checked
+              ? '- [x]'
+              : '- [ ]';
+        const line = `${indentation}${marker} ${serializeInlines(block.inlines, renderedEquations)}`;
+        const markerWidth = block.listKind === 'ordered' ? 3 : 2;
+        const childIndentation = `${indentation}${' '.repeat(markerWidth)}`;
+        const children = block.children.map((child) =>
+          renderBlock(child, childIndentation));
+        return [line, ...children].filter(Boolean).join('\n');
+      }
+      case 'code': {
+        const fence = codeFence(block.value);
+        const beforeClosingFence = block.value.endsWith('\n') ? '' : '\n';
+        return indentBlock(
+          `${fence}${block.language}\n${block.value}${beforeClosingFence}${fence}`,
+          indentation,
+        );
+      }
+      case 'quote':
+        return indentBlock(
+          serializeInlines(block.inlines, renderedEquations)
+            .split('\n')
+            .map((line) => `> ${line}`)
+            .join('\n'),
+          indentation,
+        );
+      case 'divider':
+        return indentBlock('---', indentation);
+      case 'image':
+        return indentBlock(`![图片](${media.register(block.token)})`, indentation);
+      case 'table': {
+        const rows = block.rows.map((row) => row.map((cell) =>
+          escapeTablePipes(cell.map((cellBlockInlines) =>
+            serializeInlines(cellBlockInlines, renderedEquations, {
+              markdownTableCell: true,
+            }).replace(/\r\n?|\n/g, '<br>')).join('<br>'))));
+        const columnSize = rows[0]?.length ?? 0;
+        if (columnSize === 0) return '';
+        return indentBlock([
+          `| ${rows[0].join(' | ')} |`,
+          `| ${Array.from({ length: columnSize }, () => '---').join(' | ')} |`,
+          ...rows.slice(1).map((row) => `| ${row.join(' | ')} |`),
+        ].join('\n'), indentation);
+      }
+      case 'callout':
+      case 'sourceSynced':
+        throw new Error('Controlled container reached Markdown serializer.');
+      default:
+        return unsupportedKind(block.kind);
+    }
+  };
+
+  return document.children.map((block) => renderBlock(block))
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+function serializeControlledDocument(document, renderedEquations, media) {
+  let headingIndex = 0;
+
+  const renderInlines = (inlines) => serializeInlines(
+    inlines,
+    renderedEquations,
+    { forceControlled: true },
+  );
+
+  const renderChildren = (children) => {
+    const parts = [];
+    for (let index = 0; index < children.length;) {
+      const child = children[index];
+      if (child.kind !== 'listItem') {
+        parts.push(renderBlock(child));
+        index += 1;
+        continue;
+      }
+      const items = [];
+      const listKind = child.listKind;
+      while (
+        index < children.length &&
+        children[index].kind === 'listItem' &&
+        children[index].listKind === listKind
+      ) {
+        items.push(children[index]);
+        index += 1;
+      }
+      parts.push(renderList(items, listKind));
+    }
+    return parts.join('\n');
+  };
+
+  const renderList = (items, listKind) => {
+    const tag = listKind === 'ordered' ? 'ol' : 'ul';
+    const className = listKind === 'todo' ? ' class="feishu-task-list"' : '';
+    const body = items.map((item) => {
+      const marker = listKind === 'todo'
+        ? `<span class="feishu-task-list__marker" aria-hidden="true">${item.checked ? '☑' : '☐'}</span><span class="visually-hidden">${item.checked ? '已完成：' : '未完成：'}</span>`
+        : '';
+      const children = renderChildren(item.children);
+      return `<li>${marker}${renderInlines(item.inlines)}${children ? `\n${children}` : ''}</li>`;
+    }).join('\n');
+    return `<${tag}${className}>\n${body}\n</${tag}>`;
+  };
+
+  const renderTableCell = (cell) => cell
+    .map((cellBlockInlines) => renderInlines(cellBlockInlines))
+    .join('<br>');
+
+  const renderBlock = (block) => {
+    switch (block.kind) {
+      case 'paragraph':
+        return `<p>${renderInlines(block.inlines)}</p>`;
+      case 'heading': {
+        headingIndex += 1;
+        const visibleText = block.inlines.map((inline) =>
+          inline.kind === 'equation'
+            ? renderedEquations.get(inline).source
+            : inline.value).join('').replace(/\s+/gu, ' ').trim();
+        const encodedText = Buffer.from(visibleText, 'utf8').toString('base64url');
+        return `<h${block.depth} id="feishu-heading-${headingIndex}" data-feishu-heading-text="${encodedText}">${renderInlines(block.inlines)}</h${block.depth}>`;
+      }
+      case 'listItem':
+        return renderList([block], block.listKind);
+      case 'quote':
+        return `<blockquote>${renderInlines(block.inlines)}</blockquote>`;
+      case 'code':
+        return `<pre><code class="language-${escapeHtmlAttribute(block.language)}">${escapeHtmlText(block.value)}</code></pre>`;
+      case 'divider':
+        return '<hr>';
+      case 'image':
+        return `<img src="${escapeHtmlAttribute(media.register(block.token))}" alt="图片">`;
+      case 'table': {
+        if (block.rows.length === 0) return '<table></table>';
+        const renderRow = (row, cellTag) => `<tr>${row.map((cell) =>
+          `<${cellTag}>${renderTableCell(cell)}</${cellTag}>`).join('')}</tr>`;
+        const head = `<thead>${renderRow(block.rows[0], 'th')}</thead>`;
+        const body = block.rows.length > 1
+          ? `<tbody>${block.rows.slice(1).map((row) => renderRow(row, 'td')).join('')}</tbody>`
+          : '';
+        return `<table>${head}${body}</table>`;
+      }
+      case 'callout': {
+        const classes = [
+          'feishu-callout',
+          block.background && `feishu-callout--background-${block.background}`,
+          block.border && `feishu-callout--border-${block.border}`,
+          block.textColor && `feishu-callout--text-${block.textColor}`,
+        ].filter(Boolean).join(' ');
+        const content = renderChildren(block.children);
+        return `<aside class="${classes}">\n<span class="feishu-callout__emoji" aria-hidden="true">${escapeHtmlText(block.emoji)}</span>\n<div class="feishu-callout__content">${content}</div>\n</aside>`;
+      }
+      case 'sourceSynced': {
+        const renderedTitle = renderInlines(block.title);
+        const title = /\S/u.test(renderedTitle)
+          ? `\n<div class="feishu-source-synced__title feishu-source-synced__title--align-${block.align}">${renderedTitle}</div>`
+          : '';
+        const childContent = renderChildren(block.children);
+        const content = childContent
+          ? `\n<div class="feishu-source-synced__content">${childContent}</div>`
+          : '';
+        return `<section class="feishu-source-synced">\n<span class="feishu-source-synced__label" data-feishu-search-ui>↻ 同步内容</span>${title}${content}\n</section>`;
+      }
+      default:
+        return unsupportedKind(block.kind);
+    }
+  };
+
+  const content = renderChildren(document.children);
+  return content ? `<div class="feishu-document">\n${content}\n</div>` : '';
 }
 
 function serializeDocument(document, renderedEquations) {
   if (document.kind !== 'document') return unsupportedKind(document.kind);
+  const media = createMediaRegistry();
+  const body = document.mode === 'controlled-document'
+    ? serializeControlledDocument(document, renderedEquations, media)
+    : serializeMarkdownDocument(document, renderedEquations, media);
+  const markdown = body.length === 0 ? '' : `${body.replace(/\n+$/u, '')}\n`;
   return {
-    markdown: document.children.map((child) =>
-      serializeBlock(child, renderedEquations)).join('\n\n'),
-    mediaTokens: [],
-    mediaReferences: [],
+    markdown,
+    mediaTokens: media.mediaTokens,
+    mediaReferences: media.mediaReferences,
     warnings: [...document.warnings],
   };
 }

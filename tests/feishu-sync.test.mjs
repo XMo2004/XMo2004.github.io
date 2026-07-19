@@ -609,7 +609,7 @@ test('changing only Feishu internal identifiers does not rewrite public output',
   assert.deepEqual(await generatedSnapshot(root), before);
 });
 
-test('conversion warnings expose only the public slug and warning details', async (t) => {
+test('supported underline conversion emits controlled HTML without warnings', async (t) => {
   const root = await makeRoot(t);
   const { client } = stableClient({
     records: [publishedRecord({ fields: { 封面: [] } })],
@@ -645,10 +645,13 @@ test('conversion warnings expose only the public slug and warning details', asyn
     tableId: TABLE_ID,
   });
 
-  assert.deepEqual(result.warnings, [{ slug: 'first-post', type: 'underline' }]);
-  assert.doesNotMatch(
-    JSON.stringify(result.warnings),
-    /rec-one|doxcnExample123|private-page-id|private-paragraph-id/,
+  assert.deepEqual(result.warnings, []);
+  assert.match(
+    await readFile(
+      join(root, 'src/content/posts/feishu/first-post.md'),
+      'utf8',
+    ),
+    /<u class="feishu-underline">带下划线的正文<\/u>/,
   );
 });
 

@@ -31,12 +31,12 @@ function equation(source, display = 'inline', blockId = 'equation') {
   };
 }
 
-function text(value, blockId = 'paragraph') {
+function text(value, blockId = 'paragraph', style = {}) {
   return {
     kind: 'text',
     blockId,
     value,
-    style: { ...PLAIN_STYLE },
+    style: { ...PLAIN_STYLE, ...style },
   };
 }
 
@@ -75,6 +75,383 @@ function annotationSource(markdown) {
   assert.ok(match, 'expected a MathML annotation');
   return withoutMarkup(match[1]);
 }
+
+test('controlled inline uses the fixed complete style stack', () => {
+  const controlled = text('<x>', 'paragraph', {
+    inlineCode: true,
+    bold: true,
+    italic: true,
+    strikethrough: true,
+    underline: true,
+    textColor: 'red',
+    backgroundColor: 'light-blue',
+    href: 'https://example.com/docs',
+  });
+
+  const result = renderFeishuDocument(documentWith([controlled]));
+
+  assert.deepEqual(result.issues, []);
+  assert.equal(
+    result.conversion.markdown,
+    '<a class="feishu-link" href="https://example.com/docs"><span class="feishu-text-color--red feishu-text-background--light-blue"><u class="feishu-underline"><del><em><strong><code>&lt;x&gt;</code></strong></em></del></u></span></a>\n',
+  );
+});
+
+test('default inline styles remain Markdown until a controlled style is present', () => {
+  const result = renderFeishuDocument(documentWith([
+    text('bold', 'paragraph', { bold: true }),
+    text(' '),
+    text('italic', 'paragraph', { italic: true }),
+    text(' '),
+    text('strike', 'paragraph', { strikethrough: true }),
+    text(' '),
+    text('code', 'paragraph', { inlineCode: true }),
+    text(' '),
+    text('link', 'paragraph', { href: 'https://example.com/' }),
+    text(' '),
+    text('controlled', 'paragraph', { bold: true, underline: true }),
+  ]));
+
+  assert.deepEqual(result.issues, []);
+  assert.equal(
+    result.conversion.markdown,
+    '**bold** *italic* ~~strike~~ `code` [link](https://example.com/) <u class="feishu-underline"><strong>controlled</strong></u>\n',
+  );
+  assert.doesNotMatch(result.conversion.markdown.slice(-70), /\*\*|~~|`|\]\(/);
+});
+
+test('controlled inline preserves whitespace and context-escapes author text and hrefs', () => {
+  const authorText = '*x* _y_ `z` [链接](target) \\ | <>&"';
+  const result = renderFeishuDocument(documentWith([
+    text(' ', 'paragraph', { underline: true, bold: true }),
+    text(authorText, 'paragraph', {
+      underline: true,
+      href: 'https://example.com/a?x=1&y="quoted"',
+    }),
+  ]));
+
+  assert.deepEqual(result.issues, []);
+  assert.match(result.conversion.markdown, /^ <a class="feishu-link"/);
+  assert.match(result.conversion.markdown, /href="https:\/\/example\.com\/a\?x=1&amp;y=&quot;quoted&quot;"/);
+  assert.doesNotMatch(result.conversion.markdown, /\*x\*|_y_|`z`|\[链接\]\(target\)/);
+
+  const html = markdownToHtml(result.conversion.markdown).html;
+  assert.equal((html.match(/<a\b/g) ?? []).length, 1);
+  assert.doesNotMatch(html, /<(?:em|code)\b/);
+  assert.ok(withoutMarkup(html).includes(authorText));
+});
+
+for (const visible of [
+  'https://visible.example/path',
+  'HTTPS://VISIBLE.EXAMPLE/PATH',
+  'www.example.com',
+  'WWW.EXAMPLE.COM',
+  'user@example.com',
+  'mailto:user@example.com',
+]) {
+  test(`controlled author text prevents an implicit autolink for ${visible}`, () => {
+    for (const href of [null, 'https://target.example/']) {
+      const result = renderFeishuDocument(documentWith([
+        text(visible, 'paragraph', { underline: true, href }),
+      ]));
+      const html = markdownToHtml(result.conversion.markdown).html;
+      assert.equal((html.match(/<a\b/g) ?? []).length, href === null ? 0 : 1);
+      if (href !== null) {
+        assert.match(html, /<a class="feishu-link" href="https:\/\/target\.example\/">/);
+      }
+      assert.ok(withoutMarkup(html).includes(visible));
+    }
+  });
+}
+
+test('controlled inline in a Markdown table cannot split rows, columns, or anchors', () => {
+  const input = {
+    kind: 'document',
+    mode: 'markdown',
+    children: [{
+      kind: 'table',
+      blockId: 'table',
+      rows: [
+        [[[text('标题', 'header')]]],
+        [[[text('a|b\r\nc', 'cell', {
+          underline: true,
+          href: 'https://example.com/a|b',
+        })]]],
+      ],
+    }],
+    warnings: [],
+  };
+
+  const result = renderFeishuDocument(input);
+
+  assert.deepEqual(result.issues, []);
+  assert.equal(result.conversion.markdown.split('\n').filter((line) => line.startsWith('|')).length, 3);
+  assert.match(result.conversion.markdown, /href="https:\/\/example\.com\/a&#124;b"/);
+  assert.match(result.conversion.markdown, /a&#124;b&#13;&#10;c/);
+  const html = markdownToHtml(result.conversion.markdown).html;
+  assert.equal((html.match(/<tr\b/g) ?? []).length, 2);
+  assert.equal((html.match(/<a\b/g) ?? []).length, 1);
+});
+
+test('Markdown mode keeps basic blocks while rendering only controlled leaves as HTML', () => {
+  const input = {
+    kind: 'document',
+    mode: 'markdown',
+    children: [
+      { kind: 'heading', blockId: 'heading', depth: 1, inlines: [text('旧标题')] },
+      {
+        kind: 'paragraph',
+        blockId: 'paragraph',
+        inlines: [
+          text('下划线', 'paragraph', { underline: true }),
+          text(' 与 '),
+          equation('x + y'),
+        ],
+      },
+    ],
+    warnings: [],
+  };
+
+  const result = renderFeishuDocument(input, {
+    katexRender: () => '<span class="katex">x + y</span>',
+  });
+
+  assert.deepEqual(result.issues, []);
+  assert.match(result.conversion.markdown, /^# 旧标题$/m);
+  assert.doesNotMatch(result.conversion.markdown, /feishu-document/);
+  assert.match(result.conversion.markdown, /^<u class="feishu-underline">下划线<\/u> 与 <span class="feishu-equation /m);
+  assert.equal(result.conversion.markdown.endsWith('\n'), true);
+  assert.equal(result.conversion.markdown.endsWith('\n\n'), false);
+});
+
+test('controlled document renders normalized callout and source-synced boundaries only', () => {
+  for (const align of ['left', 'center', 'right']) {
+    const result = renderFeishuDocument({
+      kind: 'document',
+      mode: 'controlled-document',
+      children: [{
+        kind: 'sourceSynced',
+        blockId: `source-${align}`,
+        title: [text('title', `source-${align}`)],
+        align,
+        children: [],
+      }],
+      warnings: [],
+    });
+    assert.match(result.conversion.markdown, new RegExp(`feishu-source-synced__title--align-${align}`));
+    for (const other of ['left', 'center', 'right'].filter((value) => value !== align)) {
+      assert.doesNotMatch(result.conversion.markdown, new RegExp(`--align-${other}`));
+    }
+    assert.match(result.conversion.markdown, /data-feishu-search-ui>↻ 同步内容<\/span>/);
+  }
+
+  const emptySource = renderFeishuDocument({
+    kind: 'document',
+    mode: 'controlled-document',
+    children: [{
+      kind: 'sourceSynced', blockId: 'empty-source', title: [], align: 'right',
+      children: [],
+    }],
+    warnings: [],
+  });
+  assert.doesNotMatch(emptySource.conversion.markdown, /feishu-source-synced__title/);
+  assert.doesNotMatch(emptySource.conversion.markdown, /feishu-source-synced__content/);
+
+  const callout = renderFeishuDocument({
+    kind: 'document',
+    mode: 'controlled-document',
+    children: [{
+      kind: 'callout',
+      blockId: 'callout',
+      emoji: '🎁',
+      background: null,
+      border: null,
+      textColor: null,
+      children: [],
+    }],
+    warnings: [],
+  });
+  assert.match(callout.conversion.markdown, /<span class="feishu-callout__emoji" aria-hidden="true">🎁<\/span>/);
+  assert.match(callout.conversion.markdown, /<div class="feishu-callout__content"><\/div>/);
+  assert.doesNotMatch(callout.conversion.markdown, /feishu-callout--(?:background|border|text)-/);
+});
+
+test('collects every known semantic equation field exactly once', () => {
+  const formulas = ['heading', 'list', 'nested', 'quote', 'table', 'callout', 'title', 'source'];
+  const eq = (source) => equation(source, 'inline', source);
+  const document = {
+    kind: 'document',
+    mode: 'controlled-document',
+    children: [
+      { kind: 'heading', blockId: 'h', depth: 2, inlines: [eq('heading')] },
+      {
+        kind: 'listItem', blockId: 'l', listKind: 'bullet', checked: undefined,
+        inlines: [eq('list')],
+        children: [{ kind: 'paragraph', blockId: 'n', inlines: [eq('nested')] }],
+      },
+      { kind: 'quote', blockId: 'q', inlines: [eq('quote')] },
+      { kind: 'table', blockId: 't', rows: [[[[eq('table')]]]] },
+      {
+        kind: 'callout', blockId: 'c', emoji: '🎁', background: null,
+        border: null, textColor: null,
+        children: [{ kind: 'paragraph', blockId: 'cp', inlines: [eq('callout')] }],
+      },
+      {
+        kind: 'sourceSynced', blockId: 's', align: 'right', title: [eq('title')],
+        children: [{ kind: 'paragraph', blockId: 'sp', inlines: [eq('source')] }],
+      },
+    ],
+    warnings: [],
+  };
+  const calls = [];
+
+  const result = renderFeishuDocument(document, {
+    katexRender: (source) => {
+      calls.push(source);
+      return `<span>${source}</span>`;
+    },
+  });
+
+  assert.deepEqual(result.issues, []);
+  assert.deepEqual(calls, formulas);
+  assert.equal((result.conversion.markdown.match(/class="feishu-equation /g) ?? []).length, formulas.length);
+});
+
+test('unknown semantic kinds fail before any KaTeX call', () => {
+  let calls = 0;
+  const input = {
+    kind: 'document',
+    mode: 'controlled-document',
+    children: [{
+      kind: 'privateUnknown',
+      inlines: [equation('private')],
+    }],
+    warnings: [],
+  };
+
+  assert.throws(
+    () => renderFeishuDocument(input, {
+      katexRender: () => {
+        calls += 1;
+        return 'private';
+      },
+    }),
+    /Unsupported Feishu semantic kind: privateUnknown/,
+  );
+  assert.equal(calls, 0);
+});
+
+test('controlled headings use continuous ids and exact NFKC visible text', () => {
+  const input = {
+    kind: 'document',
+    mode: 'controlled-document',
+    children: [
+      {
+        kind: 'heading',
+        blockId: 'first',
+        depth: 2,
+        inlines: [
+          text('标题 '),
+          text('code', 'first', { inlineCode: true }),
+          text('  '),
+          equation('Ｅ'),
+        ],
+      },
+      {
+        kind: 'callout', blockId: 'callout', emoji: '🎁', background: null,
+        border: null, textColor: null,
+        children: [{
+          kind: 'heading', blockId: 'nested', depth: 3,
+          inlines: [text('嵌套标题')],
+        }],
+      },
+    ],
+    warnings: [],
+  };
+  const calls = [];
+  const result = renderFeishuDocument(input, {
+    katexRender: (source) => {
+      calls.push(source);
+      return `<span>${source}</span>`;
+    },
+  });
+
+  assert.deepEqual(calls, ['E']);
+  const headings = [...result.conversion.markdown.matchAll(
+    /<h[1-6] id="feishu-heading-(\d+)" data-feishu-heading-text="([A-Za-z0-9_-]*)">/g,
+  )];
+  assert.deepEqual(headings.map((match) => match[1]), ['1', '2']);
+  assert.deepEqual(
+    headings.map((match) => Buffer.from(match[2], 'base64url').toString('utf8')),
+    ['标题 code E', '嵌套标题'],
+  );
+});
+
+test('controlled adjacent lists group by kind and keep nested children inside li', () => {
+  const item = (blockId, listKind, value, children = []) => ({
+    kind: 'listItem', blockId, listKind,
+    checked: listKind === 'todo' ? false : undefined,
+    inlines: [text(value, blockId)], children,
+  });
+  const input = {
+    kind: 'document',
+    mode: 'controlled-document',
+    children: [
+      item('bullet-1', 'bullet', '一', [item('nested', 'bullet', '嵌套')]),
+      item('bullet-2', 'bullet', '二'),
+      item('ordered', 'ordered', '三'),
+    ],
+    warnings: [],
+  };
+
+  const result = renderFeishuDocument(input);
+
+  assert.equal((result.conversion.markdown.match(/<ul>/g) ?? []).length, 2);
+  assert.equal((result.conversion.markdown.match(/<ol>/g) ?? []).length, 1);
+  assert.match(
+    result.conversion.markdown,
+    /<ul>\n<li>一\n<ul>\n<li>嵌套<\/li>\n<\/ul><\/li>\n<li>二<\/li>\n<\/ul>\n<ol>/,
+  );
+});
+
+test('empty output, media de-duplication, and the four-field contract are deterministic', () => {
+  const empty = {
+    kind: 'document', mode: 'markdown', children: [], warnings: [],
+  };
+  assert.deepEqual(renderFeishuDocument(empty), {
+    conversion: {
+      markdown: '', mediaTokens: [], mediaReferences: [], warnings: [],
+    },
+    issues: [],
+  });
+
+  const input = {
+    kind: 'document',
+    mode: 'controlled-document',
+    children: [
+      { kind: 'image', blockId: 'image-1', token: 'same_token' },
+      { kind: 'image', blockId: 'image-2', token: 'same_token' },
+    ],
+    warnings: [{ type: 'copied-warning' }],
+  };
+  const before = structuredClone(input);
+  const first = renderFeishuDocument(input);
+  const second = renderFeishuDocument(input);
+
+  assert.deepEqual(first, second);
+  assert.deepEqual(input, before);
+  assert.deepEqual(Object.keys(first.conversion), [
+    'markdown', 'mediaTokens', 'mediaReferences', 'warnings',
+  ]);
+  assert.deepEqual(first.conversion.mediaTokens, ['same_token']);
+  assert.deepEqual(first.conversion.mediaReferences, [{
+    token: 'same_token', placeholder: '\uE000feishu-media:same_token\uE001',
+  }]);
+  assert.equal((first.conversion.markdown.match(/<img\b/g) ?? []).length, 2);
+  assert.equal(first.conversion.markdown.endsWith('\n'), true);
+  assert.equal(first.conversion.markdown.endsWith('\n\n'), false);
+  assert.notEqual(first.conversion.warnings, input.warnings);
+});
 
 test('freezes the exact formula budgets', () => {
   assert.deepEqual(FORMULA_LIMITS, {
@@ -615,49 +992,7 @@ test('copies document warnings into the partial conversion', () => {
   assert.deepEqual(result.conversion.warnings, warnings);
   assert.notEqual(result.conversion.warnings, warnings);
   assert.match(result.conversion.markdown, /^before /);
-  assert.match(result.conversion.markdown, / after$/);
-});
-
-test('throws an internal task-order error for semantic kinds outside Task 6', () => {
-  const unsupported = {
-    kind: 'document',
-    mode: 'controlled-document',
-    children: [{ kind: 'heading', blockId: 'heading', level: 2, inlines: [] }],
-    warnings: [],
-  };
-
-  assert.throws(
-    () => renderFeishuDocument(unsupported, { katexRender: () => 'x' }),
-    /Task 6 partial serializer does not support semantic kind: heading/,
-  );
-});
-
-test('rejects an unsupported block before inspecting or rendering its equations', () => {
-  const unsupported = {
-    kind: 'document',
-    mode: 'controlled-document',
-    children: [
-      {
-        kind: 'heading',
-        blockId: 'heading',
-        depth: 2,
-        inlines: [equation(String.raw`\notARealPrivateCommand`)],
-      },
-    ],
-    warnings: [],
-  };
-  let calls = 0;
-
-  assert.throws(
-    () => renderFeishuDocument(unsupported, {
-      katexRender: () => {
-        calls += 1;
-        throw new Error('private renderer error');
-      },
-    }),
-    /Task 6 partial serializer does not support semantic kind: heading/,
-  );
-  assert.equal(calls, 0);
+  assert.match(result.conversion.markdown, / after\n$/);
 });
 
 test('does not treat equation-shaped metadata as semantic content', () => {
@@ -686,5 +1021,5 @@ test('does not treat equation-shaped metadata as semantic content', () => {
 
   assert.equal(calls, 0);
   assert.deepEqual(result.issues, []);
-  assert.equal(result.conversion.markdown, 'visible');
+  assert.equal(result.conversion.markdown, 'visible\n');
 });

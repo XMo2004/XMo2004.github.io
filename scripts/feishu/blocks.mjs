@@ -1,9 +1,9 @@
 import {
   CODE_LANGUAGES,
-  PLAIN_TEXT_CODE_FALLBACKS,
+  normalizeFeishuDocument,
   TEXT_PROPERTY_BY_TYPE,
-  normalizeLinkUrl,
 } from './semantics.mjs';
+import { renderFeishuDocument } from './markdown.mjs';
 
 const SUPPORTED_BLOCK_TYPES = new Set([
   1, 2, 3, 4, 5, 6, 7, 8, 12, 13, 14, 15, 17, 19, 22, 27, 31, 32, 49,
@@ -12,13 +12,6 @@ const SUPPORTED_BLOCK_TYPES = new Set([
 const CONTAINER_BLOCK_TYPES = new Set([1, 12, 13, 17, 19, 31, 32, 49]);
 
 const MEDIA_TOKEN = /^[A-Za-z0-9_-]+$/;
-const MEDIA_PLACEHOLDER_PREFIX = '\uE000feishu-media:';
-const MEDIA_PLACEHOLDER_SUFFIX = '\uE001';
-
-function mediaPlaceholder(token) {
-  return `${MEDIA_PLACEHOLDER_PREFIX}${token}${MEDIA_PLACEHOLDER_SUFFIX}`;
-}
-
 export class FeishuConversionError extends Error {
   constructor(issues) {
     super(
@@ -50,11 +43,6 @@ function blockChildren(block, issues) {
     return [];
   }
   return block.children;
-}
-
-function textDataFor(block) {
-  const property = TEXT_PROPERTY_BY_TYPE.get(block.block_type);
-  return property === undefined ? undefined : block[property];
 }
 
 function validateRichElements(block, elements, issues) {
@@ -99,99 +87,6 @@ function validateRichElements(block, elements, issues) {
       continue;
     }
 
-    if (elementTypes[0] === 'equation') {
-      const equation = element.equation;
-      if (
-        equation === null ||
-        typeof equation !== 'object' ||
-        Array.isArray(equation) ||
-        typeof equation.content !== 'string' ||
-        /^\s*$/.test(equation.content)
-      ) {
-        issues.push(
-          issue(
-            'invalid_equation',
-            `Block "${block.block_id}" contains an invalid equation.`,
-            block.block_id,
-          ),
-        );
-        continue;
-      }
-
-      if (
-        equation.content.includes(MEDIA_PLACEHOLDER_PREFIX) ||
-        equation.content.includes(MEDIA_PLACEHOLDER_SUFFIX)
-      ) {
-        issues.push(
-          issue(
-            'reserved_media_placeholder',
-            `Block "${block.block_id}" contains reserved media placeholder characters.`,
-            block.block_id,
-          ),
-        );
-      }
-
-      if (equation.text_element_style?.inline_code === true) {
-        issues.push(
-          issue(
-            'invalid_text_style',
-            `Block "${block.block_id}" cannot apply inline code to an equation.`,
-            block.block_id,
-          ),
-        );
-      }
-      issues.push(
-        issue(
-          'unsupported_equation_renderer',
-          'The legacy Markdown renderer does not support equations.',
-        ),
-      );
-      continue;
-    }
-
-    const textRun = element.text_run;
-    if (
-      textRun === null ||
-      typeof textRun !== 'object' ||
-      typeof textRun.content !== 'string'
-    ) {
-      issues.push(
-        issue(
-          'invalid_text_run',
-          `Block "${block.block_id}" contains a text_run without string content.`,
-          block.block_id,
-        ),
-      );
-      continue;
-    }
-
-    if (
-      textRun.content.includes(MEDIA_PLACEHOLDER_PREFIX) ||
-      textRun.content.includes(MEDIA_PLACEHOLDER_SUFFIX)
-    ) {
-      issues.push(
-        issue(
-          'reserved_media_placeholder',
-          `Block "${block.block_id}" contains reserved media placeholder characters.`,
-          block.block_id,
-        ),
-      );
-    }
-
-    const style = textRun.text_element_style;
-    if (style?.link !== undefined) {
-      try {
-        normalizeLinkUrl(style.link?.url);
-      } catch (error) {
-        issues.push(
-          issue(
-            'unsafe_link',
-            `Block "${block.block_id}" has an unsafe link: ${error.message}.`,
-            block.block_id,
-          ),
-        );
-      }
-    }
   }
 }
 
@@ -588,270 +483,15 @@ function validateBlocks(items) {
   return { blocks, root };
 }
 
-function escapeMarkdown(value) {
-  return value
-    .replace(/\\/g, '\\\\')
-    .replace(/([!"#$%&'()*+,\-./:;<=>?@\[\]^_`{|}~])/g, '\\$1');
-}
-
-function maxBacktickRun(value) {
-  return Math.max(0, ...(value.match(/`+/g) ?? []).map((run) => run.length));
-}
-
-function inlineCode(value) {
-  if (value.length === 0 || /^\s+$/.test(value)) {
-    return value;
-  }
-  const fence = '`'.repeat(Math.max(1, maxBacktickRun(value) + 1));
-  const needsPadding = /^\s|\s$|^`|`$/.test(value);
-  const padding = needsPadding ? ' ' : '';
-  return `${fence}${padding}${value}${padding}${fence}`;
-}
-
-function tableInlineCode(value) {
-  const escaped = value
-    .replace(/&/g, '&amp;')
-    .replace(/\\/g, '&#92;')
-    .replace(/\|/g, '&#124;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-  return `<code>${escaped}</code>`;
-}
-
-function protectLeadingIndentation(value) {
-  return value.replace(/^[ \t]+/gm, (indentation) => {
-    if (!indentation.includes('\t') && indentation.length < 4) {
-      return indentation;
-    }
-    return [...indentation]
-      .map((character) =>
-        character === '\t' ? '&nbsp;'.repeat(4) : '&nbsp;',
-      )
-      .join('');
-  });
-}
-
-function escapeTablePipes(value) {
-  let escaped = '';
-  let precedingBackslashes = 0;
-  for (const character of value) {
-    if (character === '\\') {
-      escaped += character;
-      precedingBackslashes += 1;
-      continue;
-    }
-    if (character === '|' && precedingBackslashes % 2 === 0) {
-      escaped += '\\';
-    }
-    escaped += character;
-    precedingBackslashes = 0;
-  }
-  return escaped;
-}
-
-function renderElements(
-  block,
-  warnings,
-  { raw = false, tableCell = false } = {},
-) {
-  const textData = textDataFor(block);
-  if (textData === undefined) {
-    return '';
-  }
-
-  const rendered = textData.elements
-    .map((element) => {
-      const textRun = element.text_run;
-      const style = textRun.text_element_style ?? {};
-      if (!raw && /^\s*$/.test(textRun.content)) {
-        return textRun.content;
-      }
-      let rendered = raw
-        ? textRun.content
-        : style.inline_code
-          ? tableCell
-            ? tableInlineCode(textRun.content)
-            : inlineCode(textRun.content)
-          : escapeMarkdown(textRun.content);
-
-      if (!raw) {
-        if (style.bold) rendered = `**${rendered}**`;
-        if (style.italic) rendered = `*${rendered}*`;
-        if (style.strikethrough) rendered = `~~${rendered}~~`;
-        if (style.link !== undefined) {
-          rendered = `[${rendered}](${normalizeLinkUrl(style.link.url)})`;
-        }
-
-        for (const warningType of [
-          style.underline ? 'underline' : undefined,
-          style.text_color !== undefined ? 'text_color' : undefined,
-          style.background_color !== undefined ? 'background_color' : undefined,
-        ]) {
-          if (
-            warningType !== undefined &&
-            !warnings.some(
-              (warning) =>
-                warning.blockId === block.block_id &&
-                warning.type === warningType,
-            )
-          ) {
-            warnings.push({ blockId: block.block_id, type: warningType });
-          }
-        }
-      }
-
-      return rendered;
-    })
-    .join('');
-  return raw ? rendered : protectLeadingIndentation(rendered);
-}
-
-function codeFence(value) {
-  return '`'.repeat(Math.max(3, maxBacktickRun(value) + 1));
-}
-
-function indentBlock(value, indentation) {
-  return indentation.length === 0
-    ? value
-    : value
-        .split('\n')
-        .map((line) => `${indentation}${line}`)
-        .join('\n');
-}
-
 export function blocksToMarkdown(items) {
   const { blocks, root } = validateBlocks(items);
-  const warnings = [];
-  const mediaTokens = [];
-  const mediaTokenSet = new Set();
-  const mediaReferences = [];
-
-  function renderBlock(blockId, indentation = '') {
-    const block = blocks.get(blockId);
-
-    if (block.block_type >= 3 && block.block_type <= 8) {
-      const level = block.block_type - 2;
-      return indentBlock(
-        `${'#'.repeat(level)} ${renderElements(block, warnings)}`,
-        indentation,
-      );
-    }
-
-    switch (block.block_type) {
-      case 2:
-        return indentBlock(renderElements(block, warnings), indentation);
-      case 12:
-      case 13:
-      case 17: {
-        const marker =
-          block.block_type === 12
-            ? '-'
-            : block.block_type === 13
-              ? '1.'
-              : block.todo.style?.done
-                ? '- [x]'
-                : '- [ ]';
-        const line = `${indentation}${marker} ${renderElements(block, warnings)}`;
-        const markerWidth = block.block_type === 13 ? 3 : 2;
-        const childIndentation = `${indentation}${' '.repeat(markerWidth)}`;
-        const children = (block.children ?? []).map((childId) =>
-          renderBlock(childId, childIndentation),
-        );
-        return [line, ...children].filter(Boolean).join('\n');
-      }
-      case 14: {
-        const content = renderElements(block, warnings, { raw: true });
-        const fence = codeFence(content);
-        const languageEnum = block.code.style?.language;
-        const language = CODE_LANGUAGES.get(languageEnum) ?? 'text';
-        if (PLAIN_TEXT_CODE_FALLBACKS.has(languageEnum)) {
-          warnings.push({
-            blockId: block.block_id,
-            type: 'code_language_fallback',
-            language: languageEnum,
-          });
-        }
-        const beforeClosingFence = content.endsWith('\n') ? '' : '\n';
-        return indentBlock(
-          `${fence}${language}\n${content}${beforeClosingFence}${fence}`,
-          indentation,
-        );
-      }
-      case 15:
-        return indentBlock(
-          renderElements(block, warnings)
-            .split('\n')
-            .map((line) => `> ${line}`)
-            .join('\n'),
-          indentation,
-        );
-      case 19:
-      case 49:
-        throw new FeishuConversionError([
-          issue(
-            'unsupported_rich_container_renderer',
-            'The legacy Markdown renderer does not support rich content containers.',
-          ),
-        ]);
-      case 22:
-        return indentBlock('---', indentation);
-      case 27: {
-        const token = block.image.token;
-        if (!mediaTokenSet.has(token)) {
-          mediaTokenSet.add(token);
-          mediaTokens.push(token);
-          mediaReferences.push({ token, placeholder: mediaPlaceholder(token) });
-        }
-        return indentBlock(
-          `![图片](${mediaPlaceholder(token)})`,
-          indentation,
-        );
-      }
-      case 31: {
-        const { row_size: rowSize, column_size: columnSize } =
-          block.table.property;
-        const cellValues = block.table.cells.map((cellId) => {
-          const cell = blocks.get(cellId);
-          return (cell.children ?? [])
-            .map((childId) =>
-              escapeTablePipes(
-                renderElements(blocks.get(childId), warnings, {
-                  tableCell: true,
-                }).replace(/\n/g, '<br>'),
-              ),
-            )
-            .join('<br>');
-        });
-        const rows = Array.from({ length: rowSize }, (_, rowIndex) =>
-          cellValues.slice(
-            rowIndex * columnSize,
-            (rowIndex + 1) * columnSize,
-          ),
-        );
-        const header = rows[0];
-        return indentBlock(
-          [
-            `| ${header.join(' | ')} |`,
-            `| ${Array.from({ length: columnSize }, () => '---').join(' | ')} |`,
-            ...rows.slice(1).map((row) => `| ${row.join(' | ')} |`),
-          ].join('\n'),
-          indentation,
-        );
-      }
-      default:
-        return '';
-    }
+  const normalized = normalizeFeishuDocument({ blocks, root });
+  if (normalized.issues.length > 0) {
+    throw new FeishuConversionError(normalized.issues);
   }
-
-  const markdown = (root.children ?? [])
-    .map((blockId) => renderBlock(blockId))
-    .filter(Boolean)
-    .join('\n\n');
-
-  return {
-    markdown: markdown ? `${markdown}\n` : '',
-    mediaTokens,
-    mediaReferences,
-    warnings,
-  };
+  const rendered = renderFeishuDocument(normalized.document);
+  if (rendered.issues.length > 0) {
+    throw new FeishuConversionError(rendered.issues);
+  }
+  return rendered.conversion;
 }
