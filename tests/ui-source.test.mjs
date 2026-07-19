@@ -1568,7 +1568,7 @@ test('PostLayout loads KaTeX before the Feishu content overrides', async () => {
   );
 });
 
-test('Feishu heading equations are center-aligned at desktop and mobile sizes', async () => {
+test('Feishu heading equation glyphs are optically centered at desktop and mobile sizes', async () => {
   const source = await readSource('src/styles/feishu-content.css');
 
   assert.match(
@@ -1578,13 +1578,13 @@ test('Feishu heading equations are center-aligned at desktop and mobile sizes', 
   );
   assert.match(
     source,
-    /\.prose :is\(h1, h2, h3, h4, h5, h6\) \.feishu-equation--inline\s*\{\s*vertical-align:\s*-0\.407em;\s*\}/,
-    'desktop headings need the measured zero-delta KaTeX alignment',
+    /\.prose :is\(h1, h2, h3, h4, h5, h6\) \.feishu-equation--inline\s*\{\s*vertical-align:\s*-0\.4493em;\s*\}/,
+    'desktop headings need the measured zero-delta KaTeX glyph alignment',
   );
   assert.match(
     source,
-    /@media \(max-width: 40rem\)\s*\{[\s\S]*?\.prose :is\(h1, h2, h3, h4, h5, h6\) \.feishu-equation--inline\s*\{\s*vertical-align:\s*-0\.404em;\s*\}/,
-    'mobile headings need their measured zero-delta KaTeX alignment',
+    /@media \(max-width: 40rem\)\s*\{[\s\S]*?\.prose :is\(h1, h2, h3, h4, h5, h6\) \.feishu-equation--inline\s*\{\s*vertical-align:\s*-0\.4576em;\s*\}/,
+    'mobile headings need their measured zero-delta KaTeX glyph alignment',
   );
 });
 
